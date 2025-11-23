@@ -1,0 +1,4 @@
+name,start,end,spans_midnight
+Morning,06:00,14:00,0
+Afternoon,14:00,22:00,0
+Night,22:00,06:00,1

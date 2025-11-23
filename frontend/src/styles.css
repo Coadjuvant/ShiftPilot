@@ -1,0 +1,245 @@
+:root {
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #0f172a;
+  background-color: #f0f9ff;
+  --indigo-600: #4f46e5;
+  --teal-500: #14b8a6;
+  --slate-900: #0f172a;
+  --slate-600: #475569;
+  --slate-200: #e2e8f0;
+  --sky-50: #f0f9ff;
+  --white: #ffffff;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--sky-50);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+[data-theme="dark"] {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .app-shell {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .card {
+  background: #111827;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="dark"] .hero {
+  background: linear-gradient(120deg, rgba(79, 70, 229, 0.2), rgba(20, 184, 166, 0.15));
+}
+
+[data-theme="dark"] input,
+[data-theme="dark"] select {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-color: #1f2937;
+}
+
+[data-theme="dark"] table td,
+[data-theme="dark"] table th {
+  border-color: #1f2937;
+}
+
+[data-theme="dark"] .secondary-btn {
+  background-color: #111827;
+  color: #e2e8f0;
+  border-color: #1f2937;
+}
+
+[data-theme="dark"] .secondary-btn:hover {
+  background-color: #1f2937;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 2.25rem 1.5rem 3rem;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.hero {
+  border-radius: 16px;
+  background: linear-gradient(120deg, rgba(79, 70, 229, 0.08), rgba(20, 184, 166, 0.08));
+  padding: 1.25rem;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.app-header-centered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.75rem;
+}
+
+.brand-centered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hero-logo {
+  height: 64px;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  color: var(--teal-500);
+  margin: 0;
+}
+
+.muted {
+  color: var(--slate-600);
+  margin: 0.2rem 0 0;
+}
+
+.card {
+  background: var(--white);
+  border-radius: 16px;
+  padding: 1.75rem;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+}
+
+table {
+  width: 100%;
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+input,
+select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--slate-200);
+  background: var(--white);
+  color: var(--slate-900);
+}
+
+button {
+  background-color: var(--indigo-600);
+  color: var(--white);
+  border: none;
+  padding: 0.6rem 1.1rem;
+  min-height: 42px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.05s ease, box-shadow 0.1s ease, background-color 0.1s ease;
+}
+
+button:hover {
+  background-color: #4239d3;
+  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.3);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+.secondary-btn {
+  background-color: var(--white);
+  color: var(--slate-900);
+  border: 1px solid var(--slate-200);
+}
+
+.secondary-btn:hover {
+  background-color: var(--slate-200);
+}
+
+.stack {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.tab-btn {
+  background: var(--white);
+  color: var(--slate-900);
+  border: 1px solid var(--slate-200);
+}
+
+.tab-btn.active {
+  background: var(--indigo-600);
+  color: var(--white);
+  border-color: var(--indigo-600);
+}
+
+table td,
+table th {
+  padding: 6px 4px;
+}
+
+.controls-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+  align-items: flex-end;
+}
+
+.controls-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.95rem;
+  color: var(--slate-900);
+}
+
+@keyframes progressPulse {
+  0% {
+    transform: translateX(-60%);
+  }
+  50% {
+    transform: translateX(60%);
+  }
+  100% {
+    transform: translateX(160%);
+  }
+}

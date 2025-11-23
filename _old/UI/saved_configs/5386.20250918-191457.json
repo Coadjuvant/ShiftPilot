@@ -1,0 +1,187 @@
+{
+  "config_version": "2",
+  "clinic": {
+    "name": "5386",
+    "timezone": "America/Chicago"
+  },
+  "roles": [
+    "Tech",
+    "RN",
+    "Admin"
+  ],
+  "staff": [
+    {
+      "id": "a",
+      "name": "Ava",
+      "roles": [
+        "Tech"
+      ],
+      "availability": {
+        "Mon": true,
+        "Tue": true,
+        "Wed": true,
+        "Thu": true,
+        "Fri": true,
+        "Sat": true,
+        "Sun": false
+      }
+    },
+    {
+      "id": "b",
+      "name": "Ben",
+      "roles": [
+        "Tech"
+      ],
+      "availability": {
+        "Mon": true,
+        "Tue": true,
+        "Wed": true,
+        "Thu": true,
+        "Fri": true,
+        "Sat": false,
+        "Sun": false
+      }
+    },
+    {
+      "id": "c",
+      "name": "Casey",
+      "roles": [
+        "RN"
+      ],
+      "availability": {
+        "Mon": true,
+        "Tue": true,
+        "Wed": true,
+        "Thu": true,
+        "Fri": true,
+        "Sat": true,
+        "Sun": false
+      }
+    },
+    {
+      "id": "d",
+      "name": "Drew",
+      "roles": [
+        "Admin"
+      ],
+      "availability": {
+        "Mon": true,
+        "Tue": true,
+        "Wed": true,
+        "Thu": true,
+        "Fri": true,
+        "Sat": false,
+        "Sun": false
+      }
+    }
+  ],
+  "patient_shifts": [
+    {
+      "name": "S1",
+      "start": "04:00",
+      "end": "10:30",
+      "spans_midnight": false
+    },
+    {
+      "name": "S2",
+      "start": "10:30",
+      "end": "15:00",
+      "spans_midnight": false
+    },
+    {
+      "name": "S3",
+      "start": "15:00",
+      "end": "19:30",
+      "spans_midnight": false
+    },
+    {
+      "name": "S4",
+      "start": "19:30",
+      "end": "00:00",
+      "spans_midnight": false
+    },
+    {
+      "name": "S5",
+      "start": "00:00",
+      "end": "04:00",
+      "spans_midnight": true
+    }
+  ],
+  "coverage": [
+    {
+      "shift": "S1",
+      "requirements": [
+        {
+          "label": "Tech",
+          "role": "Tech",
+          "count": 4
+        },
+        {
+          "label": "RN",
+          "role": "RN",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "shift": "S2",
+      "requirements": [
+        {
+          "label": "Tech",
+          "role": "Tech",
+          "count": 4
+        },
+        {
+          "label": "RN",
+          "role": "RN",
+          "count": 2
+        }
+      ]
+    }
+  ],
+  "week_pattern": {
+    "Mon": [
+      "S1",
+      "S2"
+    ],
+    "Tue": [
+      "S1",
+      "S2"
+    ],
+    "Wed": [
+      "S1",
+      "S2"
+    ],
+    "Thu": [
+      "S1",
+      "S2"
+    ],
+    "Fri": [
+      "S1",
+      "S2"
+    ],
+    "Sat": [
+      "S1",
+      "S2"
+    ],
+    "Sun": []
+  },
+  "constraints": {
+    "min_rest_hours": 10,
+    "max_hours_per_week": 48,
+    "max_days_in_row": 6,
+    "max_shifts_per_day_by_role": {
+      "Tech": 2,
+      "RN": 2,
+      "Admin": 1
+    },
+    "min_gap_same_day_hours": 0.0,
+    "max_consecutive_days": 2,
+    "max_work_days_per_week": 4
+  },
+  "penalties": {
+    "unfilled": 5.0,
+    "double_assignment": 2.0,
+    "weekly_balance": 1.0
+  }
+}

@@ -1,0 +1,168 @@
+{
+  "config_version": "2",
+  "clinic": {
+    "name": "Imported Clinic",
+    "timezone": "America/Chicago"
+  },
+  "roles": [
+    "Lead",
+    "Tech"
+  ],
+  "staff": [
+    {
+      "id": "s1",
+      "name": "Ava",
+      "roles": [
+        "Tech",
+        "Lead"
+      ],
+      "availability": {
+        "Mon": true,
+        "Tue": true,
+        "Wed": true,
+        "Thu": true,
+        "Fri": true,
+        "Sat": true,
+        "Sun": true
+      }
+    },
+    {
+      "id": "s2",
+      "name": "Ben",
+      "roles": [
+        "Tech"
+      ],
+      "availability": {
+        "Mon": true,
+        "Tue": true,
+        "Wed": true,
+        "Thu": true,
+        "Fri": true,
+        "Sat": false,
+        "Sun": false
+      }
+    },
+    {
+      "id": "s3",
+      "name": "Cam",
+      "roles": [
+        "Tech"
+      ],
+      "availability": {
+        "Mon": true,
+        "Tue": true,
+        "Wed": true,
+        "Thu": true,
+        "Fri": true,
+        "Sat": true,
+        "Sun": false
+      }
+    }
+  ],
+  "patient_shifts": [
+    {
+      "name": "Morning",
+      "start": "06:00",
+      "end": "14:00",
+      "spans_midnight": false
+    },
+    {
+      "name": "Afternoon",
+      "start": "14:00",
+      "end": "22:00",
+      "spans_midnight": false
+    },
+    {
+      "name": "Night",
+      "start": "22:00",
+      "end": "06:00",
+      "spans_midnight": true
+    }
+  ],
+  "coverage": [
+    {
+      "shift": "Morning",
+      "requirements": [
+        {
+          "label": "Opener",
+          "role": "Tech",
+          "count": 2
+        },
+        {
+          "label": "Floor",
+          "role": "Tech",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "shift": "Afternoon",
+      "requirements": [
+        {
+          "label": "Floor",
+          "role": "Tech",
+          "count": 2
+        },
+        {
+          "label": "Closer",
+          "role": "Tech",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "shift": "Night",
+      "requirements": [
+        {
+          "label": "NightTech",
+          "role": "Tech",
+          "count": 2
+        }
+      ]
+    }
+  ],
+  "week_pattern": {
+    "Mon": [
+      "Morning",
+      "Afternoon"
+    ],
+    "Tue": [
+      "Morning",
+      "Afternoon",
+      "Night"
+    ],
+    "Wed": [
+      "Morning",
+      "Afternoon"
+    ],
+    "Thu": [
+      "Morning",
+      "Afternoon",
+      "Night"
+    ],
+    "Fri": [
+      "Morning",
+      "Afternoon"
+    ],
+    "Sat": [
+      "Morning",
+      "Afternoon",
+      "Night"
+    ],
+    "Sun": [
+      "Morning",
+      "Afternoon",
+      "Night"
+    ]
+  },
+  "constraints": {
+    "min_rest_hours": 10,
+    "max_hours_per_week": 48,
+    "max_days_in_row": 6
+  },
+  "penalties": {
+    "unfilled": 5.0,
+    "double_assignment": 2.0,
+    "weekly_balance": 1.0
+  }
+}

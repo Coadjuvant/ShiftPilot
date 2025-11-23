@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scheduler Config v2",
+  "type": "object",
+  "properties": {
+    "config_version": {
+      "type": "string",
+      "const": "2"
+    },
+    "clinic": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "timezone": {
+          "type": "string",
+          "default": "America/Chicago"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "roles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "staff": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "availability": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "boolean"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "roles"
+        ]
+      }
+    },
+    "patient_shifts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string",
+            "pattern": "^\\d{2}:\\d{2}$"
+          },
+          "end": {
+            "type": "string",
+            "pattern": "^\\d{2}:\\d{2}$"
+          },
+          "spans_midnight": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "name",
+          "start",
+          "end"
+        ]
+      }
+    },
+    "coverage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "shift": {
+            "type": "string"
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 1
+                }
+              },
+              "required": [
+                "label",
+                "role"
+              ]
+            }
+          }
+        },
+        "required": [
+          "shift",
+          "requirements"
+        ]
+      }
+    },
+    "week_pattern": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "properties": {
+        "min_rest_hours": {
+          "type": "number",
+          "default": 10
+        },
+        "max_hours_per_week": {
+          "type": "number",
+          "default": 48
+        },
+        "max_days_in_row": {
+          "type": "integer",
+          "default": 6
+        }
+      }
+    },
+    "penalties": {
+      "type": "object",
+      "properties": {
+        "unfilled": {
+          "type": "number",
+          "default": 5.0
+        },
+        "double_assignment": {
+          "type": "number",
+          "default": 2.0
+        },
+        "weekly_balance": {
+          "type": "number",
+          "default": 1.0
+        }
+      }
+    }
+  },
+  "required": [
+    "config_version",
+    "clinic",
+    "roles",
+    "staff",
+    "patient_shifts",
+    "coverage",
+    "week_pattern"
+  ]
+}

@@ -1,0 +1,240 @@
+{
+  "config_version": "2",
+  "clinic": {
+    "name": "5386",
+    "timezone": "America/Chicago"
+  },
+  "roles": [
+    "Tech",
+    "RN",
+    "Admin"
+  ],
+  "staff": [
+    {
+      "id": "a",
+      "name": "Ava",
+      "roles": [
+        "Tech"
+      ],
+      "availability": {
+        "Mon": true,
+        "Tue": true,
+        "Wed": true,
+        "Thu": true,
+        "Fri": true,
+        "Sat": true,
+        "Sun": false
+      },
+      "preferences": {
+        "weights": {
+          "open": 0.0,
+          "close": 0.0,
+          "mwf_open": 0.0,
+          "mwf_close": 0.0,
+          "tts_open": 0.0,
+          "tts_close": 0.0,
+          "bleach": 0.0,
+          "days": {
+            "Mon": 0.0,
+            "Tue": 0.0,
+            "Wed": 0.0,
+            "Thu": 0.0,
+            "Fri": 0.0,
+            "Sat": 0.0,
+            "Sun": 0.0
+          }
+        },
+        "can_open": false,
+        "can_close": false,
+        "can_bleach": false
+      }
+    },
+    {
+      "id": "b",
+      "name": "Ben",
+      "roles": [
+        "Tech"
+      ],
+      "availability": {
+        "Mon": true,
+        "Tue": true,
+        "Wed": true,
+        "Thu": true,
+        "Fri": true,
+        "Sat": false,
+        "Sun": false
+      },
+      "preferences": {
+        "weights": {
+          "open": 0.0,
+          "close": 0.0,
+          "mwf_open": 0.0,
+          "mwf_close": 0.0,
+          "tts_open": 0.0,
+          "tts_close": 0.0,
+          "bleach": 0.0,
+          "days": {
+            "Mon": 0.0,
+            "Tue": 0.0,
+            "Wed": 0.0,
+            "Thu": 0.0,
+            "Fri": 0.0,
+            "Sat": 0.0,
+            "Sun": 0.0
+          }
+        },
+        "can_open": false,
+        "can_close": false,
+        "can_bleach": false
+      }
+    },
+    {
+      "id": "c",
+      "name": "Casey",
+      "roles": [
+        "RN"
+      ],
+      "availability": {
+        "Mon": true,
+        "Tue": true,
+        "Wed": true,
+        "Thu": true,
+        "Fri": true,
+        "Sat": true,
+        "Sun": false
+      },
+      "preferences": {
+        "weights": {
+          "open": 0.0,
+          "close": 0.0,
+          "mwf_open": 0.0,
+          "mwf_close": 0.0,
+          "tts_open": 0.0,
+          "tts_close": 0.0,
+          "bleach": 0.0,
+          "days": {
+            "Mon": 0.0,
+            "Tue": 0.0,
+            "Wed": 0.0,
+            "Thu": 0.0,
+            "Fri": 0.0,
+            "Sat": 0.0,
+            "Sun": 0.0
+          }
+        },
+        "can_open": false,
+        "can_close": false,
+        "can_bleach": false
+      }
+    },
+    {
+      "id": "d",
+      "name": "Drew",
+      "roles": [
+        "Admin"
+      ],
+      "availability": {
+        "Mon": true,
+        "Tue": true,
+        "Wed": true,
+        "Thu": true,
+        "Fri": true,
+        "Sat": false,
+        "Sun": false
+      },
+      "preferences": {
+        "weights": {
+          "open": 0.0,
+          "close": 0.0,
+          "mwf_open": 0.0,
+          "mwf_close": 0.0,
+          "tts_open": 0.0,
+          "tts_close": 0.0,
+          "bleach": 0.0,
+          "days": {
+            "Mon": 0.0,
+            "Tue": 0.0,
+            "Wed": 0.0,
+            "Thu": 0.0,
+            "Fri": 0.0,
+            "Sat": 0.0,
+            "Sun": 0.0
+          }
+        },
+        "can_open": false,
+        "can_close": false,
+        "can_bleach": false
+      }
+    }
+  ],
+  "patient_shifts": [
+    {
+      "name": "S1",
+      "start": "06:00",
+      "end": "10:30",
+      "spans_midnight": false
+    },
+    {
+      "name": "S2",
+      "start": "10:30",
+      "end": "15:00",
+      "spans_midnight": false
+    },
+    {
+      "name": "S3",
+      "start": "15:00",
+      "end": "19:30",
+      "spans_midnight": false
+    },
+    {
+      "name": "S4",
+      "start": "19:30",
+      "end": "00:00",
+      "spans_midnight": false
+    },
+    {
+      "name": "S5",
+      "start": "00:00",
+      "end": "04:30",
+      "spans_midnight": true
+    }
+  ],
+  "coverage": [],
+  "week_pattern": {
+    "Mon": [],
+    "Tue": [],
+    "Wed": [],
+    "Thu": [],
+    "Fri": [],
+    "Sat": [],
+    "Sun": []
+  },
+  "constraints": {
+    "min_rest_hours": 10,
+    "max_hours_per_week": 48,
+    "max_days_in_row": 6,
+    "max_shifts_per_day_by_role": {
+      "Tech": 2,
+      "RN": 2,
+      "Admin": 1
+    },
+    "min_gap_same_day_hours": 0.0,
+    "work_days_week": {
+      "mode": "hard",
+      "by_role": {
+        "Tech": 4,
+        "RN": 4,
+        "Admin": 5
+      },
+      "per_person": {}
+    },
+    "soft_weights": {
+      "exceed_week_days": 1.0
+    }
+  },
+  "penalties": {
+    "unfilled": 5.0,
+    "double_assignment": 2.0,
+    "weekly_balance": 1.0
+  }
+}
