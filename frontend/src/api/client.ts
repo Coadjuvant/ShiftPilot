@@ -48,6 +48,7 @@ export interface ScheduleRequest {
   pto: Array<Record<string, unknown>>;
   tournament_trials: number;
   base_seed?: number | null;
+  export_roles?: string[];
 }
 
 export interface ScheduleResponse {

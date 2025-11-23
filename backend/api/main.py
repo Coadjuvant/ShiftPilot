@@ -120,7 +120,13 @@ def run_schedule(request: ScheduleRequest) -> ScheduleResponse:
             )
             for assignment in result.assignments
         ]
-        excel_bytes = export_schedule_to_excel(result, {s.id: s for s in staff_members})
+        roles_filter = request.export_roles or None
+        excel_bytes = export_schedule_to_excel(
+            result,
+            {s.id: s for s in staff_members},
+            export_roles=roles_filter,
+            pto_entries=pto_entries,
+        )
         excel_b64 = base64.b64encode(excel_bytes).decode("utf-8")
         return ScheduleResponse(
             bleach_cursor=result.bleach_cursor,

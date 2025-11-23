@@ -27,7 +27,7 @@
       "3",
       "4"
     ],
-    "cursor": 0
+    "cursor": 3
   },
   "tournament": {
     "trials": 600,
@@ -124,7 +124,7 @@
     },
     {
       "id": "5",
-      "name": "Mari",
+      "name": "Marianna",
       "role": "Tech",
       "can_bleach": false,
       "can_open": true,

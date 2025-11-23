@@ -1,7 +1,0 @@
-2025-11-18T15:39:21.682053 | pending_add=0 | working_rows=0 | editor_rows=1 | state={'edited_rows': {}, 'added_rows': [{}], 'deleted_rows': []}
-2025-11-18T15:39:22.453418 | pending_add=1 | working_rows=2 | editor_rows=2 | state={'edited_rows': {}, 'added_rows': [], 'deleted_rows': []}
-2025-11-18T15:39:23.253965 | pending_add=0 | working_rows=2 | editor_rows=3 | state={'edited_rows': {}, 'added_rows': [{}], 'deleted_rows': []}
-2025-11-18T15:39:24.040343 | pending_add=1 | working_rows=4 | editor_rows=4 | state={'edited_rows': {}, 'added_rows': [], 'deleted_rows': []}
-2025-11-18T15:39:24.763629 | pending_add=0 | working_rows=4 | editor_rows=5 | state={'edited_rows': {}, 'added_rows': [{}], 'deleted_rows': []}
-2025-11-18T15:39:26.346999 | pending_add=1 | working_rows=6 | editor_rows=6 | state={'edited_rows': {}, 'added_rows': [], 'deleted_rows': []}
-2025-11-18T15:39:27.051390 | pending_add=0 | working_rows=6 | editor_rows=7 | state={'edited_rows': {}, 'added_rows': [{}], 'deleted_rows': []}

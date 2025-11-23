@@ -73,6 +73,7 @@ export default function StaffPlanner() {
   const [bleachCursor, setBleachCursor] = useState<number>(0);
   const [bleachRotation, setBleachRotation] = useState<string[]>([]);
   const [trials, setTrials] = useState<number>(20);
+  const [exportRoles, setExportRoles] = useState<string[]>(["Tech", "RN", "Admin"]);
   const [enforceThree, setEnforceThree] = useState<boolean>(true);
   const [enforcePostBleach, setEnforcePostBleach] = useState<boolean>(true);
   const [enforceAltSat, setEnforceAltSat] = useState<boolean>(true);
@@ -811,6 +812,27 @@ export default function StaffPlanner() {
               />
               Use previous best seed
             </label>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span>Export roles</span>
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.25rem" }}>
+                {["Tech", "RN", "Admin"].map((role) => (
+                  <label key={role} style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    <input
+                      type="checkbox"
+                      checked={exportRoles.includes(role)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setExportRoles((prev) => {
+                          if (checked) return Array.from(new Set([...prev, role]));
+                          return prev.filter((r) => r !== role);
+                        });
+                      }}
+                    />
+                    {role}
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
           <button
             disabled={hasErrors}
@@ -865,6 +887,8 @@ export default function StaffPlanner() {
                   }
                   return entries;
                 };
+                const selectedSeed =
+                  usePrevSeed && winningSeed !== null ? winningSeed : baseSeed > 0 ? baseSeed : null;
                 const payload = {
                   staff: staffPayload,
                   requirements,
@@ -889,16 +913,14 @@ export default function StaffPlanner() {
                   },
                   pto: expandPTO(),
                   tournament_trials: trials,
-                  base_seed: usePrevSeed && winningSeed ? winningSeed : baseSeed > 0 ? baseSeed : null
+                  base_seed: selectedSeed,
+                  export_roles: exportRoles
                 };
                 const res = await runSchedule(payload);
                 setAssignments(res.assignments);
                 setStats(res.stats);
                 setWinningSeed(res.winning_seed ?? null);
                 setWinningScore(typeof res.total_penalty === "number" ? res.total_penalty : null);
-                if (res.winning_seed !== null && res.winning_seed !== undefined) {
-                  setBaseSeed(res.winning_seed);
-                }
                 if (res.excel) {
                   const blob = Uint8Array.from(window.atob(res.excel), (c) => c.charCodeAt(0));
                   const file = new Blob([blob], {
@@ -951,9 +973,18 @@ export default function StaffPlanner() {
           )}
           {runResult && <p style={{ marginTop: "0.75rem" }}>{runResult}</p>}
           {excelUrl && (
-            <a href={excelUrl} download="schedule.xlsx" style={{ display: "inline-block", marginTop: "0.75rem" }}>
+            <button
+              className="primary-btn"
+              style={{ marginTop: "0.75rem" }}
+              onClick={() => {
+                const link = document.createElement("a");
+                link.href = excelUrl;
+                link.download = "schedule.xlsx";
+                link.click();
+              }}
+            >
               Download Excel
-            </a>
+            </button>
           )}
           {assignments.length > 0 && (
             <div style={{ marginTop: "1rem", overflowX: "auto" }}>
