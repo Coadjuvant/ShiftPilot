@@ -164,3 +164,13 @@ class ConfigPayload(BaseModel):
 class SaveConfigRequest(BaseModel):
     payload: ConfigPayload
     filename: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    token: str
+

@@ -1,8 +1,22 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? "/api"
+  baseURL: (import.meta as any).env?.VITE_API_URL ?? "/api"
 });
+
+// Optional API key header (set VITE_API_KEY in your frontend env)
+const apiKey = (import.meta as any).env?.VITE_API_KEY;
+if (apiKey) {
+  api.defaults.headers.common["x-api-key"] = apiKey;
+}
+
+export const setAuthToken = (token: string | null) => {
+  if (token) {
+    api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+  } else {
+    delete api.defaults.headers.common["Authorization"];
+  }
+};
 
 export interface HealthResponse {
   status: string;
@@ -95,3 +109,8 @@ export const runSchedule = async (req: ScheduleRequest): Promise<ScheduleRespons
 };
 
 export default api;
+
+export const login = async (username: string, password: string): Promise<{ token: string }> => {
+  const { data } = await api.post<{ token: string }>("/auth/login", { username, password });
+  return data;
+};

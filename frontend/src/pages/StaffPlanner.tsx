@@ -6,7 +6,9 @@ import {
   saveConfig,
   ConfigPayload,
   SaveConfigRequest,
-  runSchedule
+  runSchedule,
+  login,
+  setAuthToken
 } from "../api/client";
 import DemandEditor from "../components/DemandEditor";
 import PTOEditor from "../components/PTOEditor";
@@ -56,12 +58,25 @@ export default function StaffPlanner() {
   const [runResult, setRunResult] = useState<string>("");
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [assignments, setAssignments] = useState<
-    Array<{ date: string; day_name: string; role: string; duty: string; staff_id: string | null; notes: string[] }>
+    Array<{
+      date: string;
+      day_name: string;
+      role: string;
+      duty: string;
+      staff_id: string | null;
+      notes: string[];
+      slot_index: number;
+      is_bleach: boolean;
+    }>
   >([]);
   const [stats, setStats] = useState<Record<string, number>>({});
   const [excelUrl, setExcelUrl] = useState<string | null>(null);
   const [winningSeed, setWinningSeed] = useState<number | null>(null);
   const [winningScore, setWinningScore] = useState<number | null>(null);
+  const [authToken, setAuthTokenState] = useState<string | null>(null);
+  const [loginUser, setLoginUser] = useState<string>("admin");
+  const [loginPass, setLoginPass] = useState<string>("admin");
+  const [loginError, setLoginError] = useState<string>("");
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [weeks, setWeeks] = useState<number>(1);
   const [patientsPerTech, setPatientsPerTech] = useState<number>(4);
@@ -79,6 +94,7 @@ export default function StaffPlanner() {
   const [enforceAltSat, setEnforceAltSat] = useState<boolean>(true);
   const [limitTechFour, setLimitTechFour] = useState<boolean>(true);
   const [limitRnFour, setLimitRnFour] = useState<boolean>(true);
+  const isAuthed = Boolean(authToken && authToken.length > 0);
   const uniqueStaffIds = Array.from(
     new Set(staffRows.filter((s) => s.can_bleach).map((s) => s.id).filter((v) => v && v.trim().length > 0))
   );
@@ -99,11 +115,21 @@ export default function StaffPlanner() {
     fetchHealth()
       .then((res) => setStatus(`API status: ${res.status}`))
       .catch((err) => setStatus(`API unreachable: ${err.message}`));
+  }, []);
+  useEffect(() => {
+    if (authToken) {
+      setAuthToken(authToken);
+    }
+  }, [authToken]);
+  useEffect(() => {
+    if (!isAuthed) return;
     listConfigs()
       .then((names) => setConfigs(names))
-      .catch(() => setConfigs([]));
-  }, []);
-
+      .catch((err) => {
+        setConfigs([]);
+        setStatus(`Failed to load configs: ${err?.message ?? err}`);
+      });
+  }, [isAuthed]);
   const updateRow = (index: number, key: "id" | "name" | "role", value: string) => {
     setStaffRows((prev) => {
       const next = [...prev];
@@ -284,11 +310,74 @@ export default function StaffPlanner() {
     }
   };
 
+  const handleLogin = async () => {
+    try {
+      const res = await login(loginUser, loginPass);
+      setAuthTokenState(res.token);
+      setAuthToken(res.token);
+      setLoginError("");
+      setStatus("Logged in.");
+    } catch (err: any) {
+      setAuthTokenState(null);
+      setAuthToken(null);
+      setLoginError(err?.message ?? "Login failed");
+      setStatus("Login failed");
+    }
+  };
+
+  const handleLogout = () => {
+    setAuthTokenState(null);
+    setAuthToken(null);
+    setStatus("Logged out.");
+    setConfigs([]);
+  };
+
+  if (!isAuthed) {
+    return (
+      <section className="card">
+        <h2>Staff Planner (React prototype)</h2>
+        <p>{status}</p>
+        <div className="card" style={{ marginBottom: "1rem" }}>
+          <h4>Login</h4>
+          <div className="stack">
+            <label>
+              Username
+              <input value={loginUser} onChange={(e) => setLoginUser(e.target.value)} />
+            </label>
+            <label>
+              Password
+              <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
+            </label>
+          </div>
+          <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem" }}>
+            <button onClick={handleLogin}>Login</button>
+          </div>
+          {loginError && <p style={{ color: "#b45309" }}>{loginError}</p>}
+          {!isAuthed && <p style={{ color: "#b45309" }}>Login required to edit and run.</p>}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="card">
       <h2>Staff Planner (React prototype)</h2>
       <p>{status}</p>
-      <div className="controls-row">
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.75rem", gap: "0.5rem" }}>
+        <span className="muted">{authToken ? "Authenticated" : "Not authenticated"}</span>
+        {authToken && (
+          <button className="secondary-btn" onClick={handleLogout}>
+            Logout
+          </button>
+        )}
+      </div>
+      <div
+        style={{
+          pointerEvents: isAuthed ? "auto" : "none",
+          opacity: isAuthed ? 1 : 0.4
+        }}
+      >
+        <div className="controls-row">
         <label>
           Load config:
           <select
@@ -1115,6 +1204,7 @@ export default function StaffPlanner() {
           )}
         </div>
       )}
+      </div>
     </section>
   );
 }

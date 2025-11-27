@@ -5,8 +5,18 @@ from pathlib import Path
 import json
 import re
 import base64
+import os
+import jwt
+from datetime import datetime, timedelta
 
-from fastapi import APIRouter, FastAPI, HTTPException
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except Exception:
+    # dotenv is optional; ignore if not installed
+    pass
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.scheduler import (
@@ -26,11 +36,50 @@ from .schemas import (
     SaveConfigRequest,
     ScheduleRequest,
     ScheduleResponse,
+    LoginRequest,
+    LoginResponse,
     StaffMemberIn,
 )
 
 
+JWT_SECRET = os.getenv("JWT_SECRET", os.getenv("API_KEY", "dev-secret"))
+JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "24"))
+ADMIN_USER = (os.getenv("ADMIN_USER", "admin") or "admin").strip()
+ADMIN_PASS = (os.getenv("ADMIN_PASS", "admin") or "admin").strip()
+
 app = FastAPI(title="Clinic Scheduler API", version="0.1.0")
+
+
+def _decode_jwt(token: str) -> dict:
+    return jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+
+
+def require_auth(
+    authorization: str = Header(default=None),
+    x_api_key: str = Header(default=None, alias="x-api-key"),
+) -> None:
+    """
+    Auth stub: allow either a valid Bearer JWT or matching x-api-key.
+    If neither is configured in the environment, allow all.
+    """
+    expected_key = os.getenv("API_KEY")
+    allow_public = not expected_key and not ADMIN_USER
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+        try:
+            _decode_jwt(token)
+            return
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    if expected_key:
+        if x_api_key == expected_key:
+            return
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if allow_public:
+        return
+    raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 router = APIRouter(prefix="/api")
 
 app.add_middleware(
@@ -62,7 +111,20 @@ def healthcheck() -> dict:
     return {"status": "ok"}
 
 
-@router.post("/schedule/run", response_model=ScheduleResponse)
+@router.post("/auth/login", response_model=LoginResponse)
+def login(request: LoginRequest) -> LoginResponse:
+    if request.username.strip() != ADMIN_USER or request.password.strip() != ADMIN_PASS:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    payload = {
+        "sub": request.username,
+        "iat": datetime.utcnow(),
+        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS),
+    }
+    token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    return LoginResponse(token=token)
+
+
+@router.post("/schedule/run", response_model=ScheduleResponse, dependencies=[Depends(require_auth)])
 def run_schedule(request: ScheduleRequest) -> ScheduleResponse:
     try:
         staff_members = [_to_staff_member(s) for s in request.staff]
@@ -148,13 +210,13 @@ def _slugify(name: str) -> str:
     return slug or "clinic"
 
 
-@router.get("/configs")
+@router.get("/configs", dependencies=[Depends(require_auth)])
 def list_configs() -> List[str]:
     CONFIG_ROOT.mkdir(parents=True, exist_ok=True)
     return sorted([p.name for p in CONFIG_ROOT.glob("*.json")])
 
 
-@router.get("/configs/{filename}", response_model=ConfigPayload)
+@router.get("/configs/{filename}", response_model=ConfigPayload, dependencies=[Depends(require_auth)])
 def load_config(filename: str) -> ConfigPayload:
     path = CONFIG_ROOT / filename
     if not path.exists():
@@ -166,7 +228,7 @@ def load_config(filename: str) -> ConfigPayload:
         raise HTTPException(status_code=400, detail=f"Failed to load config: {exc}") from exc
 
 
-@router.post("/configs/save")
+@router.post("/configs/save", dependencies=[Depends(require_auth)])
 def save_config(request: SaveConfigRequest) -> dict:
     CONFIG_ROOT.mkdir(parents=True, exist_ok=True)
     filename = request.filename.strip() if request.filename else ""
