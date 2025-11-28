@@ -18,6 +18,27 @@ export const setAuthToken = (token: string | null) => {
   }
 };
 
+// Apply token from localStorage on load (browser only)
+if (typeof window !== "undefined") {
+  const stored = window.localStorage.getItem("auth_token");
+  if (stored) {
+    setAuthToken(stored);
+  }
+}
+
+// Always attach the latest token from localStorage on each request so we
+// don't rely solely on the default header state.
+api.interceptors.request.use((config) => {
+  if (typeof window !== "undefined") {
+    const stored = window.localStorage.getItem("auth_token");
+    if (stored) {
+      config.headers = config.headers ?? {};
+      config.headers["Authorization"] = `Bearer ${stored}`;
+    }
+  }
+  return config;
+});
+
 export interface HealthResponse {
   status: string;
 }
@@ -41,6 +62,25 @@ export interface ConfigPayload {
 export interface SaveConfigRequest {
   payload: ConfigPayload;
   filename?: string;
+}
+
+export interface InviteRequest {
+  username: string;
+  license_key: string;
+  role?: string;
+}
+
+export interface UserSummary {
+  id: number;
+  username: string;
+  status: string;
+  role: string;
+  license_key?: string;
+  created_at?: string;
+  last_login?: string;
+  invite_expires_at?: string;
+  invite_created_by?: number | null;
+  last_invite_token?: string | null;
 }
 
 export interface ScheduleRequest {
@@ -112,5 +152,30 @@ export default api;
 
 export const login = async (username: string, password: string): Promise<{ token: string }> => {
   const { data } = await api.post<{ token: string }>("/auth/login", { username, password });
+  return data;
+};
+
+export const setupUser = async (invite_token: string, password: string): Promise<{ token: string }> => {
+  const { data } = await api.post<{ token: string }>("/auth/setup", { invite_token, password });
+  return data;
+};
+
+export const createInvite = async (req: InviteRequest): Promise<{ token: string }> => {
+  const { data } = await api.post<{ token: string }>("/auth/invite", req);
+  return data;
+};
+
+export const listUsers = async (): Promise<UserSummary[]> => {
+  const { data } = await api.get<UserSummary[]>("/auth/users");
+  return data;
+};
+
+export const deleteUser = async (userId: number): Promise<{ status: string; id: number }> => {
+  const { data } = await api.delete<{ status: string; id: number }>(`/auth/users/${userId}`);
+  return data;
+};
+
+export const revokeInvite = async (req: InviteRequest): Promise<{ status: string; username: string }> => {
+  const { data } = await api.post<{ status: string; username: string }>("/auth/invite/revoke", req);
   return data;
 };

@@ -8,7 +8,13 @@ import {
   SaveConfigRequest,
   runSchedule,
   login,
-  setAuthToken
+  setAuthToken,
+  setupUser,
+  createInvite,
+  listUsers,
+  deleteUser,
+  revokeInvite,
+  UserSummary
 } from "../api/client";
 import DemandEditor from "../components/DemandEditor";
 import PTOEditor from "../components/PTOEditor";
@@ -17,7 +23,7 @@ import { DAYS } from "../constants";
 
 export default function StaffPlanner() {
   const [status, setStatus] = useState<string>("Checking API...");
-  const [activeTab, setActiveTab] = useState<"staff" | "avail" | "prefs" | "demand" | "pto" | "run">("staff");
+  const [activeTab, setActiveTab] = useState<"staff" | "avail" | "prefs" | "demand" | "pto" | "run" | "admin">("staff");
   const defaultAvailability = DAYS.reduce<Record<string, boolean>>((acc, day) => {
     acc[day] = true;
     return acc;
@@ -73,10 +79,15 @@ export default function StaffPlanner() {
   const [excelUrl, setExcelUrl] = useState<string | null>(null);
   const [winningSeed, setWinningSeed] = useState<number | null>(null);
   const [winningScore, setWinningScore] = useState<number | null>(null);
-  const [authToken, setAuthTokenState] = useState<string | null>(null);
+  const [authToken, setAuthTokenState] = useState<string | null>(() => {
+    return localStorage.getItem("auth_token");
+  });
+  const [loginMode, setLoginMode] = useState<"login" | "setup">("login");
   const [loginUser, setLoginUser] = useState<string>("admin");
   const [loginPass, setLoginPass] = useState<string>("admin");
+  const [inviteToken, setInviteToken] = useState<string>("");
   const [loginError, setLoginError] = useState<string>("");
+  const [meLoaded, setMeLoaded] = useState<boolean>(false);
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [weeks, setWeeks] = useState<number>(1);
   const [patientsPerTech, setPatientsPerTech] = useState<number>(4);
@@ -94,6 +105,12 @@ export default function StaffPlanner() {
   const [enforceAltSat, setEnforceAltSat] = useState<boolean>(true);
   const [limitTechFour, setLimitTechFour] = useState<boolean>(true);
   const [limitRnFour, setLimitRnFour] = useState<boolean>(true);
+  const [inviteUsername, setInviteUsername] = useState<string>("");
+  const [inviteLicense, setInviteLicense] = useState<string>("DEMO");
+  const [inviteResult, setInviteResult] = useState<string>("");
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<string>("");
   const isAuthed = Boolean(authToken && authToken.length > 0);
   const uniqueStaffIds = Array.from(
     new Set(staffRows.filter((s) => s.can_bleach).map((s) => s.id).filter((v) => v && v.trim().length > 0))
@@ -116,9 +133,38 @@ export default function StaffPlanner() {
       .then((res) => setStatus(`API status: ${res.status}`))
       .catch((err) => setStatus(`API unreachable: ${err.message}`));
   }, []);
+  // Fetch current user info to set admin flag
+  useEffect(() => {
+    if (!isAuthed) {
+      setIsAdmin(false);
+      setMeLoaded(false);
+      setCurrentUser("");
+      return;
+    }
+    fetch("/api/auth/me", { headers: { Authorization: `Bearer ${authToken}` } })
+      .then((r) => r.json())
+      .then((data) => {
+        setIsAdmin((data?.role || "").toLowerCase() === "admin");
+        setCurrentUser(data?.username || "");
+        setMeLoaded(true);
+      })
+      .catch(() => {
+        setIsAdmin(false);
+        setMeLoaded(false);
+        setCurrentUser("");
+      });
+  }, [isAuthed, authToken]);
+  useEffect(() => {
+    if (isAuthed && isAdmin && activeTab === "admin") {
+      loadUsers();
+    }
+  }, [isAuthed, isAdmin, activeTab]);
   useEffect(() => {
     if (authToken) {
       setAuthToken(authToken);
+      localStorage.setItem("auth_token", authToken);
+    } else {
+      localStorage.removeItem("auth_token");
     }
   }, [authToken]);
   useEffect(() => {
@@ -126,10 +172,26 @@ export default function StaffPlanner() {
     listConfigs()
       .then((names) => setConfigs(names))
       .catch((err) => {
+        if (err?.response?.status === 401) {
+          setAuthTokenState(null);
+          setAuthToken(null);
+          setConfigs([]);
+          setStatus("Session expired. Please log in again.");
+          return;
+        }
         setConfigs([]);
         setStatus(`Failed to load configs: ${err?.message ?? err}`);
       });
   }, [isAuthed]);
+
+  const loadUsers = async () => {
+    try {
+      const data = await listUsers();
+      setUsers(data);
+    } catch (err: any) {
+      // ignore for now
+    }
+  };
   const updateRow = (index: number, key: "id" | "name" | "role", value: string) => {
     setStaffRows((prev) => {
       const next = [...prev];
@@ -313,10 +375,18 @@ export default function StaffPlanner() {
   const handleLogin = async () => {
     try {
       const res = await login(loginUser, loginPass);
+      // Persist and apply token immediately
+      localStorage.setItem("auth_token", res.token);
       setAuthTokenState(res.token);
       setAuthToken(res.token);
       setLoginError("");
       setStatus("Logged in.");
+      try {
+        const names = await listConfigs();
+        setConfigs(names);
+      } catch {
+        /* ignore – useEffect will retry */
+      }
     } catch (err: any) {
       setAuthTokenState(null);
       setAuthToken(null);
@@ -325,11 +395,42 @@ export default function StaffPlanner() {
     }
   };
 
+  const handleSetup = async () => {
+    try {
+      if (!inviteToken.trim()) {
+        setLoginError("Invite token required");
+        return;
+      }
+      const res = await setupUser(inviteToken.trim(), loginPass);
+      localStorage.setItem("auth_token", res.token);
+      setAuthTokenState(res.token);
+      setAuthToken(res.token);
+      setLoginError("");
+      setStatus("Account activated.");
+      setLoginMode("login");
+      try {
+        const names = await listConfigs();
+        setConfigs(names);
+      } catch {
+        /* ignore */
+      }
+    } catch (err: any) {
+      setAuthTokenState(null);
+      setAuthToken(null);
+      setLoginError(err?.message ?? "Setup failed");
+      setStatus("Setup failed");
+    }
+  };
+
   const handleLogout = () => {
     setAuthTokenState(null);
     setAuthToken(null);
     setStatus("Logged out.");
     setConfigs([]);
+    setAssignments([]);
+    setCurrentUser("");
+    setUsers([]);
+    setIsAdmin(false);
   };
 
   if (!isAuthed) {
@@ -338,20 +439,52 @@ export default function StaffPlanner() {
         <h2>Staff Planner (React prototype)</h2>
         <p>{status}</p>
         <div className="card" style={{ marginBottom: "1rem" }}>
-          <h4>Login</h4>
-          <div className="stack">
-            <label>
-              Username
-              <input value={loginUser} onChange={(e) => setLoginUser(e.target.value)} />
-            </label>
-            <label>
-              Password
-              <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
-            </label>
+          <h4>{loginMode === "login" ? "Existing user login" : "New user setup"}</h4>
+          <div style={{ display: "flex", gap: "0.75rem", marginBottom: "0.5rem" }}>
+            <button
+              className={loginMode === "login" ? "primary-btn" : "secondary-btn"}
+              onClick={() => {
+                setLoginMode("login");
+                setLoginError("");
+              }}
+            >
+              Existing user
+            </button>
+            <button
+              className={loginMode === "setup" ? "primary-btn" : "secondary-btn"}
+              onClick={() => {
+                setLoginMode("setup");
+                setLoginError("");
+              }}
+            >
+              New user (invite)
+            </button>
           </div>
-          <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem" }}>
-            <button onClick={handleLogin}>Login</button>
-          </div>
+          {loginMode === "login" ? (
+            <div className="stack">
+              <label>
+                Username
+                <input value={loginUser} onChange={(e) => setLoginUser(e.target.value)} />
+              </label>
+              <label>
+                Password
+                <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
+              </label>
+              <button onClick={handleLogin}>Login</button>
+            </div>
+          ) : (
+            <div className="stack">
+              <label>
+                Invite token
+                <input value={inviteToken} onChange={(e) => setInviteToken(e.target.value)} />
+              </label>
+              <label>
+                Set password
+                <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
+              </label>
+              <button onClick={handleSetup}>Activate account</button>
+            </div>
+          )}
           {loginError && <p style={{ color: "#b45309" }}>{loginError}</p>}
           {!isAuthed && <p style={{ color: "#b45309" }}>Login required to edit and run.</p>}
         </div>
@@ -363,13 +496,53 @@ export default function StaffPlanner() {
     <section className="card">
       <h2>Staff Planner (React prototype)</h2>
       <p>{status}</p>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.75rem", gap: "0.5rem" }}>
-        <span className="muted">{authToken ? "Authenticated" : "Not authenticated"}</span>
-        {authToken && (
-          <button className="secondary-btn" onClick={handleLogout}>
-            Logout
-          </button>
-        )}
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.75rem", gap: "0.5rem", alignItems: "center" }}>
+        <div>
+          <strong>User tools</strong>
+          <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem", alignItems: "center" }}>
+            <input
+              placeholder="Invite username"
+              value={inviteUsername}
+              onChange={(e) => setInviteUsername(e.target.value)}
+              style={{ maxWidth: "160px" }}
+              disabled={!isAuthed}
+            />
+            <input
+              placeholder="License key"
+              value={inviteLicense}
+              onChange={(e) => setInviteLicense(e.target.value)}
+              style={{ maxWidth: "120px" }}
+              disabled={!isAuthed}
+            />
+            <button
+              className="secondary-btn"
+              onClick={async () => {
+                try {
+                  const res = await createInvite({
+                    username: inviteUsername,
+                    license_key: inviteLicense,
+                    role: "user"
+                  });
+                  setInviteResult(`Invite token: ${res.token}`);
+                } catch (err: any) {
+                  setInviteResult(err?.message ?? "Failed to create invite");
+                }
+              }}
+              disabled={!isAuthed || !inviteUsername.trim()}
+            >
+              Create invite
+            </button>
+          </div>
+          {inviteResult && <p className="muted">{inviteResult}</p>}
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <span className="muted">{authToken ? `Logged in as ${currentUser || "user"}` : "Not authenticated"}</span>
+          {authToken && (
+            <button className="secondary-btn" onClick={handleLogout}>
+              Logout
+            </button>
+          )}
+        </div>
       </div>
       <div
         style={{
@@ -411,7 +584,8 @@ export default function StaffPlanner() {
           { key: "prefs", label: "Prefs" },
           { key: "demand", label: "Demand" },
           { key: "pto", label: "PTO" },
-          { key: "run", label: "Run" }
+          { key: "run", label: "Run" },
+          ...(isAdmin ? [{ key: "admin", label: "Admin" }] : [])
         ].map((tab) => (
           <button
             key={tab.key}
@@ -1196,6 +1370,75 @@ export default function StaffPlanner() {
                     <tr key={k}>
                       <td>{staffNameMap[k] || k}</td>
                       <td>{v}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+      {activeTab === "admin" && isAdmin && (
+        <div className="card" style={{ marginTop: "1rem" }}>
+          <h3>Admin</h3>
+          <div style={{ marginBottom: "0.5rem", display: "flex", gap: "0.5rem" }}>
+            <button className="secondary-btn" onClick={loadUsers}>
+              Refresh users
+            </button>
+          </div>
+          {users.length === 0 ? (
+            <p className="muted">No users found.</p>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table cellPadding={6} style={{ minWidth: "700px", borderCollapse: "collapse", fontSize: "0.9rem" }}>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Username</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Last Login</th>
+                    <th>Invite Expires</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((u) => (
+                    <tr key={u.id}>
+                      <td>{u.id}</td>
+                      <td>{u.username}</td>
+                      <td>{u.role}</td>
+                      <td>{u.status}</td>
+                      <td>{u.last_login || "—"}</td>
+                      <td>{u.invite_expires_at || "—"}</td>
+                      <td style={{ display: "flex", gap: "0.35rem" }}>
+                        <button
+                          className="secondary-btn"
+                          onClick={async () => {
+                            try {
+                              await deleteUser(u.id);
+                              loadUsers();
+                            } catch (err) {
+                              /* ignore */
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                        <button
+                          className="secondary-btn"
+                          onClick={async () => {
+                            try {
+                              await revokeInvite({ username: u.username, license_key: "" });
+                              loadUsers();
+                            } catch (err) {
+                              /* ignore */
+                            }
+                          }}
+                        >
+                          Revoke invite
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

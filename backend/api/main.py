@@ -8,6 +8,7 @@ import base64
 import os
 import jwt
 from datetime import datetime, timedelta
+from fastapi import Request
 
 try:
     from dotenv import load_dotenv
@@ -30,6 +31,18 @@ from backend.scheduler import (
     run_tournament,
 )
 from backend.scheduler.model import DAYS
+from backend.auth_db import (
+    init_db,
+    create_invite,
+    redeem_invite,
+    validate_login,
+    update_last_login,
+    log_event,
+    ensure_admin,
+    list_users,
+    delete_user,
+    revoke_invite,
+)
 from .schemas import (
     AssignmentOut,
     ConfigPayload,
@@ -38,6 +51,9 @@ from .schemas import (
     ScheduleResponse,
     LoginRequest,
     LoginResponse,
+    InviteRequest,
+    SetupRequest,
+    UserInfo,
     StaffMemberIn,
 )
 
@@ -48,6 +64,13 @@ ADMIN_USER = (os.getenv("ADMIN_USER", "admin") or "admin").strip()
 ADMIN_PASS = (os.getenv("ADMIN_PASS", "admin") or "admin").strip()
 
 app = FastAPI(title="Clinic Scheduler API", version="0.1.0")
+init_db()
+# seed default admin user if provided
+ensure_admin(
+    os.getenv("ADMIN_USER", "admin"),
+    os.getenv("ADMIN_PASS", "admin"),
+    os.getenv("ADMIN_LICENSE", "DEMO"),
+)
 
 
 def _decode_jwt(token: str) -> dict:
@@ -55,9 +78,10 @@ def _decode_jwt(token: str) -> dict:
 
 
 def require_auth(
+    request: Request,
     authorization: str = Header(default=None),
     x_api_key: str = Header(default=None, alias="x-api-key"),
-) -> None:
+) -> dict:
     """
     Auth stub: allow either a valid Bearer JWT or matching x-api-key.
     If neither is configured in the environment, allow all.
@@ -67,16 +91,16 @@ def require_auth(
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
         try:
-            _decode_jwt(token)
-            return
+            payload = _decode_jwt(token)
+            return payload
         except Exception:
             raise HTTPException(status_code=401, detail="Invalid token")
     if expected_key:
         if x_api_key == expected_key:
-            return
+            return {"sub": "api-key"}
         raise HTTPException(status_code=401, detail="Unauthorized")
     if allow_public:
-        return
+        return {"sub": "public"}
     raise HTTPException(status_code=401, detail="Unauthorized")
 
 
@@ -111,17 +135,79 @@ def healthcheck() -> dict:
     return {"status": "ok"}
 
 
+def require_admin(payload: dict = Depends(require_auth)) -> dict:
+    if payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    return payload
+
+
 @router.post("/auth/login", response_model=LoginResponse)
-def login(request: LoginRequest) -> LoginResponse:
-    if request.username.strip() != ADMIN_USER or request.password.strip() != ADMIN_PASS:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+def login(request: Request, creds: LoginRequest) -> LoginResponse:
+    user = validate_login(creds.username, creds.password)
+    if not user:
+        log_event(None, "login_fail", "invalid_credentials", request.client.host if request.client else "", request.headers.get("user-agent", ""))
+        raise HTTPException(status_code=401, detail="Invalid credentials or license")
+    update_last_login(user["id"])
     payload = {
-        "sub": request.username,
+        "sub": str(user["id"]),
+        "username": user["username"],
+        "role": user.get("role", "user"),
         "iat": datetime.utcnow(),
         "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS),
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    log_event(user["id"], "login_success", "", request.client.host if request.client else "", request.headers.get("user-agent", ""))
     return LoginResponse(token=token)
+
+
+@router.post("/auth/invite", response_model=LoginResponse, dependencies=[Depends(require_auth)])
+def invite_user(req: InviteRequest, payload: dict = Depends(require_auth)) -> dict:
+    creator = payload.get("sub")
+    try:
+        creator_id = int(creator) if creator is not None else None
+    except Exception:
+        creator_id = None
+    token = create_invite(req.username, req.license_key, role=req.role or "user", created_by=creator_id)
+    return {"token": token}
+
+
+@router.post("/auth/setup", response_model=LoginResponse)
+def setup_user(request: Request, body: SetupRequest) -> LoginResponse:
+    user = redeem_invite(body.invite_token, body.password)
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired invite token")
+    payload = {
+        "sub": str(user["id"]),
+        "username": user["username"],
+        "role": user.get("role", "user"),
+        "iat": datetime.utcnow(),
+        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS),
+    }
+    token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    log_event(user["id"], "login_success", "invite_setup", request.client.host if request.client else "", request.headers.get("user-agent", ""))
+    return LoginResponse(token=token)
+
+
+@router.get("/auth/me", response_model=UserInfo, dependencies=[Depends(require_auth)])
+def me(payload: dict = Depends(require_auth)) -> UserInfo:
+    return UserInfo(sub=str(payload.get("sub", "")), username=payload.get("username", ""), role=payload.get("role", ""))
+
+
+@router.get("/auth/users", dependencies=[Depends(require_admin)])
+def list_users_admin():
+    return list_users()
+
+
+@router.delete("/auth/users/{user_id}", dependencies=[Depends(require_admin)])
+def delete_user_admin(user_id: int):
+    delete_user(user_id)
+    return {"status": "deleted", "id": user_id}
+
+
+@router.post("/auth/invite/revoke", dependencies=[Depends(require_admin)])
+def revoke_invite_admin(req: InviteRequest):
+    revoke_invite(req.username)
+    return {"status": "revoked", "username": req.username}
 
 
 @router.post("/schedule/run", response_model=ScheduleResponse, dependencies=[Depends(require_auth)])

@@ -174,3 +174,20 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     token: str
 
+
+class InviteRequest(BaseModel):
+    username: str
+    license_key: str
+    role: str = "user"
+
+
+class SetupRequest(BaseModel):
+    invite_token: str
+    password: str
+
+
+class UserInfo(BaseModel):
+    sub: str
+    username: str
+    role: str = "user"
+
