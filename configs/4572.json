@@ -1,0 +1,178 @@
+{
+  "clinic": {
+    "name": "4572",
+    "timezone": "UTC"
+  },
+  "schedule": {
+    "start": "2025-11-30",
+    "weeks": 4
+  },
+  "ratios": {
+    "patients_per_tech": 4,
+    "patients_per_rn": 12,
+    "techs_per_rn": 4
+  },
+  "constraints": {
+    "enforce_three_day_cap": true,
+    "enforce_post_bleach_rest": true,
+    "enforce_alt_saturdays": true,
+    "limit_tech_four_days": true,
+    "limit_rn_four_days": true
+  },
+  "bleach": {
+    "day": "Thu",
+    "rotation": [],
+    "cursor": 0
+  },
+  "tournament": {
+    "trials": 20,
+    "last_seed": 0
+  },
+  "staff": [
+    {
+      "id": "1",
+      "name": "Ava",
+      "role": "RN",
+      "can_bleach": false,
+      "can_open": false,
+      "can_close": false,
+      "availability": {
+        "Mon": true,
+        "Tue": true,
+        "Wed": true,
+        "Thu": true,
+        "Fri": true,
+        "Sat": true
+      },
+      "pref_open_mwf": 0,
+      "pref_open_tts": 0,
+      "pref_mid_mwf": 0,
+      "pref_mid_tts": 0,
+      "pref_close_mwf": 0,
+      "pref_close_tts": 0
+    },
+    {
+      "id": "2",
+      "name": "Bob",
+      "role": "Tech",
+      "can_bleach": true,
+      "can_open": true,
+      "can_close": true,
+      "availability": {
+        "Mon": true,
+        "Tue": true,
+        "Wed": true,
+        "Thu": true,
+        "Fri": true,
+        "Sat": true
+      },
+      "pref_open_mwf": 0,
+      "pref_open_tts": 0,
+      "pref_mid_mwf": 0,
+      "pref_mid_tts": 0,
+      "pref_close_mwf": 0,
+      "pref_close_tts": 0
+    },
+    {
+      "id": "3",
+      "name": "Charlie",
+      "role": "Tech",
+      "can_bleach": true,
+      "can_open": true,
+      "can_close": true,
+      "availability": {
+        "Mon": true,
+        "Tue": true,
+        "Wed": true,
+        "Thu": true,
+        "Fri": true,
+        "Sat": true
+      },
+      "pref_open_mwf": 0,
+      "pref_open_tts": 0,
+      "pref_mid_mwf": 0,
+      "pref_mid_tts": 0,
+      "pref_close_mwf": 0,
+      "pref_close_tts": 0
+    },
+    {
+      "id": "4",
+      "name": "Devin",
+      "role": "Tech",
+      "can_bleach": true,
+      "can_open": true,
+      "can_close": true,
+      "availability": {
+        "Mon": true,
+        "Tue": true,
+        "Wed": true,
+        "Thu": true,
+        "Fri": true,
+        "Sat": true
+      },
+      "pref_open_mwf": 0,
+      "pref_open_tts": 0,
+      "pref_mid_mwf": 0,
+      "pref_mid_tts": 0,
+      "pref_close_mwf": 0,
+      "pref_close_tts": 0
+    }
+  ],
+  "demand": [
+    {
+      "Day": "Mon",
+      "Patients": 12,
+      "Tech_Open": 1,
+      "Tech_Mid": 1,
+      "Tech_Close": 1,
+      "RN_Count": 1,
+      "Admin_Count": 1
+    },
+    {
+      "Day": "Tue",
+      "Patients": 6,
+      "Tech_Open": 1,
+      "Tech_Mid": 1,
+      "Tech_Close": 1,
+      "RN_Count": 1,
+      "Admin_Count": 1
+    },
+    {
+      "Day": "Wed",
+      "Patients": 12,
+      "Tech_Open": 1,
+      "Tech_Mid": 1,
+      "Tech_Close": 1,
+      "RN_Count": 1,
+      "Admin_Count": 1
+    },
+    {
+      "Day": "Thu",
+      "Patients": 6,
+      "Tech_Open": 1,
+      "Tech_Mid": 1,
+      "Tech_Close": 1,
+      "RN_Count": 1,
+      "Admin_Count": 1
+    },
+    {
+      "Day": "Fri",
+      "Patients": 12,
+      "Tech_Open": 1,
+      "Tech_Mid": 1,
+      "Tech_Close": 1,
+      "RN_Count": 1,
+      "Admin_Count": 1
+    },
+    {
+      "Day": "Sat",
+      "Patients": 6,
+      "Tech_Open": 1,
+      "Tech_Mid": 1,
+      "Tech_Close": 1,
+      "RN_Count": 1,
+      "Admin_Count": 0
+    }
+  ],
+  "pto": []
+}

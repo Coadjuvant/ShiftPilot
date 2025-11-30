@@ -10,6 +10,7 @@ import json
 import os
 import secrets
 import hashlib
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -93,6 +94,7 @@ class PostgresAuth:
                 invite_expires_at TIMESTAMPTZ,
                 invite_created_by INTEGER,
                 last_invite_token TEXT,
+                public_id TEXT UNIQUE,
                 role TEXT NOT NULL DEFAULT 'user',
                 created_at TIMESTAMPTZ,
                 last_login TIMESTAMPTZ
@@ -103,6 +105,7 @@ class PostgresAuth:
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_invite_token TEXT;")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_expires_at TIMESTAMPTZ;")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_created_by INTEGER;")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS public_id TEXT UNIQUE;")
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS audit_log (
@@ -125,7 +128,7 @@ class PostgresAuth:
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, username, status, license_key, role, created_at, last_login, invite_expires_at, invite_created_by, last_invite_token FROM users ORDER BY id"
+            "SELECT id, username, status, license_key, role, created_at, last_login, invite_expires_at, invite_created_by, last_invite_token, public_id FROM users ORDER BY id"
         )
         rows = cur.fetchall()
         conn.close()
@@ -140,10 +143,20 @@ class PostgresAuth:
             "invite_expires_at",
             "invite_created_by",
             "last_invite_token",
+            "public_id",
         ]
         return [dict(zip(keys, r)) for r in rows]
 
     def delete_user(self, user_id: int):
+        # protect default admin
+        admin_user = (os.getenv("ADMIN_USER", "admin") or "admin").strip()
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("SELECT username FROM users WHERE id=%s", (user_id,))
+        row = cur.fetchone()
+        if row and row[0] == admin_user:
+            conn.close()
+            raise ValueError("Cannot delete default admin user")
         conn = self._conn()
         cur = conn.cursor()
         cur.execute("DELETE FROM users WHERE id=%s", (user_id,))
@@ -160,6 +173,38 @@ class PostgresAuth:
         conn.commit()
         conn.close()
 
+    def reset_invite(self, user_id: int, created_by: Optional[int] = None, ttl_hours: int = 24) -> str:
+        token = secrets.token_hex(16)
+        expires_at = datetime.utcnow() + timedelta(hours=ttl_hours)
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("SELECT username FROM users WHERE id=%s", (user_id,))
+        row = cur.fetchone()
+        if not row:
+            conn.close()
+            raise ValueError("User not found")
+        cur.execute(
+            "UPDATE users SET invite_token=%s, invite_expires_at=%s, invite_created_by=%s WHERE id=%s",
+            (token, expires_at, created_by, user_id),
+        )
+        conn.commit()
+        conn.close()
+        return token
+
+    def update_role(self, user_id: int, role: str):
+        conn = self._conn()
+        cur = conn.cursor()
+        # protect default admin
+        admin_user = (os.getenv("ADMIN_USER", "admin") or "admin").strip()
+        cur.execute("SELECT username FROM users WHERE id=%s", (user_id,))
+        row = cur.fetchone()
+        if row and row[0] == admin_user and role.lower() != "admin":
+            conn.close()
+            raise ValueError("Cannot demote default admin user")
+        cur.execute("UPDATE users SET role=%s WHERE id=%s", (role, user_id))
+        conn.commit()
+        conn.close()
+
     def ensure_admin(self, username: str, password: str, license_key: str = "DEMO"):
         conn = self._conn()
         cur = conn.cursor()
@@ -167,16 +212,17 @@ class PostgresAuth:
         now = datetime.utcnow()
         cur.execute(
             """
-            INSERT INTO users (username, password_hash, status, license_key, role, created_at)
-            VALUES (%s, %s, 'active', %s, 'admin', %s)
+            INSERT INTO users (username, password_hash, status, license_key, role, created_at, public_id)
+            VALUES (%s, %s, 'active', %s, 'admin', %s, %s)
             ON CONFLICT (username)
             DO UPDATE SET password_hash = EXCLUDED.password_hash,
                           status = 'active',
                           license_key = EXCLUDED.license_key,
                           role = 'admin',
-                          invite_token = NULL;
+                          invite_token = NULL,
+                          public_id = COALESCE(users.public_id, EXCLUDED.public_id);
             """,
-            (username.strip(), pwd_hash, license_key.strip(), now),
+            (username.strip(), pwd_hash, license_key.strip(), now, str(uuid.uuid4())),
         )
         conn.commit()
         conn.close()
@@ -185,7 +231,7 @@ class PostgresAuth:
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, username, password_hash, status, license_key, invite_token, invite_expires_at, invite_created_by, last_invite_token, role, created_at, last_login FROM users WHERE username=%s",
+            "SELECT id, username, password_hash, status, license_key, invite_token, invite_expires_at, invite_created_by, last_invite_token, public_id, role, created_at, last_login FROM users WHERE username=%s",
             (username.strip(),),
         )
         row = cur.fetchone()
@@ -202,6 +248,7 @@ class PostgresAuth:
             "invite_expires_at",
             "invite_created_by",
             "last_invite_token",
+            "public_id",
             "role",
             "created_at",
             "last_login",
@@ -230,17 +277,21 @@ class PostgresAuth:
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO users (username, status, license_key, invite_token, role, created_at)
-            VALUES (%s, 'pending', %s, %s, %s, %s)
+            INSERT INTO users (username, status, license_key, invite_token, role, created_at, public_id)
+            VALUES (%s, 'pending', %s, %s, %s, %s, %s)
             ON CONFLICT (username)
-            DO UPDATE SET status='pending', license_key=EXCLUDED.license_key, invite_token=EXCLUDED.invite_token, role=EXCLUDED.role;
+            DO UPDATE SET status='pending',
+                          license_key=EXCLUDED.license_key,
+                          invite_token=EXCLUDED.invite_token,
+                          role=EXCLUDED.role,
+                          public_id=COALESCE(users.public_id, EXCLUDED.public_id);
             """,
-            (username.strip(), license_key.strip(), token, role, datetime.utcnow()),
+            (username.strip(), license_key.strip(), token, role, datetime.utcnow(), str(uuid.uuid4())),
         )
         # set expiry and creator
         cur.execute(
-            "UPDATE users SET invite_expires_at=%s, invite_created_by=%s WHERE username=%s",
-            (expires_at, created_by, username.strip()),
+            "UPDATE users SET invite_expires_at=%s, invite_created_by=%s, public_id=COALESCE(public_id, %s) WHERE username=%s",
+            (expires_at, created_by, str(uuid.uuid4()), username.strip()),
         )
         conn.commit()
         conn.close()
@@ -250,14 +301,14 @@ class PostgresAuth:
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, username, status, license_key, role, invite_token, invite_expires_at, invite_created_by FROM users WHERE invite_token=%s",
+            "SELECT id, username, status, license_key, role, invite_token, invite_expires_at, invite_created_by, public_id FROM users WHERE invite_token=%s",
             (invite_token,),
         )
         row = cur.fetchone()
         if not row:
             conn.close()
             return None
-        user_id, username, status, license_key, role, inv, expires_at, inv_created_by = row
+        user_id, username, status, license_key, role, inv, expires_at, inv_created_by, public_id = row
         if expires_at and datetime.utcnow() > expires_at:
             conn.close()
             return None
@@ -268,7 +319,7 @@ class PostgresAuth:
         )
         conn.commit()
         cur.execute(
-            "SELECT id, username, password_hash, status, license_key, invite_token, invite_expires_at, invite_created_by, last_invite_token, role, created_at, last_login FROM users WHERE id=%s",
+            "SELECT id, username, password_hash, status, license_key, invite_token, invite_expires_at, invite_created_by, last_invite_token, public_id, role, created_at, last_login FROM users WHERE id=%s",
             (user_id,),
         )
         updated = cur.fetchone()
@@ -283,6 +334,7 @@ class PostgresAuth:
             "invite_expires_at",
             "invite_created_by",
             "last_invite_token",
+            "public_id",
             "role",
             "created_at",
             "last_login",
@@ -309,6 +361,18 @@ class PostgresAuth:
         conn.commit()
         conn.close()
 
+    def list_audit(self, limit: int = 50) -> List[Dict[str, Any]]:
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, user_id, event, detail, ip, user_agent, created_at FROM audit_log ORDER BY id DESC LIMIT %s",
+            (limit,),
+        )
+        rows = cur.fetchall()
+        conn.close()
+        keys = ["id", "user_id", "event", "detail", "ip", "user_agent", "created_at"]
+        return [dict(zip(keys, r)) for r in rows]
+
 
 # -----------------------
 # JSON backend (fallback)
@@ -333,6 +397,7 @@ class JsonAuth:
                     "license_key": license_key,
                     "invite_token": None,
                     "last_invite_token": existing.get("last_invite_token"),
+                    "public_id": existing.get("public_id") or str(uuid.uuid4()),
                 }
             )
         else:
@@ -346,6 +411,7 @@ class JsonAuth:
                     "role": "admin",
                     "invite_token": None,
                     "last_invite_token": None,
+                    "public_id": str(uuid.uuid4()),
                     "created_at": now,
                     "last_login": None,
                 }
@@ -396,6 +462,7 @@ class JsonAuth:
                     "invite_expires_at": expires_at.isoformat(),
                     "invite_created_by": created_by,
                     "last_invite_token": existing.get("last_invite_token"),
+                    "public_id": existing.get("public_id") or str(uuid.uuid4()),
                     "role": role,
                 }
             )
@@ -410,6 +477,7 @@ class JsonAuth:
                     "invite_expires_at": expires_at.isoformat(),
                     "invite_created_by": created_by,
                     "last_invite_token": None,
+                    "public_id": str(uuid.uuid4()),
                     "role": role,
                     "password_hash": None,
                     "created_at": now,
@@ -467,6 +535,10 @@ class JsonAuth:
         data["audit"] = audit
         _save_json(data)
 
+    def list_audit(self, limit: int = 50) -> List[Dict[str, Any]]:
+        data = _load_json()
+        audit = data.get("audit", [])
+        return list(reversed(audit))[:limit]
 
     # --- admin helpers ---
     def list_users(self) -> List[Dict[str, Any]]:
@@ -475,7 +547,14 @@ class JsonAuth:
 
     def delete_user(self, user_id: int):
         data = _load_json()
-        data["users"] = [u for u in data.get("users", []) if u.get("id") != user_id]
+        admin_user = (os.getenv("ADMIN_USER", "admin") or "admin").strip()
+        keep = []
+        for u in data.get("users", []):
+            if u.get("id") == user_id and u.get("username") == admin_user:
+                raise ValueError("Cannot delete default admin user")
+            if u.get("id") != user_id:
+                keep.append(u)
+        data["users"] = keep
         _save_json(data)
 
     def revoke_invite(self, username: str):
@@ -487,6 +566,35 @@ class JsonAuth:
                 u["invite_expires_at"] = None
                 u["status"] = "disabled"
         data["users"] = users
+        _save_json(data)
+
+    def reset_invite(self, user_id: int, created_by: Optional[int] = None, ttl_hours: int = 24) -> str:
+        token = secrets.token_hex(16)
+        expires_at = datetime.utcnow() + timedelta(hours=ttl_hours)
+        data = _load_json()
+        users = data.get("users", [])
+        found = False
+        for u in users:
+            if u.get("id") == user_id:
+                u["invite_token"] = token
+                u["invite_expires_at"] = expires_at.isoformat()
+                u["invite_created_by"] = created_by
+                found = True
+                break
+        if not found:
+            raise ValueError("User not found")
+        data["users"] = users
+        _save_json(data)
+        return token
+
+    def update_role(self, user_id: int, role: str):
+        data = _load_json()
+        admin_user = (os.getenv("ADMIN_USER", "admin") or "admin").strip()
+        for u in data.get("users", []):
+            if u.get("id") == user_id:
+                if u.get("username") == admin_user and role.lower() != "admin":
+                    raise ValueError("Cannot demote default admin user")
+                u["role"] = role
         _save_json(data)
 
 # -----------------------
@@ -549,3 +657,15 @@ def delete_user(user_id: int):
 
 def revoke_invite(username: str):
     return _backend.revoke_invite(username)
+
+
+def list_audit(limit: int = 50) -> List[Dict[str, Any]]:
+    return _backend.list_audit(limit=limit)
+
+
+def update_role(user_id: int, role: str):
+    return _backend.update_role(user_id, role)
+
+
+def reset_invite(user_id: int, created_by: Optional[int] = None, ttl_hours: int = 24) -> str:
+    return _backend.reset_invite(user_id, created_by=created_by, ttl_hours=ttl_hours)

@@ -72,6 +72,7 @@ export interface InviteRequest {
 
 export interface UserSummary {
   id: number;
+  public_id?: string;
   username: string;
   status: string;
   role: string;
@@ -81,6 +82,16 @@ export interface UserSummary {
   invite_expires_at?: string;
   invite_created_by?: number | null;
   last_invite_token?: string | null;
+}
+
+export interface AuditEntry {
+  id: number;
+  user_id: number | null;
+  event: string;
+  detail: string;
+  ip: string;
+  user_agent: string;
+  created_at: string;
 }
 
 export interface ScheduleRequest {
@@ -177,5 +188,20 @@ export const deleteUser = async (userId: number): Promise<{ status: string; id: 
 
 export const revokeInvite = async (req: InviteRequest): Promise<{ status: string; username: string }> => {
   const { data } = await api.post<{ status: string; username: string }>("/auth/invite/revoke", req);
+  return data;
+};
+
+export const listAudit = async (limit = 50): Promise<AuditEntry[]> => {
+  const { data } = await api.get<AuditEntry[]>(`/auth/audit?limit=${limit}`);
+  return data;
+};
+
+export const updateUserRole = async (userId: number, role: string): Promise<{ status: string; id: number; role: string }> => {
+  const { data } = await api.post<{ status: string; id: number; role: string }>(`/auth/users/${userId}/role`, { role });
+  return data;
+};
+
+export const resetUserInvite = async (userId: number): Promise<{ token: string }> => {
+  const { data } = await api.post<{ token: string }>(`/auth/users/${userId}/reset`);
   return data;
 };

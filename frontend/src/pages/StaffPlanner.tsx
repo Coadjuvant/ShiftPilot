@@ -14,7 +14,11 @@ import {
   listUsers,
   deleteUser,
   revokeInvite,
-  UserSummary
+  listAudit,
+  updateUserRole,
+  resetUserInvite,
+  UserSummary,
+  AuditEntry
 } from "../api/client";
 import DemandEditor from "../components/DemandEditor";
 import PTOEditor from "../components/PTOEditor";
@@ -107,10 +111,13 @@ export default function StaffPlanner() {
   const [limitRnFour, setLimitRnFour] = useState<boolean>(true);
   const [inviteUsername, setInviteUsername] = useState<string>("");
   const [inviteLicense, setInviteLicense] = useState<string>("DEMO");
+  const [inviteRole, setInviteRole] = useState<string>("user");
   const [inviteResult, setInviteResult] = useState<string>("");
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<string>("");
+  const [auditFeed, setAuditFeed] = useState<AuditEntry[]>([]);
+  const [lastError, setLastError] = useState<string>("");
   const isAuthed = Boolean(authToken && authToken.length > 0);
   const uniqueStaffIds = Array.from(
     new Set(staffRows.filter((s) => s.can_bleach).map((s) => s.id).filter((v) => v && v.trim().length > 0))
@@ -157,6 +164,7 @@ export default function StaffPlanner() {
   useEffect(() => {
     if (isAuthed && isAdmin && activeTab === "admin") {
       loadUsers();
+      loadAudit();
     }
   }, [isAuthed, isAdmin, activeTab]);
   useEffect(() => {
@@ -190,6 +198,14 @@ export default function StaffPlanner() {
       setUsers(data);
     } catch (err: any) {
       // ignore for now
+    }
+  };
+  const loadAudit = async () => {
+    try {
+      const data = await listAudit(50);
+      setAuditFeed(data);
+    } catch {
+      /* ignore */
     }
   };
   const updateRow = (index: number, key: "id" | "name" | "role", value: string) => {
@@ -514,6 +530,15 @@ export default function StaffPlanner() {
               style={{ maxWidth: "120px" }}
               disabled={!isAuthed}
             />
+            <select
+              value={inviteRole}
+              onChange={(e) => setInviteRole(e.target.value)}
+              style={{ maxWidth: "120px" }}
+              disabled={!isAuthed}
+            >
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
             <button
               className="secondary-btn"
               onClick={async () => {
@@ -521,7 +546,7 @@ export default function StaffPlanner() {
                   const res = await createInvite({
                     username: inviteUsername,
                     license_key: inviteLicense,
-                    role: "user"
+                    role: inviteRole
                   });
                   setInviteResult(`Invite token: ${res.token}`);
                 } catch (err: any) {
@@ -543,6 +568,7 @@ export default function StaffPlanner() {
             </button>
           )}
         </div>
+        {lastError && <p style={{ color: "#b45309", marginTop: "0.35rem" }}>{lastError}</p>}
       </div>
       <div
         style={{
@@ -1102,6 +1128,15 @@ export default function StaffPlanner() {
             onClick={async () => {
               if (hasErrors) {
                 setStatus("Fix validation errors before running.");
+                setLastError(
+                  [
+                    staffWarnings[0] ? `Staff: ${staffWarnings[0]}` : "",
+                    demandWarnings[0] ? `Demand: ${demandWarnings[0]}` : "",
+                    ptoWarnings[0] ? `PTO: ${ptoWarnings[0]}` : ""
+                  ]
+                    .filter(Boolean)
+                    .join(" | ")
+                );
                 return;
               }
               try {
@@ -1386,14 +1421,14 @@ export default function StaffPlanner() {
               Refresh users
             </button>
           </div>
-          {users.length === 0 ? (
-            <p className="muted">No users found.</p>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table cellPadding={6} style={{ minWidth: "700px", borderCollapse: "collapse", fontSize: "0.9rem" }}>
+          <div style={{ overflowX: "auto", marginBottom: "1rem" }}>
+            {users.length === 0 ? (
+              <p className="muted">No users found.</p>
+            ) : (
+              <table cellPadding={6} style={{ minWidth: "780px", borderCollapse: "collapse", fontSize: "0.9rem" }}>
                 <thead>
                   <tr>
-                    <th>ID</th>
+                    <th>Public ID</th>
                     <th>Username</th>
                     <th>Role</th>
                     <th>Status</th>
@@ -1405,20 +1440,57 @@ export default function StaffPlanner() {
                 <tbody>
                   {users.map((u) => (
                     <tr key={u.id}>
-                      <td>{u.id}</td>
+                      <td>{u.public_id || u.id}</td>
                       <td>{u.username}</td>
-                      <td>{u.role}</td>
+                      <td>
+                        <select
+                          value={u.role}
+                          onChange={async (e) => {
+                            const newRole = e.target.value;
+                            try {
+                              await updateUserRole(u.id, newRole);
+                              loadUsers();
+                            } catch {
+                              /* ignore */
+                            }
+                          }}
+                        >
+                          <option value="user">User</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </td>
                       <td>{u.status}</td>
                       <td>{u.last_login || "—"}</td>
                       <td>{u.invite_expires_at || "—"}</td>
-                      <td style={{ display: "flex", gap: "0.35rem" }}>
+                      <td
+                        style={{
+                          display: "flex",
+                          gap: "0.35rem",
+                          flexWrap: "nowrap",
+                          alignItems: "center",
+                          justifyContent: "flex-start"
+                        }}
+                      >
+                        <button
+                          className="secondary-btn"
+                          onClick={async () => {
+                            try {
+                              await revokeInvite({ username: u.username, license_key: "" });
+                              loadUsers();
+                            } catch {
+                              /* ignore */
+                            }
+                          }}
+                        >
+                          Revoke invite
+                        </button>
                         <button
                           className="secondary-btn"
                           onClick={async () => {
                             try {
                               await deleteUser(u.id);
                               loadUsers();
-                            } catch (err) {
+                            } catch {
                               /* ignore */
                             }
                           }}
@@ -1429,22 +1501,54 @@ export default function StaffPlanner() {
                           className="secondary-btn"
                           onClick={async () => {
                             try {
-                              await revokeInvite({ username: u.username, license_key: "" });
+                              const res = await resetUserInvite(u.id);
+                              setInviteResult(`Reset token for ${u.username}: ${res.token}`);
                               loadUsers();
-                            } catch (err) {
-                              /* ignore */
+                            } catch (err: any) {
+                              setInviteResult(err?.message ?? "Failed to reset invite");
                             }
                           }}
                         >
-                          Revoke invite
+                          Reset password
                         </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
-          )}
+            )}
+          </div>
+          <div>
+            <h4>Recent activity</h4>
+            {auditFeed.length === 0 ? (
+              <p className="muted">No audit entries.</p>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table cellPadding={6} style={{ minWidth: "720px", borderCollapse: "collapse", fontSize: "0.9rem" }}>
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Event</th>
+                      <th>User ID</th>
+                      <th>Detail</th>
+                      <th>IP</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditFeed.map((a) => (
+                      <tr key={a.id}>
+                        <td>{a.created_at}</td>
+                        <td>{a.event}</td>
+                        <td>{a.user_id ?? "—"}</td>
+                        <td>{a.detail || "—"}</td>
+                        <td>{a.ip || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
       </div>

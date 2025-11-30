@@ -2,21 +2,29 @@
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #0f172a;
-  background-color: #f0f9ff;
-  --indigo-600: #4f46e5;
-  --teal-500: #14b8a6;
-  --slate-900: #0f172a;
-  --slate-600: #475569;
-  --slate-200: #e2e8f0;
-  --sky-50: #f0f9ff;
+  color: #071b45;
+  background-color: #eeedeb;
+  /* Brand palette */
+  --brand-blue: #0033a0;
+  --deep-blue: #071b45;
+  --deep-blue-95: rgba(7, 27, 69, 0.95);
   --white: #ffffff;
+  --warm-1: #eeedeb;
+  --warm-2: #dcdad8;
+  --warm-3: #cbc8c4;
+  --warm-5: #a8a39d;
+  --vivid-red: #ed484f;
+  --active-red: #e3467d;
+  --passionate-red: #901f49;
+  --medical-blue: #28aeca;
+  --concise-blue: #00a3de;
+  --effective-blue: #377cb5;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: var(--sky-50);
+  background-color: var(--warm-1);
 }
 
 #root {
@@ -24,27 +32,27 @@ body {
 }
 
 [data-theme="dark"] {
-  background-color: #0f172a;
-  color: #e2e8f0;
+  background-color: var(--deep-blue);
+  color: var(--warm-2);
 }
 
 [data-theme="dark"] .app-shell {
-  color: #e2e8f0;
+  color: var(--warm-2);
 }
 
 [data-theme="dark"] .card {
-  background: #111827;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  background: var(--deep-blue-95);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
 }
 
 [data-theme="dark"] .hero {
-  background: linear-gradient(120deg, rgba(79, 70, 229, 0.2), rgba(20, 184, 166, 0.15));
+  background: linear-gradient(135deg, rgba(0, 51, 160, 0.35), rgba(40, 174, 202, 0.25));
 }
 
 [data-theme="dark"] input,
 [data-theme="dark"] select {
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--deep-blue);
+  color: var(--warm-2);
   border-color: #1f2937;
 }
 
@@ -54,17 +62,13 @@ body {
 }
 
 [data-theme="dark"] .secondary-btn {
-  background-color: #111827;
-  color: #e2e8f0;
-  border-color: #1f2937;
+  background-color: var(--deep-blue);
+  color: var(--warm-2);
+  border: 1px solid #1f2937;
 }
 
 [data-theme="dark"] .secondary-btn:hover {
-  background-color: #1f2937;
-}
-
-#root {
-  min-height: 100vh;
+  background-color: #0c1531;
 }
 
 .app-shell {
@@ -82,15 +86,9 @@ body {
 
 .hero {
   border-radius: 16px;
-  background: linear-gradient(120deg, rgba(79, 70, 229, 0.08), rgba(20, 184, 166, 0.08));
+  background: linear-gradient(135deg, rgba(0, 51, 160, 0.12), rgba(40, 174, 202, 0.12));
   padding: 1.25rem;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  box-shadow: 0 12px 30px rgba(7, 27, 69, 0.15);
 }
 
 .app-header-centered {
@@ -112,16 +110,8 @@ body {
   height: 64px;
 }
 
-.eyebrow {
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.75rem;
-  color: var(--teal-500);
-  margin: 0;
-}
-
 .muted {
-  color: var(--slate-600);
+  color: #5c667a;
   margin: 0.2rem 0 0;
 }
 
@@ -129,7 +119,7 @@ body {
   background: var(--white);
   border-radius: 16px;
   padding: 1.75rem;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 12px 30px rgba(7, 27, 69, 0.12);
 }
 
 table {
@@ -149,13 +139,13 @@ select {
   padding: 0.55rem 0.65rem;
   height: 40px;
   border-radius: 10px;
-  border: 1px solid var(--slate-200);
+  border: 1px solid var(--warm-3);
   background: var(--white);
-  color: var(--slate-900);
+  color: var(--deep-blue);
 }
 
 button {
-  background-color: var(--indigo-600);
+  background-color: var(--brand-blue);
   color: var(--white);
   border: none;
   padding: 0.6rem 1.1rem;
@@ -166,8 +156,8 @@ button {
 }
 
 button:hover {
-  background-color: #4239d3;
-  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.3);
+  background-color: #0a3fba;
+  box-shadow: 0 8px 18px rgba(0, 51, 160, 0.25);
 }
 
 button:active {
@@ -176,12 +166,12 @@ button:active {
 
 .secondary-btn {
   background-color: var(--white);
-  color: var(--slate-900);
-  border: 1px solid var(--slate-200);
+  color: var(--deep-blue);
+  border: 1px solid var(--warm-3);
 }
 
 .secondary-btn:hover {
-  background-color: var(--slate-200);
+  background-color: var(--warm-2);
 }
 
 .stack {
@@ -201,14 +191,14 @@ button:active {
 
 .tab-btn {
   background: var(--white);
-  color: var(--slate-900);
-  border: 1px solid var(--slate-200);
+  color: var(--deep-blue);
+  border: 1px solid var(--warm-3);
 }
 
 .tab-btn.active {
-  background: var(--indigo-600);
+  background: var(--brand-blue);
   color: var(--white);
-  border-color: var(--indigo-600);
+  border-color: var(--brand-blue);
 }
 
 table td,
@@ -229,7 +219,7 @@ table th {
   flex-direction: column;
   gap: 4px;
   font-size: 0.95rem;
-  color: var(--slate-900);
+  color: var(--deep-blue);
 }
 
 @keyframes progressPulse {

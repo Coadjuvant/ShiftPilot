@@ -42,6 +42,9 @@ from backend.auth_db import (
     list_users,
     delete_user,
     revoke_invite,
+    list_audit,
+    update_role,
+    reset_invite,
 )
 from .schemas import (
     AssignmentOut,
@@ -168,6 +171,13 @@ def invite_user(req: InviteRequest, payload: dict = Depends(require_auth)) -> di
     except Exception:
         creator_id = None
     token = create_invite(req.username, req.license_key, role=req.role or "user", created_by=creator_id)
+    log_event(
+        creator_id,
+        "invite_created",
+        f"username={req.username}",
+        "",
+        "",
+    )
     return {"token": token}
 
 
@@ -200,14 +210,52 @@ def list_users_admin():
 
 @router.delete("/auth/users/{user_id}", dependencies=[Depends(require_admin)])
 def delete_user_admin(user_id: int):
-    delete_user(user_id)
-    return {"status": "deleted", "id": user_id}
+    try:
+        delete_user(user_id)
+        log_event(user_id, "user_deleted", "", "", "")
+        return {"status": "deleted", "id": user_id}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/auth/invite/revoke", dependencies=[Depends(require_admin)])
 def revoke_invite_admin(req: InviteRequest):
     revoke_invite(req.username)
+    log_event(None, "invite_revoked", f"username={req.username}", "", "")
     return {"status": "revoked", "username": req.username}
+
+
+@router.get("/auth/audit", dependencies=[Depends(require_admin)])
+def audit_feed(limit: int = 50):
+    return list_audit(limit=limit)
+
+
+@router.post("/auth/users/{user_id}/role", dependencies=[Depends(require_admin)])
+def update_user_role(user_id: int, body: dict | None = None, payload: dict = Depends(require_auth)):
+    role = body.get("role") if body else None
+    if not role:
+        raise HTTPException(status_code=400, detail="Role required")
+    try:
+        update_role(user_id, role)
+        log_event(payload.get("sub"), "role_updated", f"user_id={user_id}, role={role}", "", "")
+        return {"status": "ok", "id": user_id, "role": role}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/auth/users/{user_id}/reset", dependencies=[Depends(require_admin)])
+def reset_user_invite(user_id: int, payload: dict = Depends(require_auth)):
+    creator = payload.get("sub")
+    try:
+        creator_id = int(creator) if creator is not None else None
+    except Exception:
+        creator_id = None
+    try:
+        token = reset_invite(user_id, created_by=creator_id)
+        log_event(creator_id, "reset_invite", f"user_id={user_id}", "", "")
+        return {"token": token}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/schedule/run", response_model=ScheduleResponse, dependencies=[Depends(require_auth)])

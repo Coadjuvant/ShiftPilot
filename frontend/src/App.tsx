@@ -8,6 +8,16 @@ export default function App() {
 
   useEffect(() => {
     document.body.dataset.theme = theme;
+    // Update favicon/title based on theme using brand kit icons
+    const link =
+      document.querySelector<HTMLLinkElement>("link[rel='icon']") ||
+      document.querySelector<HTMLLinkElement>("link[rel='shortcut icon']") ||
+      document.createElement("link");
+    link.rel = "icon";
+    link.type = "image/png";
+    link.href = theme === "dark" ? "/favicon-dark.png" : "/favicon-light.png";
+    if (!link.parentNode) document.head.appendChild(link);
+    document.title = "Clinic Scheduler";
   }, [theme]);
 
   return (
