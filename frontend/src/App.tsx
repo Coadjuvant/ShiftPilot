@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   // Use dark logo on dark background, light logo on light background
-  const logoSrc = theme === "dark" ? "/logo-dark.svg" : "/logo-light.svg";
+  const logoSrc = theme === "dark" ? "/logo-dark-inline.png" : "/logo-light-inline.png";
 
   useEffect(() => {
     document.body.dataset.theme = theme;
@@ -14,8 +14,8 @@ export default function App() {
       document.querySelector<HTMLLinkElement>("link[rel='shortcut icon']") ||
       document.createElement("link");
     link.rel = "icon";
-    link.type = "image/png";
-    link.href = theme === "dark" ? "/favicon-dark.png" : "/favicon-light.png";
+    link.type = "image/x-icon";
+    link.href = theme === "dark" ? "/favicon-dark.ico" : "/favicon-light.ico";
     if (!link.parentNode) document.head.appendChild(link);
     document.title = "Clinic Scheduler";
   }, [theme]);

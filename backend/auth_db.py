@@ -11,7 +11,7 @@ import os
 import secrets
 import hashlib
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
@@ -128,7 +128,7 @@ class PostgresAuth:
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, username, status, license_key, role, created_at, last_login, invite_expires_at, invite_created_by, last_invite_token, public_id FROM users ORDER BY id"
+            "SELECT id, username, status, license_key, role, created_at, last_login, invite_expires_at, invite_created_by, last_invite_token, public_id, invite_token FROM users ORDER BY id"
         )
         rows = cur.fetchall()
         conn.close()
@@ -144,6 +144,7 @@ class PostgresAuth:
             "invite_created_by",
             "last_invite_token",
             "public_id",
+            "invite_token",
         ]
         return [dict(zip(keys, r)) for r in rows]
 
@@ -275,6 +276,7 @@ class PostgresAuth:
         expires_at = datetime.utcnow() + timedelta(hours=ttl_hours)
         conn = self._conn()
         cur = conn.cursor()
+        desired_user = username.strip() or f"user-{token[:8]}"
         cur.execute(
             """
             INSERT INTO users (username, status, license_key, invite_token, role, created_at, public_id)
@@ -286,18 +288,18 @@ class PostgresAuth:
                           role=EXCLUDED.role,
                           public_id=COALESCE(users.public_id, EXCLUDED.public_id);
             """,
-            (username.strip(), license_key.strip(), token, role, datetime.utcnow(), str(uuid.uuid4())),
+            (desired_user, license_key.strip(), token, role, datetime.utcnow(), str(uuid.uuid4())),
         )
         # set expiry and creator
         cur.execute(
             "UPDATE users SET invite_expires_at=%s, invite_created_by=%s, public_id=COALESCE(public_id, %s) WHERE username=%s",
-            (expires_at, created_by, str(uuid.uuid4()), username.strip()),
+            (expires_at, created_by, str(uuid.uuid4()), desired_user),
         )
         conn.commit()
         conn.close()
         return token
 
-    def redeem_invite(self, invite_token: str, password: str) -> Optional[Dict[str, Any]]:
+    def redeem_invite(self, invite_token: str, password: str, desired_username: Optional[str] = None) -> Optional[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(
@@ -309,9 +311,22 @@ class PostgresAuth:
             conn.close()
             return None
         user_id, username, status, license_key, role, inv, expires_at, inv_created_by, public_id = row
-        if expires_at and datetime.utcnow() > expires_at:
-            conn.close()
-            return None
+        if expires_at:
+            now = datetime.now(timezone.utc)
+            exp = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
+            exp = exp.astimezone(timezone.utc)
+            if now > exp:
+                conn.close()
+                return None
+        # allow username change on redeem if requested and unique
+        if desired_username and desired_username.strip() and desired_username.strip() != username:
+            desired = desired_username.strip()
+            cur.execute("SELECT 1 FROM users WHERE username=%s", (desired,))
+            if cur.fetchone():
+                conn.close()
+                raise ValueError("Username already exists")
+            username = desired
+            cur.execute("UPDATE users SET username=%s WHERE id=%s", (username, user_id))
         pwd_hash = _hash_password(password)
         cur.execute(
             "UPDATE users SET password_hash=%s, status='active', last_invite_token=%s, invite_token=NULL WHERE id=%s",
@@ -452,7 +467,8 @@ class JsonAuth:
         expires_at = datetime.utcnow() + timedelta(hours=ttl_hours)
         data = _load_json()
         users = data.get("users", [])
-        existing = next((u for u in users if u.get("username") == username.strip()), None)
+        desired_user = username.strip() or f"user-{token[:8]}"
+        existing = next((u for u in users if u.get("username") == desired_user), None)
         if existing:
             existing.update(
                 {
@@ -470,7 +486,7 @@ class JsonAuth:
             users.append(
                 {
                     "id": _next_user_id(users),
-                    "username": username.strip(),
+                    "username": desired_user,
                     "status": "pending",
                     "license_key": license_key.strip(),
                     "invite_token": token,
@@ -488,7 +504,7 @@ class JsonAuth:
         _save_json(data)
         return token
 
-    def redeem_invite(self, invite_token: str, password: str) -> Optional[Dict[str, Any]]:
+    def redeem_invite(self, invite_token: str, password: str, desired_username: Optional[str] = None) -> Optional[Dict[str, Any]]:
         data = _load_json()
         users = data.get("users", [])
         target = next((u for u in users if u.get("invite_token") == invite_token), None)
@@ -497,10 +513,20 @@ class JsonAuth:
         expires = target.get("invite_expires_at")
         if expires:
             try:
-                if datetime.utcnow() > datetime.fromisoformat(expires):
+                exp_dt = datetime.fromisoformat(expires)
+                if exp_dt.tzinfo is None:
+                    exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                exp_dt = exp_dt.astimezone(timezone.utc)
+                if datetime.now(timezone.utc) > exp_dt:
                     return None
             except Exception:
                 return None
+        # allow username change if requested and unique
+        if desired_username and desired_username.strip() and desired_username.strip() != target.get("username"):
+            desired = desired_username.strip()
+            if any(u.get("username") == desired for u in users):
+                raise ValueError("Username already exists")
+            target["username"] = desired
         target["password_hash"] = _hash_password(password)
         target["status"] = "active"
         target["last_invite_token"] = target.get("invite_token")
@@ -632,11 +658,11 @@ def create_invite(
     created_by: Optional[int] = None,
     ttl_hours: int = 24,
 ) -> str:
-    return _backend.create_invite(username, license_key, role, created_by=created_by, ttl_hours=ttl_hours)
+    return _backend.create_invite(username or "", license_key, role, created_by=created_by, ttl_hours=ttl_hours)
 
 
-def redeem_invite(invite_token: str, password: str) -> Optional[Dict[str, Any]]:
-    return _backend.redeem_invite(invite_token, password)
+def redeem_invite(invite_token: str, password: str, desired_username: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    return _backend.redeem_invite(invite_token, password, desired_username=desired_username)
 
 
 def update_last_login(user_id: int):

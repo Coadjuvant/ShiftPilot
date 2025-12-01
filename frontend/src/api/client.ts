@@ -82,6 +82,7 @@ export interface UserSummary {
   invite_expires_at?: string;
   invite_created_by?: number | null;
   last_invite_token?: string | null;
+  invite_token?: string | null;
 }
 
 export interface AuditEntry {
@@ -166,8 +167,12 @@ export const login = async (username: string, password: string): Promise<{ token
   return data;
 };
 
-export const setupUser = async (invite_token: string, password: string): Promise<{ token: string }> => {
-  const { data } = await api.post<{ token: string }>("/auth/setup", { invite_token, password });
+export const setupUser = async (
+  invite_token: string,
+  username: string = "",
+  password: string = ""
+): Promise<{ token: string }> => {
+  const { data } = await api.post<{ token: string }>("/auth/setup", { invite_token, username, password });
   return data;
 };
 

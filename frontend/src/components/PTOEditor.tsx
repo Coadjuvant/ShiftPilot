@@ -39,7 +39,7 @@ export default function PTOEditor({ rows, onChange, staffOptions = [], scheduleS
       {grouped.map(({ staff, entries }) => (
         <div key={staff.id || staff.name} style={{ marginBottom: "1rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
-            <strong>{staff.name || staff.id || "Staff"}</strong>
+            <strong>{staff.name || "(no name set)"}</strong>
             {staff.id && (
               <button className="secondary-btn" onClick={() => addForStaff(staff.id)}>
                 Add PTO
@@ -114,7 +114,7 @@ export default function PTOEditor({ rows, onChange, staffOptions = [], scheduleS
                       <option value="">Select staff...</option>
                       {staffOptions.map((opt) => (
                         <option key={opt.id} value={opt.id}>
-                          {opt.name || opt.id}
+                          {opt.name || "(no name set)"}
                         </option>
                       ))}
                     </select>

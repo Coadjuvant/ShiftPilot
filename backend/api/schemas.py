@@ -176,13 +176,14 @@ class LoginResponse(BaseModel):
 
 
 class InviteRequest(BaseModel):
-    username: str
+    username: str = ""  # optional; if blank, server will auto-generate
     license_key: str
     role: str = "user"
 
 
 class SetupRequest(BaseModel):
     invite_token: str
+    username: str
     password: str
 
 

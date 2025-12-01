@@ -183,7 +183,11 @@ def invite_user(req: InviteRequest, payload: dict = Depends(require_auth)) -> di
 
 @router.post("/auth/setup", response_model=LoginResponse)
 def setup_user(request: Request, body: SetupRequest) -> LoginResponse:
-    user = redeem_invite(body.invite_token, body.password)
+    try:
+        user = redeem_invite(body.invite_token, body.password, desired_username=body.username)
+    except ValueError as e:
+        # propagate specific username conflict
+        raise HTTPException(status_code=409, detail=str(e))
     if not user:
         raise HTTPException(status_code=400, detail="Invalid or expired invite token")
     payload = {
@@ -212,7 +216,8 @@ def list_users_admin():
 def delete_user_admin(user_id: int):
     try:
         delete_user(user_id)
-        log_event(user_id, "user_deleted", "", "", "")
+        # log after deletion without FK reference
+        log_event(None, "user_deleted", f"user_id={user_id}", "", "")
         return {"status": "deleted", "id": user_id}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
