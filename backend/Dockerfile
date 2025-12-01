@@ -6,10 +6,11 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY backend/requirements.txt /app/requirements.txt
+# Expect build context to be the backend directory.
+COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-COPY backend /app
+COPY . /app
 
 ENV HOST=0.0.0.0
 ENV PORT=8000
