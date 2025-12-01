@@ -30,32 +30,6 @@ export default function StaffPlanner() {
     if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
     return Math.random().toString(36).slice(2, 10);
   };
-  const copyText = async (text: string) => {
-    try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        setInviteResult("Copied to clipboard");
-      } else {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-        setInviteResult("Copied to clipboard");
-      }
-    } catch {
-      setInviteResult("Copy failed");
-    }
-  };
-  const friendlyError = (err: any, fallback: string) => {
-    const status = err?.response?.status;
-    if (status === 401) return "Session expired. Please log in again.";
-    if (status === 422) return "Validation failed. Please check your inputs.";
-    if (status === 400 && err?.response?.data?.detail) return String(err.response.data.detail);
-    if (status === 409) return "Conflict: value already in use.";
-    return err?.message ?? fallback;
-  };
   const [status, setStatus] = useState<string>("Checking API...");
   const [activeTab, setActiveTab] = useState<"staff" | "avail" | "prefs" | "demand" | "pto" | "run" | "admin">("staff");
   const defaultAvailability = DAYS.reduce<Record<string, boolean>>((acc, day) => {
@@ -148,7 +122,7 @@ export default function StaffPlanner() {
   const [currentUser, setCurrentUser] = useState<string>("");
   const [auditFeed, setAuditFeed] = useState<AuditEntry[]>([]);
   const [lastError, setLastError] = useState<string>("");
-  const progressRef = useRef<NodeJS.Timeout | null>(null);
+  const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [progress, setProgress] = useState<number>(0);
   const [autoLoadedConfig, setAutoLoadedConfig] = useState<boolean>(false);
   const isAuthed = Boolean(authToken && authToken.length > 0);
@@ -223,11 +197,6 @@ export default function StaffPlanner() {
       localStorage.removeItem("auth_token");
     }
   }, [authToken]);
-  // Prune bleach rotation entries that no longer exist in staff list
-  useEffect(() => {
-    const validIds = new Set(staffRows.map((s) => s.id).filter(Boolean));
-    setBleachRotation((prev) => prev.filter((sid) => validIds.has(sid)));
-  }, [staffRows]);
   useEffect(() => {
     if (!isAuthed) return;
     listConfigs()
@@ -295,13 +264,10 @@ export default function StaffPlanner() {
   const staffWarnings: string[] = [];
   staffRows.forEach((row, idx) => {
     if (!row.id?.trim()) {
-      staffWarnings.push(`Staff row ${idx + 1}: missing ID`);
-    }
-    if (!row.name?.trim()) {
-      staffWarnings.push(`Staff row ${idx + 1}: missing name`);
+      staffWarnings.push(`Row ${idx + 1} is missing ID`);
     }
     if (!row.role?.trim()) {
-      staffWarnings.push(`Staff row ${idx + 1}: missing role`);
+      staffWarnings.push(`Row ${idx + 1} is missing role`);
     }
   });
   const demandWarnings: string[] = demandRows
@@ -335,58 +301,6 @@ export default function StaffPlanner() {
     })
     .filter(Boolean);
   const hasErrors = staffWarnings.length > 0 || demandWarnings.length > 0 || ptoWarnings.length > 0;
-
-  const fmtDateTime = (value?: string | null) => {
-    if (!value) return "";
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return value;
-    return d.toLocaleString(undefined, {
-      month: "2-digit",
-      day: "2-digit",
-      year: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit"
-    });
-  };
-
-  const WarningList = ({ title, items }: { title: string; items: string[] }) => {
-    if (!items.length) return null;
-    return (
-      <div
-        style={{
-          background: "rgba(227, 110, 26, 0.12)",
-          border: "1px solid rgba(227, 110, 26, 0.4)",
-          color: "#b45309",
-          padding: "0.5rem 0.75rem",
-          borderRadius: "8px",
-          marginBottom: "0.75rem"
-        }}
-      >
-        <strong>{title}</strong>
-        <ul style={{ margin: "0.35rem 0 0 1rem" }}>
-          {items.map((msg, i) => (
-            <li key={`${msg}-${i}`}>{msg}</li>
-          ))}
-        </ul>
-      </div>
-    );
-  };
-
-  const getWarningsForTab = () => {
-    switch (activeTab) {
-      case "staff":
-      case "avail":
-      case "prefs":
-        return staffWarnings;
-      case "demand":
-        return demandWarnings;
-      case "pto":
-        return ptoWarnings;
-      default:
-        return [];
-    }
-  };
 
   const handleLoadConfig = async (name?: string) => {
     const cfgName = name ?? selectedConfig;
@@ -458,7 +372,7 @@ export default function StaffPlanner() {
       setStatus(`Loaded config: ${cfgName}`);
       localStorage.setItem("last_config", cfgName);
     } catch (err: any) {
-      setStatus(friendlyError(err, "Failed to load config."));
+      setStatus(`Failed to load: ${err?.message ?? err}`);
     }
   };
 
@@ -503,7 +417,7 @@ export default function StaffPlanner() {
       const names = await listConfigs();
       setConfigs(names);
     } catch (err: any) {
-      setStatus(friendlyError(err, "Failed to save config."));
+      setStatus(`Failed to save: ${err?.message ?? err}`);
     }
   };
 
@@ -525,15 +439,8 @@ export default function StaffPlanner() {
     } catch (err: any) {
       setAuthTokenState(null);
       setAuthToken(null);
-      const msg =
-        err?.response?.status === 401
-          ? "Incorrect username or password"
-          : err?.response?.status === 409
-          ? "Username already taken"
-          : err?.message ?? "Login failed";
-      setLoginError(msg);
-      // Keep only the inline login error, don't mirror in status
-      // setStatus(msg);
+      setLoginError(err?.message ?? "Login failed");
+      setStatus("Login failed");
     }
   };
 
@@ -543,11 +450,7 @@ export default function StaffPlanner() {
         setLoginError("Invite token required");
         return;
       }
-      if (!loginUser.trim()) {
-        setLoginError("Username required");
-        return;
-      }
-      const res = await setupUser(inviteToken.trim(), loginUser.trim(), loginPass);
+      const res = await setupUser(inviteToken.trim(), loginPass);
       localStorage.setItem("auth_token", res.token);
       setAuthTokenState(res.token);
       setAuthToken(res.token);
@@ -579,12 +482,11 @@ export default function StaffPlanner() {
     setIsAdmin(false);
   };
 
-  const isApiStatus = status.toLowerCase().startsWith("api status");
   if (!isAuthed) {
       return (
         <section className="card">
           <h2>Staff Planner (React prototype)</h2>
-          {!isApiStatus ? <p>{status}</p> : null}
+          <p>{status}</p>
         <div className="card" style={{ marginBottom: "1rem" }}>
           <h4>{loginMode === "login" ? "Existing user login" : "New user setup"}</h4>
           <div style={{ display: "flex", gap: "0.75rem", marginBottom: "0.5rem" }}>
@@ -608,75 +510,32 @@ export default function StaffPlanner() {
             </button>
           </div>
           {loginMode === "login" ? (
-            <form
-              className="stack"
-              style={{ gap: "0.75rem" }}
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleLogin();
-              }}
-            >
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                  gap: "0.75rem",
-                  alignItems: "end"
-                }}
-              >
-                <label style={{ flex: "1 1 200px" }}>
-                  Username
-                  <input value={loginUser} onChange={(e) => setLoginUser(e.target.value)} />
-                </label>
-                <label style={{ flex: "1 1 200px" }}>
-                  Password
-                  <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
-                </label>
-                <div style={{ display: "flex", justifyContent: "flex-start", alignItems: "center" }}>
-                  <button type="submit" className="primary-btn" style={{ height: "42px" }}>
-                    Login
-                  </button>
-                </div>
-              </div>
-            </form>
+            <div className="stack">
+              <label>
+                Username
+                <input value={loginUser} onChange={(e) => setLoginUser(e.target.value)} />
+              </label>
+              <label>
+                Password
+                <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
+              </label>
+              <button onClick={handleLogin}>Login</button>
+            </div>
           ) : (
-            <form
-              className="stack"
-              style={{ gap: "0.75rem" }}
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSetup();
-              }}
-            >
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                  gap: "0.75rem",
-                  alignItems: "end"
-                }}
-              >
-                <label style={{ flex: "1 1 180px" }}>
-                  Invite token
-                  <input value={inviteToken} onChange={(e) => setInviteToken(e.target.value)} />
-                </label>
-                <label style={{ flex: "1 1 180px" }}>
-                  Choose username
-                  <input value={loginUser} onChange={(e) => setLoginUser(e.target.value)} />
-                </label>
-                <label style={{ flex: "1 1 180px" }}>
-                  Set password
-                  <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
-                </label>
-                <div style={{ display: "flex", justifyContent: "flex-start", alignItems: "center" }}>
-                  <button type="submit" className="primary-btn" style={{ height: "42px" }}>
-                    Activate account
-                  </button>
-                </div>
-              </div>
-            </form>
+            <div className="stack">
+              <label>
+                Invite token
+                <input value={inviteToken} onChange={(e) => setInviteToken(e.target.value)} />
+              </label>
+              <label>
+                Set password
+                <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
+              </label>
+              <button onClick={handleSetup}>Activate account</button>
+            </div>
           )}
           {loginError && <p style={{ color: "#b45309" }}>{loginError}</p>}
+          {!isAuthed && <p style={{ color: "#b45309" }}>Login required to edit and run.</p>}
         </div>
       </section>
     );
@@ -686,16 +545,23 @@ export default function StaffPlanner() {
     <section className="card">
       <h2>Staff Planner (React prototype)</h2>
       {isAdmin || !status.toLowerCase().startsWith("api status") ? <p>{status}</p> : null}
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.75rem", gap: "0.5rem", alignItems: "center" }}>
-            <div>
-              <strong>User tools</strong>
-              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem", alignItems: "center" }}>
-                <input
-                  placeholder="License key"
-                  value={inviteLicense}
-                  onChange={(e) => setInviteLicense(e.target.value)}
-                  style={{ maxWidth: "120px" }}
-                  disabled={!isAuthed}
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.75rem", gap: "0.5rem", alignItems: "center" }}>
+        <div>
+          <strong>User tools</strong>
+          <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem", alignItems: "center" }}>
+            <input
+              placeholder="Invite username"
+              value={inviteUsername}
+              onChange={(e) => setInviteUsername(e.target.value)}
+              style={{ maxWidth: "160px" }}
+              disabled={!isAuthed}
+            />
+            <input
+              placeholder="License key"
+              value={inviteLicense}
+              onChange={(e) => setInviteLicense(e.target.value)}
+              style={{ maxWidth: "120px" }}
+              disabled={!isAuthed}
             />
             <select
               value={inviteRole}
@@ -710,42 +576,22 @@ export default function StaffPlanner() {
               className="secondary-btn"
               onClick={async () => {
                 try {
-                  const generatedUser =
-                    inviteUsername.trim() ||
-                    (typeof crypto !== "undefined" && crypto.randomUUID ? `user-${crypto.randomUUID().slice(0, 8)}` : `user-${Math.random().toString(36).slice(2, 8)}`);
-                const res = await createInvite({
-                  username: generatedUser,
-                  license_key: inviteLicense,
-                  role: inviteRole
-                });
-                setInviteResult(`Invite token: ${res.token}`);
-              } catch (err: any) {
-                setInviteResult(friendlyError(err, "Failed to create invite"));
-              }
-            }}
-            disabled={!isAuthed}
-          >
-            Create invite
+                  const res = await createInvite({
+                    username: inviteUsername,
+                    license_key: inviteLicense,
+                    role: inviteRole
+                  });
+                  setInviteResult(`Invite token: ${res.token}`);
+                } catch (err: any) {
+                  setInviteResult(err?.message ?? "Failed to create invite");
+                }
+              }}
+              disabled={!isAuthed || !inviteUsername.trim()}
+            >
+              Create invite
             </button>
           </div>
-          {inviteResult && (
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.35rem", flexWrap: "wrap" }}>
-              <p className="muted" style={{ margin: 0 }}>
-                {inviteResult}
-              </p>
-              {inviteResult.toLowerCase().includes("token:") && (
-                <button
-                  className="secondary-btn"
-                  onClick={() => {
-                    const token = inviteResult.split(":").pop()?.trim() ?? "";
-                    if (token) copyText(token);
-                  }}
-                >
-                  Copy
-                </button>
-              )}
-            </div>
-          )}
+          {inviteResult && <p className="muted">{inviteResult}</p>}
         </div>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           <span className="muted">{authToken ? `Logged in as ${currentUser || "user"}` : "Not authenticated"}</span>
@@ -764,11 +610,11 @@ export default function StaffPlanner() {
         }}
       >
         <div className="controls-row">
-          <label>
-            Load config:
-            <select
-              value={selectedConfig}
-              onChange={(e) => setSelectedConfig(e.target.value)}
+        <label>
+          Load config:
+          <select
+            value={selectedConfig}
+            onChange={(e) => setSelectedConfig(e.target.value)}
             style={{ marginLeft: "0.5rem" }}
           >
             <option value="">Select...</option>
@@ -790,7 +636,6 @@ export default function StaffPlanner() {
         />
         <button onClick={handleSaveConfig}>Save</button>
       </div>
-      {isAuthed && <WarningList title="Issues on this tab" items={getWarningsForTab()} />}
       <div className="tabs">
         {[
           { key: "staff", label: "Staff" },
@@ -892,7 +737,6 @@ export default function StaffPlanner() {
           <button style={{ marginTop: "1rem" }} onClick={addRow}>
             Add Row
           </button>
-          <WarningList title="Staff issues" items={staffWarnings} />
         </>
       )}
 
@@ -900,28 +744,18 @@ export default function StaffPlanner() {
         <div className="card" style={{ marginTop: "1rem" }}>
           <h3>Preference Weights</h3>
           <p className="muted">
-            0 = "Avoid", 10 = "Prefer". Separate values for MWF vs TTS. Range 0 to 10 (5 is neutral), step 0.25.
+            0 = “Avoid”, 10 = “Prefer”. Separate values for MWF vs TTS. Range 0 to 10 (5 is neutral), step 0.25.
           </p>
           {staffRows.map((row, idx) => (
-            <div
-              key={idx}
-              style={{
-                borderBottom: "1px solid rgba(255,255,255,0.08)",
-                paddingBottom: "1.25rem",
-                marginBottom: "1.25rem",
-                background: "rgba(255,255,255,0.02)",
-                borderRadius: "8px",
-                padding: "1rem"
-              }}
-            >
+            <div key={idx} style={{ borderBottom: "1px solid #e2e8f0", paddingBottom: "0.75rem", marginBottom: "0.75rem" }}>
               <strong>{row.name?.trim() ? row.name : "(no name set)"}</strong> ({row.role || "Tech"})
               <div
                 style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: "0.75rem",
-                alignItems: "center",
-                marginTop: "0.5rem"
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: "0.75rem",
+                  alignItems: "center",
+                  marginTop: "0.5rem"
                 }}
               >
                 {[
@@ -930,25 +764,13 @@ export default function StaffPlanner() {
                   { key: "pref_close_mwf" as const, label: "Close MWF", value: row.pref_close_mwf ?? 5 },
                   { key: "pref_close_tts" as const, label: "Close TTS", value: row.pref_close_tts ?? 5 }
                 ].map((item) => (
-                  <div key={item.key} style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", alignItems: "center" }}>
+                  <label key={item.key} style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                    <span style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem" }}>
                       <span>{item.label}</span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={10}
-                        step={0.25}
-                        value={item.value}
-                        onChange={(e) =>
-                          setStaffRows((prev) => {
-                            const next = [...prev];
-                            next[idx] = { ...next[idx], [item.key]: Number(e.target.value) || 5 } as any;
-                            return next;
-                          })
-                        }
-                        style={{ width: "72px", fontVariantNumeric: "tabular-nums" }}
-                      />
-                    </div>
+                      <span className="muted" style={{ fontVariantNumeric: "tabular-nums" }}>
+                        {item.value.toFixed(2)}
+                      </span>
+                    </span>
                     <input
                       type="range"
                       min={0}
@@ -963,7 +785,7 @@ export default function StaffPlanner() {
                         })
                       }
                     />
-                  </div>
+                  </label>
                 ))}
               </div>
             </div>
@@ -1011,12 +833,17 @@ export default function StaffPlanner() {
               ))}
             </tbody>
           </table>
-          <WarningList title="Demand issues" items={demandWarnings} />
         </div>
       )}
 
       {activeTab === "demand" && <DemandEditor rows={demandRows} onChange={setDemandRows} />}
-      {activeTab === "demand" && <WarningList title="Demand issues" items={demandWarnings} />}
+      {activeTab === "demand" && demandWarnings.length > 0 && (
+        <ul style={{ color: "#b45309" }}>
+          {demandWarnings.map((w, i) => (
+            <li key={i}>{w}</li>
+          ))}
+        </ul>
+      )}
 
       {activeTab === "pto" && (
         <>
@@ -1032,7 +859,13 @@ export default function StaffPlanner() {
               scheduleStart={startDate}
               scheduleEnd={scheduleEnd}
             />
-          <WarningList title="PTO issues" items={ptoWarnings} />
+          {ptoWarnings.length > 0 && (
+            <ul style={{ color: "#b45309" }}>
+              {ptoWarnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          )}
         </>
       )}
 
@@ -1372,8 +1205,8 @@ export default function StaffPlanner() {
                 );
                 setStatus("Schedule generated.");
               } catch (err: any) {
-      setStatus(friendlyError(err, "Run failed. Please check inputs and try again."));
-      setRunResult("");
+                setStatus(`Run failed: ${err?.message ?? err}`);
+                setRunResult("");
                 setProgress(0);
               } finally {
                 setIsRunning(false);
@@ -1598,7 +1431,6 @@ export default function StaffPlanner() {
                     <th>Status</th>
                     <th>Last Login</th>
                     <th>Invite Expires</th>
-                    <th>Invite Token</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -1613,11 +1445,11 @@ export default function StaffPlanner() {
                           onChange={async (e) => {
                             const newRole = e.target.value;
                             try {
-                          await updateUserRole(u.id, newRole);
-                          loadUsers();
-                        } catch (err: any) {
-                          setInviteResult(friendlyError(err, "Failed to update role"));
-                        }
+                              await updateUserRole(u.id, newRole);
+                              loadUsers();
+                            } catch {
+                              /* ignore */
+                            }
                           }}
                         >
                           <option value="user">User</option>
@@ -1625,22 +1457,8 @@ export default function StaffPlanner() {
                         </select>
                       </td>
                       <td>{u.status}</td>
-                      <td>{fmtDateTime(u.last_login) || "—"}</td>
-                      <td>
-                        {u.status !== "active" && u.invite_expires_at ? fmtDateTime(u.invite_expires_at) : "—"}
-                      </td>
-                      <td style={{ wordBreak: "break-all" }}>
-                        {u.status !== "active" && u.invite_token ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap" }}>
-                            <span>{u.invite_token}</span>
-                            <button className="secondary-btn" onClick={() => copyText(u.invite_token)}>
-                              Copy
-                            </button>
-                          </div>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
+                      <td>{u.last_login || "—"}</td>
+                      <td>{u.invite_expires_at || "—"}</td>
                       <td
                         style={{
                           display: "flex",
@@ -1656,8 +1474,8 @@ export default function StaffPlanner() {
                             try {
                               await revokeInvite({ username: u.username, license_key: "" });
                               loadUsers();
-                            } catch (err: any) {
-                              setInviteResult(friendlyError(err, "Failed to revoke invite"));
+                            } catch {
+                              /* ignore */
                             }
                           }}
                         >
@@ -1669,8 +1487,8 @@ export default function StaffPlanner() {
                             try {
                               await deleteUser(u.id);
                               loadUsers();
-                            } catch (err: any) {
-                              setInviteResult(friendlyError(err, "Failed to delete user"));
+                            } catch {
+                              /* ignore */
                             }
                           }}
                         >
@@ -1684,7 +1502,7 @@ export default function StaffPlanner() {
                               setInviteResult(`Reset token for ${u.username}: ${res.token}`);
                               loadUsers();
                             } catch (err: any) {
-                              setInviteResult(friendlyError(err, "Failed to reset invite"));
+                              setInviteResult(err?.message ?? "Failed to reset invite");
                             }
                           }}
                         >
@@ -1716,7 +1534,7 @@ export default function StaffPlanner() {
                   <tbody>
                     {auditFeed.map((a) => (
                       <tr key={a.id}>
-                        <td>{fmtDateTime(a.created_at) || "—"}</td>
+                        <td>{a.created_at}</td>
                         <td>{a.event}</td>
                         <td>{a.user_id ?? "—"}</td>
                         <td>{a.detail || "—"}</td>
