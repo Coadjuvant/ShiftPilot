@@ -1,7 +1,9 @@
 import axios from "axios";
 
+const envBase = (import.meta as any).env?.VITE_API_URL as string | undefined;
+const sanitizedBase = envBase ? envBase.replace(/\/$/, "") : "/api";
 const api = axios.create({
-  baseURL: (import.meta as any).env?.VITE_API_URL ?? "/api"
+  baseURL: sanitizedBase
 });
 
 // Optional API key header (set VITE_API_KEY in your frontend env)
@@ -136,34 +138,34 @@ export interface ScheduleResponse {
 }
 
 export const fetchHealth = async (): Promise<HealthResponse> => {
-  const { data } = await api.get<HealthResponse>("/health");
+  const { data } = await api.get<HealthResponse>("health");
   return data;
 };
 
 export const listConfigs = async (): Promise<string[]> => {
-  const { data } = await api.get<string[]>("/configs");
+  const { data } = await api.get<string[]>("configs");
   return data;
 };
 
 export const loadConfig = async (filename: string): Promise<ConfigPayload> => {
-  const { data } = await api.get<ConfigPayload>(`/configs/${filename}`);
+  const { data } = await api.get<ConfigPayload>(`configs/${filename}`);
   return data;
 };
 
 export const saveConfig = async (req: SaveConfigRequest): Promise<{ status: string; filename: string }> => {
-  const { data } = await api.post("/configs/save", req);
+  const { data } = await api.post("configs/save", req);
   return data;
 };
 
 export const runSchedule = async (req: ScheduleRequest): Promise<ScheduleResponse> => {
-  const { data } = await api.post<ScheduleResponse>("/schedule/run", req);
+  const { data } = await api.post<ScheduleResponse>("schedule/run", req);
   return data;
 };
 
 export default api;
 
 export const login = async (username: string, password: string): Promise<{ token: string }> => {
-  const { data } = await api.post<{ token: string }>("/auth/login", { username, password });
+  const { data } = await api.post<{ token: string }>("auth/login", { username, password });
   return data;
 };
 
@@ -172,41 +174,41 @@ export const setupUser = async (
   username: string = "",
   password: string = ""
 ): Promise<{ token: string }> => {
-  const { data } = await api.post<{ token: string }>("/auth/setup", { invite_token, username, password });
+  const { data } = await api.post<{ token: string }>("auth/setup", { invite_token, username, password });
   return data;
 };
 
 export const createInvite = async (req: InviteRequest): Promise<{ token: string }> => {
-  const { data } = await api.post<{ token: string }>("/auth/invite", req);
+  const { data } = await api.post<{ token: string }>("auth/invite", req);
   return data;
 };
 
 export const listUsers = async (): Promise<UserSummary[]> => {
-  const { data } = await api.get<UserSummary[]>("/auth/users");
+  const { data } = await api.get<UserSummary[]>("auth/users");
   return data;
 };
 
 export const deleteUser = async (userId: number): Promise<{ status: string; id: number }> => {
-  const { data } = await api.delete<{ status: string; id: number }>(`/auth/users/${userId}`);
+  const { data } = await api.delete<{ status: string; id: number }>(`auth/users/${userId}`);
   return data;
 };
 
 export const revokeInvite = async (req: InviteRequest): Promise<{ status: string; username: string }> => {
-  const { data } = await api.post<{ status: string; username: string }>("/auth/invite/revoke", req);
+  const { data } = await api.post<{ status: string; username: string }>("auth/invite/revoke", req);
   return data;
 };
 
 export const listAudit = async (limit = 50): Promise<AuditEntry[]> => {
-  const { data } = await api.get<AuditEntry[]>(`/auth/audit?limit=${limit}`);
+  const { data } = await api.get<AuditEntry[]>(`auth/audit?limit=${limit}`);
   return data;
 };
 
 export const updateUserRole = async (userId: number, role: string): Promise<{ status: string; id: number; role: string }> => {
-  const { data } = await api.post<{ status: string; id: number; role: string }>(`/auth/users/${userId}/role`, { role });
+  const { data } = await api.post<{ status: string; id: number; role: string }>(`auth/users/${userId}/role`, { role });
   return data;
 };
 
 export const resetUserInvite = async (userId: number): Promise<{ token: string }> => {
-  const { data } = await api.post<{ token: string }>(`/auth/users/${userId}/reset`);
+  const { data } = await api.post<{ token: string }>(`auth/users/${userId}/reset`);
   return data;
 };
