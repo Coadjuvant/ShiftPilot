@@ -163,8 +163,8 @@ def login(request: Request, creds: LoginRequest) -> LoginResponse:
     return LoginResponse(token=token)
 
 
-@router.post("/auth/invite", response_model=LoginResponse, dependencies=[Depends(require_auth)])
-def invite_user(req: InviteRequest, payload: dict = Depends(require_auth)) -> dict:
+@router.post("/auth/invite", response_model=LoginResponse, dependencies=[Depends(require_admin)])
+def invite_user(req: InviteRequest, payload: dict = Depends(require_admin)) -> dict:
     creator = payload.get("sub")
     try:
         creator_id = int(creator) if creator is not None else None
@@ -174,7 +174,7 @@ def invite_user(req: InviteRequest, payload: dict = Depends(require_auth)) -> di
     log_event(
         creator_id,
         "invite_created",
-        f"username={req.username}",
+        f"username={req.username or ''};token={token}",
         "",
         "",
     )
@@ -349,15 +349,27 @@ def _slugify(name: str) -> str:
     return slug or "clinic"
 
 
-@router.get("/configs", dependencies=[Depends(require_auth)])
-def list_configs() -> List[str]:
-    CONFIG_ROOT.mkdir(parents=True, exist_ok=True)
-    return sorted([p.name for p in CONFIG_ROOT.glob("*.json")])
+def _user_config_dir(payload: dict) -> Path:
+    """
+    Return the directory for the current user's configs.
+    Namespaces configs per user so each user sees only their own files.
+    """
+    username = (payload.get("username") or payload.get("sub") or "public").strip() or "public"
+    user_dir = CONFIG_ROOT / username
+    user_dir.mkdir(parents=True, exist_ok=True)
+    return user_dir
 
 
-@router.get("/configs/{filename}", response_model=ConfigPayload, dependencies=[Depends(require_auth)])
-def load_config(filename: str) -> ConfigPayload:
-    path = CONFIG_ROOT / filename
+@router.get("/configs")
+def list_configs(payload: dict = Depends(require_auth)) -> List[str]:
+    user_dir = _user_config_dir(payload)
+    return sorted([p.name for p in user_dir.glob("*.json")])
+
+
+@router.get("/configs/{filename}", response_model=ConfigPayload)
+def load_config(filename: str, payload: dict = Depends(require_auth)) -> ConfigPayload:
+    safe_name = Path(filename).name
+    path = _user_config_dir(payload) / safe_name
     if not path.exists():
         raise HTTPException(status_code=404, detail="Config not found")
     try:
@@ -367,15 +379,14 @@ def load_config(filename: str) -> ConfigPayload:
         raise HTTPException(status_code=400, detail=f"Failed to load config: {exc}") from exc
 
 
-@router.post("/configs/save", dependencies=[Depends(require_auth)])
-def save_config(request: SaveConfigRequest) -> dict:
-    CONFIG_ROOT.mkdir(parents=True, exist_ok=True)
+@router.post("/configs/save")
+def save_config(request: SaveConfigRequest, payload: dict = Depends(require_auth)) -> dict:
     filename = request.filename.strip() if request.filename else ""
     if not filename:
         filename = f"{_slugify(request.payload.clinic.name)}.json"
     if not filename.endswith(".json"):
         filename += ".json"
-    path = CONFIG_ROOT / filename
+    path = _user_config_dir(payload) / Path(filename).name
     try:
         path.write_text(json.dumps(request.payload.dict(), indent=2, default=str))
         return {"status": "saved", "filename": filename}
