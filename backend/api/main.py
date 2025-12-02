@@ -45,6 +45,9 @@ from backend.auth_db import (
     list_audit,
     update_role,
     reset_invite,
+    list_configs as list_user_configs,
+    load_config as load_user_config,
+    save_config as save_user_config,
 )
 from .schemas import (
     AssignmentOut,
@@ -338,10 +341,7 @@ def run_schedule(request: ScheduleRequest) -> ScheduleResponse:
             excel=excel_b64,
         )
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-CONFIG_ROOT = Path("configs")
+    raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _slugify(name: str) -> str:
@@ -349,31 +349,24 @@ def _slugify(name: str) -> str:
     return slug or "clinic"
 
 
-def _user_config_dir(payload: dict) -> Path:
-    """
-    Return the directory for the current user's configs.
-    Namespaces configs per user so each user sees only their own files.
-    """
-    username = (payload.get("username") or payload.get("sub") or "public").strip() or "public"
-    user_dir = CONFIG_ROOT / username
-    user_dir.mkdir(parents=True, exist_ok=True)
-    return user_dir
+def _config_owner(payload: dict) -> str:
+    return (payload.get("username") or str(payload.get("sub") or "") or "public").strip() or "public"
 
 
 @router.get("/configs")
 def list_configs(payload: dict = Depends(require_auth)) -> List[str]:
-    user_dir = _user_config_dir(payload)
-    return sorted([p.name for p in user_dir.glob("*.json")])
+    owner = _config_owner(payload)
+    return list_user_configs(owner)
 
 
 @router.get("/configs/{filename}", response_model=ConfigPayload)
 def load_config(filename: str, payload: dict = Depends(require_auth)) -> ConfigPayload:
+    owner = _config_owner(payload)
     safe_name = Path(filename).name
-    path = _user_config_dir(payload) / safe_name
-    if not path.exists():
+    data = load_user_config(owner, safe_name)
+    if data is None:
         raise HTTPException(status_code=404, detail="Config not found")
     try:
-        data = json.loads(path.read_text())
         return ConfigPayload(**data)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Failed to load config: {exc}") from exc
@@ -381,14 +374,14 @@ def load_config(filename: str, payload: dict = Depends(require_auth)) -> ConfigP
 
 @router.post("/configs/save")
 def save_config(request: SaveConfigRequest, payload: dict = Depends(require_auth)) -> dict:
+    owner = _config_owner(payload)
     filename = request.filename.strip() if request.filename else ""
     if not filename:
         filename = f"{_slugify(request.payload.clinic.name)}.json"
     if not filename.endswith(".json"):
         filename += ".json"
-    path = _user_config_dir(payload) / Path(filename).name
     try:
-        path.write_text(json.dumps(request.payload.dict(), indent=2, default=str))
+        save_user_config(owner, Path(filename).name, request.payload.dict())
         return {"status": "saved", "filename": filename}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Failed to save config: {exc}") from exc

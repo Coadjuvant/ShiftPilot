@@ -120,6 +120,19 @@ class PostgresAuth:
             );
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS configs (
+                id SERIAL PRIMARY KEY,
+                owner TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                payload JSONB NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(owner, filename)
+            );
+            """
+        )
         conn.commit()
         conn.close()
 
@@ -388,6 +401,40 @@ class PostgresAuth:
         keys = ["id", "user_id", "event", "detail", "ip", "user_agent", "created_at"]
         return [dict(zip(keys, r)) for r in rows]
 
+    # --- configs ---
+    def list_configs(self, owner: str) -> List[str]:
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("SELECT filename FROM configs WHERE owner=%s ORDER BY filename", (owner,))
+        rows = cur.fetchall()
+        conn.close()
+        return [r[0] for r in rows]
+
+    def load_config(self, owner: str, filename: str) -> Optional[dict]:
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("SELECT payload FROM configs WHERE owner=%s AND filename=%s", (owner, filename))
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return None
+        return row[0]
+
+    def save_config(self, owner: str, filename: str, payload: dict):
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO configs (owner, filename, payload, created_at, updated_at)
+            VALUES (%s, %s, %s::jsonb, NOW(), NOW())
+            ON CONFLICT (owner, filename)
+            DO UPDATE SET payload=EXCLUDED.payload, updated_at=NOW();
+            """,
+            (owner, filename, json.dumps(payload)),
+        )
+        conn.commit()
+        conn.close()
+
 
 # -----------------------
 # JSON backend (fallback)
@@ -566,6 +613,34 @@ class JsonAuth:
         audit = data.get("audit", [])
         return list(reversed(audit))[:limit]
 
+    # --- configs ---
+    def list_configs(self, owner: str) -> List[str]:
+        data = _load_json()
+        cfgs = data.get("configs", [])
+        return sorted([c.get("filename") for c in cfgs if c.get("owner") == owner])
+
+    def load_config(self, owner: str, filename: str) -> Optional[dict]:
+        data = _load_json()
+        cfgs = data.get("configs", [])
+        for c in cfgs:
+            if c.get("owner") == owner and c.get("filename") == filename:
+                return c.get("payload")
+        return None
+
+    def save_config(self, owner: str, filename: str, payload: dict):
+        data = _load_json()
+        cfgs = data.get("configs", [])
+        updated = False
+        for c in cfgs:
+            if c.get("owner") == owner and c.get("filename") == filename:
+                c["payload"] = payload
+                updated = True
+                break
+        if not updated:
+            cfgs.append({"owner": owner, "filename": filename, "payload": payload})
+        data["configs"] = cfgs
+        _save_json(data)
+
     # --- admin helpers ---
     def list_users(self) -> List[Dict[str, Any]]:
         data = _load_json()
@@ -695,3 +770,16 @@ def update_role(user_id: int, role: str):
 
 def reset_invite(user_id: int, created_by: Optional[int] = None, ttl_hours: int = 24) -> str:
     return _backend.reset_invite(user_id, created_by=created_by, ttl_hours=ttl_hours)
+
+
+# Config helpers
+def list_configs(owner: str) -> List[str]:
+    return _backend.list_configs(owner)
+
+
+def load_config(owner: str, filename: str) -> Optional[dict]:
+    return _backend.load_config(owner, filename)
+
+
+def save_config(owner: str, filename: str, payload: dict):
+    return _backend.save_config(owner, filename, payload)
