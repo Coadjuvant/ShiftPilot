@@ -341,7 +341,7 @@ def run_schedule(request: ScheduleRequest) -> ScheduleResponse:
             excel=excel_b64,
         )
     except Exception as exc:
-    raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _slugify(name: str) -> str:
