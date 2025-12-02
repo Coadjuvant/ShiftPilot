@@ -1,7 +1,13 @@
 import axios from "axios";
 
 const envBase = (import.meta as any).env?.VITE_API_URL as string | undefined;
-const sanitizedBase = envBase ? envBase.replace(/\/$/, "") : "/api";
+// Default to Render backend if env var is missing (e.g., when Netlify env isn't injected).
+// In local dev, Vite proxy on /api still works.
+const defaultBase =
+  typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? "/api"
+    : "https://wip-scheduler.onrender.com/api";
+const sanitizedBase = envBase ? envBase.replace(/\/$/, "") : defaultBase;
 const api = axios.create({
   baseURL: sanitizedBase
 });
