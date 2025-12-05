@@ -1,16 +1,16 @@
 import axios from "axios";
 
+// We rely on VITE_API_URL for the backend API location. If it's missing, fall
+// back to the same-origin /api path (useful when an nginx proxy is in front).
 const envBase = (import.meta as any).env?.VITE_API_URL as string | undefined;
-// Default to Render backend if env var is missing (e.g., when Netlify env isn't injected).
-// In local dev, Vite proxy on /api still works.
-const defaultBase =
-  typeof window !== "undefined" && window.location.hostname === "localhost"
-    ? "/api"
-    : "https://wip-scheduler.onrender.com/api";
-const sanitizedBase = envBase ? envBase.replace(/\/$/, "") : defaultBase;
-const api = axios.create({
-  baseURL: sanitizedBase
-});
+const fallbackBase =
+  typeof window !== "undefined" ? `${window.location.origin}/api` : "/api";
+const sanitizedBase = (envBase || fallbackBase).replace(/\/$/, "");
+if (!envBase && typeof window !== "undefined") {
+  // Make it obvious in the console if we had to use the fallback.
+  console.warn("VITE_API_URL not set; falling back to", sanitizedBase);
+}
+const api = axios.create({ baseURL: sanitizedBase });
 
 // Optional API key header (set VITE_API_KEY in your frontend env)
 const apiKey = (import.meta as any).env?.VITE_API_KEY;

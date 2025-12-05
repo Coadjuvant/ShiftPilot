@@ -16,6 +16,7 @@ dist/
 .env.production.local
 configs/
 backend/auth.db
+wip-scheduler.tgz
 
 # OS/Editor
 .DS_Store
