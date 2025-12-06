@@ -5,6 +5,20 @@ networks:
     driver: bridge
 
 services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-shiftpilot_db}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - shiftpilot
+    ports:
+      - "5432:5432"
+
   backend:
     build:
       context: .
@@ -19,6 +33,8 @@ services:
       - ADMIN_LICENSE=${ADMIN_LICENSE}
       - AUTH_BACKEND=${AUTH_BACKEND}
       - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      - db
     networks:
       - shiftpilot
     expose:
@@ -39,3 +55,6 @@ services:
       - shiftpilot
     ports:
       - "80:80"
+
+volumes:
+  db-data:
