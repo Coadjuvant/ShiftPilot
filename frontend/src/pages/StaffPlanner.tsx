@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
+import api, {
   fetchHealth,
   listConfigs,
   loadConfig,
