@@ -439,9 +439,21 @@ export default function StaffPlanner() {
       setStatus("Fix validation errors before saving.");
       return;
     }
+
+    const formatMMDDYY = (d: string) => {
+      const dt = new Date(d);
+      if (Number.isNaN(dt.getTime())) return "";
+      const mm = String(dt.getMonth() + 1).padStart(2, "0");
+      const dd = String(dt.getDate()).padStart(2, "0");
+      const yy = String(dt.getFullYear()).slice(-2);
+      return `${mm}/${dd}/${yy}`;
+    };
+
+    const scheduleStart = startDate ? formatMMDDYY(startDate) : "";
+
     const payload: ConfigPayload = {
       clinic: { name: configName || "Demo Clinic", timezone },
-      schedule: { start: startDate, weeks },
+      schedule: { start: scheduleStart, weeks },
       ratios: {
         patients_per_tech: patientsPerTech,
         patients_per_rn: patientsPerRn,
