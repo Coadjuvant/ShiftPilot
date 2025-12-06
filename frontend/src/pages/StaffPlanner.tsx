@@ -209,9 +209,10 @@ export default function StaffPlanner() {
       setCurrentUser("");
       return;
     }
-    fetch("/api/auth/me", { headers: { Authorization: `Bearer ${authToken}` } })
-      .then((r) => r.json())
-      .then((data) => {
+    api
+      .get<UserInfo>("auth/me")
+      .then((r) => {
+        const data = r.data;
         setIsAdmin((data?.role || "").toLowerCase() === "admin");
         setCurrentUser(data?.username || "");
         setMeLoaded(true);
