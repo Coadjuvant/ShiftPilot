@@ -20,6 +20,12 @@ import api, {
   UserSummary,
   AuditEntry
 } from "../api/client";
+
+type UserInfo = {
+  sub: string;
+  username: string;
+  role: string;
+};
 import DemandEditor from "../components/DemandEditor";
 import PTOEditor from "../components/PTOEditor";
 import { DemandRow, PTORow, StaffRow } from "../types";
