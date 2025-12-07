@@ -423,6 +423,8 @@ class PostgresAuth:
     def save_config(self, owner: str, filename: str, payload: dict):
         conn = self._conn()
         cur = conn.cursor()
+        # Ensure all values are JSON-serializable (e.g., date -> ISO string)
+        payload_json = json.dumps(payload, default=str)
         cur.execute(
             """
             INSERT INTO configs (owner, filename, payload, created_at, updated_at)
@@ -430,7 +432,7 @@ class PostgresAuth:
             ON CONFLICT (owner, filename)
             DO UPDATE SET payload=EXCLUDED.payload, updated_at=NOW();
             """,
-            (owner, filename, json.dumps(payload)),
+            (owner, filename, payload_json),
         )
         conn.commit()
         conn.close()
@@ -628,6 +630,8 @@ class JsonAuth:
         return None
 
     def save_config(self, owner: str, filename: str, payload: dict):
+        # Ensure serializable payload (e.g., date -> ISO string)
+        payload = json.loads(json.dumps(payload, default=str))
         data = _load_json()
         cfgs = data.get("configs", [])
         updated = False
