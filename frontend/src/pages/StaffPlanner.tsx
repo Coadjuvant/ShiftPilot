@@ -440,17 +440,8 @@ export default function StaffPlanner() {
       setStatus("Fix validation errors before saving.");
       return;
     }
-
-    const formatMMDDYY = (d: string) => {
-      const dt = new Date(d);
-      if (Number.isNaN(dt.getTime())) return "";
-      const mm = String(dt.getMonth() + 1).padStart(2, "0");
-      const dd = String(dt.getDate()).padStart(2, "0");
-      const yy = String(dt.getFullYear()).slice(-2);
-      return `${mm}/${dd}/${yy}`;
-    };
-
-    const scheduleStart = startDate ? formatMMDDYY(startDate) : "";
+    // Keep ISO-like yyyy-mm-dd for backend validation
+    const scheduleStart = startDate || "";
 
     const payload: ConfigPayload = {
       clinic: { name: configName || "Demo Clinic", timezone },
@@ -488,7 +479,11 @@ export default function StaffPlanner() {
       const names = await listConfigs();
       setConfigs(names);
     } catch (err: any) {
-      const msg = friendlyError(err, "Failed to save config");
+      const backendDetail =
+        err?.response?.data?.detail && Array.isArray(err.response.data.detail)
+          ? String(err.response.data.detail[0]?.msg || err.response.data.detail[0])
+          : err?.response?.data?.detail || "";
+      const msg = backendDetail ? `Save failed: ${backendDetail}` : friendlyError(err, "Failed to save config");
       setStatus(msg);
       setLastError(msg);
     }
@@ -1555,14 +1550,20 @@ export default function StaffPlanner() {
                   {users.map((u) => (
                     <tr key={u.id}>
                       <td>{u.public_id || u.id}</td>
-                      <td>{u.username}</td>
-                      <td>
-                        <select
-                          value={u.role}
-                          onChange={async (e) => {
-                            const newRole = e.target.value;
-                            try {
-                              await updateUserRole(u.id, newRole);
+                  <td>{u.username}</td>
+                  <td>
+                    <select
+                      disabled={u.username?.toLowerCase() === "admin" || u.id === 1}
+                      title={
+                        u.username?.toLowerCase() === "admin" || u.id === 1
+                          ? "Master admin cannot be changed"
+                          : undefined
+                      }
+                      value={u.role}
+                      onChange={async (e) => {
+                        const newRole = e.target.value;
+                        try {
+                          await updateUserRole(u.id, newRole);
                               loadUsers();
                             } catch {
                               /* ignore */
