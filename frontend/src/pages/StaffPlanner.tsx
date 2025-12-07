@@ -196,6 +196,77 @@ export default function StaffPlanner() {
     return end.toISOString().slice(0, 10);
   })();
 
+  const resetWorkspaceState = (message?: string) => {
+    setStaffRows([
+      {
+        id: genId(),
+        name: "",
+        role: "Tech",
+        can_bleach: false,
+        can_open: false,
+        can_close: false,
+        availability: { ...defaultAvailability },
+        pref_open_mwf: 5,
+        pref_open_tts: 5,
+        pref_mid_mwf: 5,
+        pref_mid_tts: 5,
+        pref_close_mwf: 5,
+        pref_close_tts: 5
+      }
+    ]);
+    setDemandRows(
+      DAYS.map((day) => ({
+        Day: day,
+        Patients: 0,
+        Tech_Open: 0,
+        Tech_Mid: 0,
+        Tech_Close: 0,
+        RN_Count: 0,
+        Admin_Count: 0
+      }))
+    );
+    setPtoRows([]);
+    setConfigName("Demo Clinic");
+    setTimezone("UTC");
+    setStartDate(new Date().toISOString().slice(0, 10));
+    setWeeks(1);
+    setPatientsPerTech(4);
+    setPatientsPerRn(12);
+    setTechsPerRn(4);
+    setBleachDay("Thu");
+    setBleachCursor(0);
+    setBleachRotation([]);
+    setTrials(20);
+    setExportRoles(["Tech", "RN", "Admin"]);
+    setEnforceThree(true);
+    setEnforcePostBleach(true);
+    setEnforceAltSat(true);
+    setLimitTechFour(true);
+    setLimitRnFour(true);
+    setBaseSeed(0);
+    setUsePrevSeed(false);
+    setAssignments([]);
+    setStats({});
+    setRunResult("");
+    setExcelUrl(null);
+    setWinningSeed(null);
+    setWinningScore(null);
+    setProgress(0);
+    setSelectedConfig("");
+    setConfigs([]);
+    setAutoLoadedConfig(false);
+    setLastError("");
+    setInviteUsername("");
+    setInviteLicense("DEMO");
+    setInviteRole("user");
+    setInviteResult("");
+    setLoginUser("");
+    setLoginPass("");
+    setInviteToken("");
+    if (message) setStatus(message);
+    localStorage.removeItem("last_config");
+  };
+
   useEffect(() => {
     fetchHealth()
       .then((res) => setStatus(`API status: ${res.status}`))
@@ -503,7 +574,7 @@ export default function StaffPlanner() {
       setAuthTokenState(res.token);
       setAuthToken(res.token);
       setLoginError("");
-      setStatus("Logged in.");
+      resetWorkspaceState("Logged in.");
       try {
         const names = await listConfigs();
         setConfigs(names);
@@ -531,7 +602,7 @@ export default function StaffPlanner() {
       setAuthTokenState(res.token);
       setAuthToken(res.token);
       setLoginError("");
-      setStatus("Account activated.");
+      resetWorkspaceState("Account activated.");
       setLoginMode("login");
       try {
         const names = await listConfigs();
@@ -551,12 +622,11 @@ export default function StaffPlanner() {
   const handleLogout = () => {
     setAuthTokenState(null);
     setAuthToken(null);
-    setStatus("Logged out.");
-    setConfigs([]);
-    setAssignments([]);
     setCurrentUser("");
     setUsers([]);
     setIsAdmin(false);
+    setMeLoaded(false);
+    resetWorkspaceState("Logged out.");
   };
 
   if (!isAuthed) {
