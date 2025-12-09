@@ -1,4 +1,4 @@
-#version: "3.9"
+version: "3.9"
 
 networks:
   shiftpilot:
@@ -53,8 +53,24 @@ services:
       - shiftpilot
     expose:
       - "80"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - shiftpilot
     ports:
-      - "8080:80"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
 
 volumes:
   db-data:
+  caddy-data:
+  caddy-config:
