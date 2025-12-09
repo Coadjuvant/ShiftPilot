@@ -631,7 +631,7 @@ export default function StaffPlanner() {
 
   if (!isAuthed) {
       return (
-        <section className="card">
+        <section className="card planner-shell">
           <h2>Staff Planner (React prototype)</h2>
         <div className="card" style={{ marginBottom: "1rem" }}>
           <h4>{loginMode === "login" ? "Existing user login" : "New user setup"}</h4>
@@ -705,7 +705,7 @@ export default function StaffPlanner() {
   }
 
   return (
-    <section className="card">
+    <section className="card planner-shell">
       <h2>Staff Planner (React prototype)</h2>
       {isAdmin || !status.toLowerCase().startsWith("api status") ? <p>{status}</p> : null}
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
