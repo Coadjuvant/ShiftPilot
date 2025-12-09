@@ -164,3 +164,31 @@ class ConfigPayload(BaseModel):
 class SaveConfigRequest(BaseModel):
     payload: ConfigPayload
     filename: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    token: str
+
+
+class InviteRequest(BaseModel):
+    username: str = ""  # optional; if blank, server will auto-generate
+    license_key: str
+    role: str = "user"
+
+
+class SetupRequest(BaseModel):
+    invite_token: str
+    username: str
+    password: str
+
+
+class UserInfo(BaseModel):
+    sub: str
+    username: str
+    role: str = "user"
+

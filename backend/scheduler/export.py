@@ -227,36 +227,48 @@ def export_schedule_to_excel(
     Write the schedule to an Excel workbook.
     Returns the bytes buffer; optionally writes to `file_path`.
     """
+    allowed_roles = ({r for r in export_roles} if export_roles else {"RN", "Tech", "Admin"})
+    # filter assignments by allowed roles
+    filtered_assignments = [a for a in result.assignments if a.slot.role in allowed_roles]
+    # recompute stats for filtered roles (filled slots only)
+    filtered_stats: Dict[str, int] = defaultdict(int)
+    for a in filtered_assignments:
+        if a.staff_id and a.staff_id not in ("", OPEN_LABEL):
+            filtered_stats[a.staff_id] += 1
+
+    class _FilteredResult:
+        def __init__(self, assignments, stats):
+            self.assignments = assignments
+            self.stats = stats
+
+    filtered_result = _FilteredResult(filtered_assignments, filtered_stats)
+
     buf = BytesIO()
     with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
-        all_dates = sorted({assignment.slot.date for assignment in result.assignments})
-
-        allowed_roles = (
-            {r for r in export_roles} if export_roles else {"RN", "Tech", "Admin"}
-        )
+        all_dates = sorted({assignment.slot.date for assignment in filtered_assignments})
 
         # Roster Matrix first
         roster_matrix = _roster_matrix(
-            result.assignments,
+            filtered_assignments,
             staff,
-            _notes_map(result),
+            _notes_map(filtered_result),
             _pto_notes_map(pto_entries, staff),
         )
         if not roster_matrix.empty:
             roster_matrix.to_excel(writer, sheet_name="Roster Matrix", index=False)
 
-        roster_df = pd.DataFrame(list(_roster_rows(result, staff, allowed_roles)))
+        roster_df = pd.DataFrame(list(_roster_rows(filtered_result, staff, allowed_roles)))
         if not roster_df.empty:
             roster_df.sort_values(["Date", "Role", "Duty", "Slot"], inplace=True)
         roster_df.to_excel(writer, sheet_name="Roster", index=False)
 
-        coverage_df = pd.DataFrame(list(_coverage_rows(result)))
+        coverage_df = pd.DataFrame(list(_coverage_rows(filtered_result)))
         coverage_df.to_excel(writer, sheet_name="Coverage", index=False)
 
-        summary_df = pd.DataFrame(list(_summary_rows(result, staff)))
+        summary_df = pd.DataFrame(list(_summary_rows(filtered_result, staff)))
         summary_df.to_excel(writer, sheet_name="Summary", index=False)
 
-        note_df = pd.DataFrame(_note_rows(result, staff))
+        note_df = pd.DataFrame(_note_rows(filtered_result, staff))
         if not note_df.empty:
             note_df.to_excel(writer, sheet_name="Notes", index=False)
 

@@ -1,0 +1,74 @@
+version: "3.9"
+
+networks:
+  shiftpilot:
+    driver: bridge
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-shiftpilot_db}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - shiftpilot
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env
+    environment:
+      # Ensure these are present in .env on the server.
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_USER=${ADMIN_USER}
+      - ADMIN_PASS=${ADMIN_PASS}
+      - ADMIN_LICENSE=${ADMIN_LICENSE}
+      - AUTH_BACKEND=${AUTH_BACKEND}
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      - db
+    networks:
+      - shiftpilot
+    expose:
+      - "8000"
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+      args:
+        # Pass through the API URL (include /api) from your .env
+        VITE_API_URL: ${VITE_API_URL}
+    depends_on:
+      - backend
+    networks:
+      - shiftpilot
+    expose:
+      - "80"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - shiftpilot
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:

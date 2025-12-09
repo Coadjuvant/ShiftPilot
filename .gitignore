@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+env/
+venv/
+.env
+.screenshots/
+
+# Node/Vite
+node_modules/
+frontend/node_modules/
+dist/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+configs/
+backend/auth.db
+wip-scheduler.tgz
+
+# OS/Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Builds/Reports
+*.log
+coverage/
+
