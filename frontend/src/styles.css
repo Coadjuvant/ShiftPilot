@@ -927,6 +927,20 @@ table th {
   align-items: stretch;
 }
 
+.planner-hero {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.auth-switch {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
 .auth-copy h1 {
   margin: 0.2rem 0;
 }

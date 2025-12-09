@@ -632,74 +632,89 @@ export default function StaffPlanner() {
   if (!isAuthed) {
       return (
         <section className="card planner-shell">
-          <h2>Staff Planner (React prototype)</h2>
-        <div className="card" style={{ marginBottom: "1rem" }}>
-          <h4>{loginMode === "login" ? "Existing user login" : "New user setup"}</h4>
-          <div style={{ display: "flex", gap: "0.75rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
-            <button
-              className={loginMode === "login" ? "primary-btn" : "secondary-btn"}
-              onClick={() => {
-                setLoginMode("login");
-                setLoginError("");
-              }}
-            >
-              Existing user
-            </button>
-            <button
-              className={loginMode === "setup" ? "primary-btn" : "secondary-btn"}
-              onClick={() => {
-                setLoginMode("setup");
-                setLoginError("");
-              }}
-            >
-              New user (invite)
-            </button>
+          <div className="planner-hero">
+            <div>
+              <p className="eyebrow-pill">Planner access</p>
+              <h2 style={{ margin: "0.25rem 0 0.35rem" }}>Staff Planner (React prototype)</h2>
+              <p className="hero-sub" style={{ maxWidth: "700px" }}>
+                Sign in with your clinic manager credentials to load configs, run scenarios, and export clean handoffs. One login,
+                no staff self-serve.
+              </p>
+              <div className="auth-badges">
+                <span className="pill subtle">Secure session</span>
+                <span className="pill subtle">Clinic manager only</span>
+                <span className="pill subtle">Exports ready</span>
+              </div>
+            </div>
+            <div className="auth-card">
+              <div className="auth-card-head">
+                <p className="muted">{loginMode === "login" ? "Existing user login" : "New user setup"}</p>
+                <span className="pill success">Online</span>
+              </div>
+              <div className="auth-switch">
+                <button
+                  className={loginMode === "login" ? "primary-btn" : "secondary-btn"}
+                  onClick={() => {
+                    setLoginMode("login");
+                    setLoginError("");
+                  }}
+                >
+                  Existing user
+                </button>
+                <button
+                  className={loginMode === "setup" ? "primary-btn" : "secondary-btn"}
+                  onClick={() => {
+                    setLoginMode("setup");
+                    setLoginError("");
+                  }}
+                >
+                  New user (invite)
+                </button>
+              </div>
+              {loginMode === "login" ? (
+                <form
+                  className="auth-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleLogin();
+                  }}
+                >
+                  <label className="field">
+                    <span>Username</span>
+                    <input value={loginUser} onChange={(e) => setLoginUser(e.target.value)} />
+                  </label>
+                  <label className="field">
+                    <span>Password</span>
+                    <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
+                  </label>
+                  <button type="submit">Log in</button>
+                </form>
+              ) : (
+                <form
+                  className="auth-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSetup();
+                  }}
+                >
+                  <label className="field">
+                    <span>Invite token</span>
+                    <input value={inviteToken} onChange={(e) => setInviteToken(e.target.value)} />
+                  </label>
+                  <label className="field">
+                    <span>Choose username</span>
+                    <input value={loginUser} onChange={(e) => setLoginUser(e.target.value)} />
+                  </label>
+                  <label className="field">
+                    <span>Set password</span>
+                    <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
+                  </label>
+                  <button type="submit">Activate account</button>
+                </form>
+              )}
+              {loginError && <p className="status" style={{ color: "#f97316" }}>{loginError}</p>}
+            </div>
           </div>
-          {loginMode === "login" ? (
-            <form
-              className="stack"
-              style={{ flexDirection: "column", alignItems: "flex-start" }}
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleLogin();
-              }}
-            >
-              <label>
-                Username
-                <input value={loginUser} onChange={(e) => setLoginUser(e.target.value)} />
-              </label>
-              <label>
-                Password
-                <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
-              </label>
-              <button type="submit">Login</button>
-            </form>
-          ) : (
-            <form
-              className="stack"
-              style={{ flexDirection: "column", alignItems: "flex-start" }}
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSetup();
-              }}
-            >
-              <label>
-                Invite token
-                <input value={inviteToken} onChange={(e) => setInviteToken(e.target.value)} />
-              </label>
-              <label>
-                Choose username
-                <input value={loginUser} onChange={(e) => setLoginUser(e.target.value)} />
-              </label>
-              <label>
-                Set password
-                <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
-              </label>
-              <button type="submit">Activate account</button>
-            </form>
-          )}
-          {loginError && <p style={{ color: "#b45309" }}>{loginError}</p>}
-        </div>
       </section>
     );
   }
