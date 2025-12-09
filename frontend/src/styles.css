@@ -293,6 +293,7 @@ table th {
   opacity: 0.65;
   filter: blur(40px);
   z-index: 0;
+  pointer-events: none;
 }
 
 .page-shell.light .hero-wrap {
