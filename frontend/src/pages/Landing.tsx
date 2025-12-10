@@ -61,13 +61,24 @@ const steps = [
 ];
 
 export default function Landing() {
+  const [isAuthed, setIsAuthed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return Boolean(localStorage.getItem("auth_token"));
+  });
   const [latestSchedule, setLatestSchedule] = useState<SavedSchedule | null>(null);
   const [weekIndex, setWeekIndex] = useState(0);
   const [scheduleError, setScheduleError] = useState<string>("");
 
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
-    if (!token) {
+    if (typeof window === "undefined") return;
+    const handler = () => setIsAuthed(Boolean(localStorage.getItem("auth_token")));
+    window.addEventListener("storage", handler);
+    handler();
+    return () => window.removeEventListener("storage", handler);
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthed) {
       setLatestSchedule(null);
       return;
     }
@@ -81,7 +92,7 @@ export default function Landing() {
         setLatestSchedule(null);
         setScheduleError(err?.response?.status === 404 ? "No saved schedule yet" : "Unable to load latest schedule");
       });
-  }, []);
+  }, [isAuthed]);
 
   const weeksData = useMemo(() => {
     if (!latestSchedule) return [];
@@ -149,6 +160,19 @@ export default function Landing() {
   }, [latestSchedule]);
 
   const currentWeek = weeksData[weekIndex] || [];
+  const weekLabel = useMemo(() => {
+    if (!latestSchedule || !weeksData.length) return "Week 1";
+    const start = new Date(latestSchedule.start_date);
+    const dt = new Date(start);
+    dt.setDate(dt.getDate() + weekIndex * (latestSchedule.requirements?.length || 0));
+    return `Week of ${dt.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  }, [latestSchedule, weekIndex, weeksData.length]);
+
+  const scheduleStatus = useMemo(() => {
+    if (!currentWeek.length) return "No data";
+    const hasDeficit = currentWeek.some((d) => d.deficits.length);
+    return hasDeficit ? "Needs attention" : "Fully staffed";
+  }, [currentWeek]);
 
   return (
     <>
@@ -188,53 +212,81 @@ export default function Landing() {
         <div className="hero-visual">
           <div className="orb orb-a" aria-hidden="true" />
           <div className="orb orb-b" aria-hidden="true" />
-          <div className="schedule-card">
-            <div className="schedule-card__head">
-              <div>
-                <span className="pill small-pill">Week of Jun 10</span>
-                <h4>Dialysis coverage</h4>
+          {isAuthed && (
+            <div className="schedule-card">
+              <div className="schedule-card__head">
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <span className="pill small-pill">{weekLabel}</span>
+                  <h4 style={{ margin: 0 }}>Dialysis coverage</h4>
+                  <div className="pill muted-pill">{scheduleStatus}</div>
+                </div>
+                <div className="week-nav">
+                  <button
+                    className="secondary-btn"
+                    disabled={weekIndex <= 0}
+                    onClick={() => setWeekIndex((w) => Math.max(0, w - 1))}
+                    aria-label="Previous week"
+                  >
+                    <IconChevronLeft />
+                  </button>
+                  <button
+                    className="secondary-btn"
+                    disabled={weekIndex >= weeksData.length - 1}
+                    onClick={() => setWeekIndex((w) => Math.min(weeksData.length - 1, w + 1))}
+                    aria-label="Next week"
+                  >
+                    <IconChevronRight />
+                  </button>
+                </div>
               </div>
-              <div className="pill success-pill">Conflicts resolved</div>
+              {!latestSchedule ? (
+                <div className="schedule-list">
+                  <div className="schedule-row">
+                    <div>
+                      <div className="row-title">No schedule saved</div>
+                      <div className="row-sub">
+                        <Link className="secondary-link" to="/planner">
+                          Head to Planner to make one.
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : !currentWeek.length ? (
+                <div className="schedule-list">
+                  <div className="schedule-row">
+                    <div>
+                      <div className="row-title">{scheduleError || "No schedule data yet"}</div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="schedule-list">
+                  {currentWeek.map((day) => (
+                    <div className="schedule-row" key={day.dateStr}>
+                      <span className={`dot ${day.deficits.length ? "dot-amber" : "dot-blue"}`} />
+                      <div>
+                        <div className="row-title">
+                          {day.req.day_name} • {day.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                        </div>
+                        <div className="row-sub">
+                          RN {day.summary.rnFilled}/{day.summary.rnReq} | Tech {day.summary.techFilled}/{day.summary.techReq} | Admin{" "}
+                          {day.summary.adminFilled}/{day.summary.adminReq}
+                        </div>
+                      </div>
+                      <span className={`tag ${day.deficits.length ? "tag-warn" : ""}`}>
+                        {day.deficits.length ? day.deficits.join(", ") : "Fully staffed"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="schedule-foot">
+                <div className="pill muted-pill">Soft constraints honored</div>
+                <div className="pill muted-pill">Exports: Excel / PDF</div>
+              </div>
             </div>
-            <div className="schedule-list">
-              <div className="schedule-row">
-                <span className="dot dot-blue" />
-                <div>
-                  <div className="row-title">Mon - First shift</div>
-                  <div className="row-sub">RN (2) | Tech (4) | Admin (1)</div>
-                </div>
-                <span className="tag">Staffed</span>
-              </div>
-              <div className="schedule-row">
-                <span className="dot dot-teal" />
-                <div>
-                  <div className="row-title">Tue - Second shift</div>
-                  <div className="row-sub">RN (2) | Tech (3) | Admin (1)</div>
-                </div>
-                <span className="tag">Staffed</span>
-              </div>
-              <div className="schedule-row">
-                <span className="dot dot-amber" />
-                <div>
-                  <div className="row-title">Wed - First shift</div>
-                  <div className="row-sub">RN (2) | Tech (3) | Admin (1)</div>
-                </div>
-                <span className="tag tag-warn">Needs 1 Tech</span>
-              </div>
-              <div className="schedule-row">
-                <span className="dot dot-slate" />
-                <div>
-                  <div className="row-title">Weekend rotation</div>
-                  <div className="row-sub">A-team off | B-team on</div>
-                </div>
-                <span className="tag ghost-tag">Locked</span>
-              </div>
-            </div>
-            <div className="schedule-foot">
-              <div className="pill muted-pill">Soft constraints honored</div>
-              <div className="pill muted-pill">Exports: Excel / PDF</div>
-            </div>
-          </div>
+          )}
         </div>
       </section>
 
@@ -276,9 +328,6 @@ export default function Landing() {
               <h2>Go from rules to roster in minutes</h2>
               <p className="muted">Define your clinic guardrails once, then iterate quickly with your team.</p>
             </div>
-            <Link className="ghost" to="/planner">
-              Open planner -&gt;
-            </Link>
           </div>
           <div className="how-grid">
             {steps.map((step, idx) => (
@@ -324,7 +373,8 @@ export default function Landing() {
           {!latestSchedule ? (
             <div className="card planner-shell">
               <p className="muted">
-                {scheduleError || "No schedule saved. "}
+                {scheduleError || "No schedule saved."}
+                <br />
                 <Link className="secondary-link" to="/planner">
                   Head to Planner to make one.
                 </Link>
