@@ -84,13 +84,18 @@ export default function Landing() {
     }
     fetchLatestSchedule()
       .then((data) => {
+        if (data && (data as any).status === "none") {
+          setLatestSchedule(null);
+          setScheduleError("No saved schedule yet");
+          return;
+        }
         setLatestSchedule(data);
         setScheduleError("");
         setWeekIndex(0);
       })
       .catch((err) => {
         setLatestSchedule(null);
-        setScheduleError(err?.response?.status === 404 ? "No saved schedule yet" : "Unable to load latest schedule");
+        setScheduleError("Unable to load latest schedule");
       });
   }, [isAuthed]);
 

@@ -428,7 +428,7 @@ def latest_schedule(payload: dict = Depends(require_auth)) -> dict:
     owner = _schedule_owner(payload)
     data = get_latest_schedule(owner)
     if not data:
-        raise HTTPException(status_code=404, detail="No saved schedule")
+        return {"status": "none"}
     return data
 
 
