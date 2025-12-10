@@ -9,6 +9,7 @@ export default function Login() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [online, setOnline] = useState<"checking" | "ok" | "down">("checking");
   const [loginSuccess, setLoginSuccess] = useState(false);
+  const [loginUserDisplay, setLoginUserDisplay] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -25,8 +26,11 @@ export default function Login() {
       const res = await login(username, password);
       setAuthToken(res.token);
       localStorage.setItem("auth_token", res.token);
+      localStorage.setItem("auth_user", username || "user");
       setLoginSuccess(true);
+      setLoginUserDisplay(username || "user");
       setStatus(`Logged in as ${username || "user"}`);
+      window.dispatchEvent(new Event("storage"));
       setTimeout(() => navigate("/"), 1200);
     } catch {
       setStatus("Login failed. Check credentials.");
@@ -38,6 +42,7 @@ export default function Login() {
 
   const handleLogout = () => {
     localStorage.removeItem("auth_token");
+    localStorage.removeItem("auth_user");
     setLoginSuccess(false);
     setStatus("Logged out");
     // Notify other listeners and return home
@@ -72,17 +77,12 @@ export default function Login() {
         </div>
 
         <div className="auth-card">
-          <div className="auth-card-head">
-            <p className="muted">Clinic manager sign-in</p>
+            <div className="auth-card-head">
+              <p className="muted">Clinic manager sign-in</p>
             <div style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "wrap" }}>
               <span className={`pill ${online === "ok" ? "success" : "subtle"}`} title={onlineTitle}>
                 {onlineLabel}
               </span>
-              {loginSuccess && (
-                <span className="pill subtle" title={status || ""}>
-                  Welcome back, {username || "user"}
-                </span>
-              )}
             </div>
           </div>
           <form className="auth-form" onSubmit={handleLogin}>

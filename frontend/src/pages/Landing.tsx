@@ -212,7 +212,7 @@ export default function Landing() {
         <div className="hero-visual">
           <div className="orb orb-a" aria-hidden="true" />
           <div className="orb orb-b" aria-hidden="true" />
-          {isAuthed && (
+          {isAuthed ? (
             <div className="schedule-card">
               <div className="schedule-card__head">
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -281,6 +281,54 @@ export default function Landing() {
                   ))}
                 </div>
               )}
+              <div className="schedule-foot">
+                <div className="pill muted-pill">Soft constraints honored</div>
+                <div className="pill muted-pill">Exports: Excel / PDF</div>
+              </div>
+            </div>
+          ) : (
+            <div className="schedule-card">
+              <div className="schedule-card__head">
+                <div>
+                  <span className="pill small-pill">Week of Jun 10</span>
+                  <h4>Dialysis coverage</h4>
+                </div>
+                <div className="pill success-pill">Conflicts resolved</div>
+              </div>
+              <div className="schedule-list">
+                <div className="schedule-row">
+                  <span className="dot dot-blue" />
+                  <div>
+                    <div className="row-title">Mon - First shift</div>
+                    <div className="row-sub">RN (2) | Tech (4) | Admin (1)</div>
+                  </div>
+                  <span className="tag">Staffed</span>
+                </div>
+                <div className="schedule-row">
+                  <span className="dot dot-teal" />
+                  <div>
+                    <div className="row-title">Tue - Second shift</div>
+                    <div className="row-sub">RN (2) | Tech (3) | Admin (1)</div>
+                  </div>
+                  <span className="tag">Staffed</span>
+                </div>
+                <div className="schedule-row">
+                  <span className="dot dot-amber" />
+                  <div>
+                    <div className="row-title">Wed - First shift</div>
+                    <div className="row-sub">RN (2) | Tech (3) | Admin (1)</div>
+                  </div>
+                  <span className="tag tag-warn">Needs 1 Tech</span>
+                </div>
+                <div className="schedule-row">
+                  <span className="dot dot-slate" />
+                  <div>
+                    <div className="row-title">Weekend rotation</div>
+                    <div className="row-sub">A-team off | B-team on</div>
+                  </div>
+                  <span className="tag ghost-tag">Locked</span>
+                </div>
+              </div>
               <div className="schedule-foot">
                 <div className="pill muted-pill">Soft constraints honored</div>
                 <div className="pill muted-pill">Exports: Excel / PDF</div>

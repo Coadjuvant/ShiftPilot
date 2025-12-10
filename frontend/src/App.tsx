@@ -12,6 +12,10 @@ export default function App() {
     if (typeof window === "undefined") return false;
     return Boolean(localStorage.getItem("auth_token"));
   });
+  const [authUser, setAuthUser] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("auth_user") || "";
+  });
   const location = useLocation();
 
   useEffect(() => {
@@ -29,7 +33,10 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const handler = () => setIsAuthed(Boolean(localStorage.getItem("auth_token")));
+    const handler = () => {
+      setIsAuthed(Boolean(localStorage.getItem("auth_token")));
+      setAuthUser(localStorage.getItem("auth_user") || "");
+    };
     window.addEventListener("storage", handler);
     handler();
     return () => window.removeEventListener("storage", handler);
@@ -38,7 +45,9 @@ export default function App() {
   const handleLogout = () => {
     if (typeof window === "undefined") return;
     localStorage.removeItem("auth_token");
+    localStorage.removeItem("auth_user");
     setIsAuthed(false);
+    setAuthUser("");
     window.location.href = "/";
   };
 
@@ -94,9 +103,12 @@ export default function App() {
               <Link to="/contact">Contact</Link>
             </nav>
             {isAuthed ? (
-              <button className="primary-chip nav-cta" onClick={handleLogout}>
-                Logout
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                {authUser ? <span className="pill subtle">Welcome back, {authUser}</span> : null}
+                <button className="primary-chip nav-cta" onClick={handleLogout}>
+                  Logout
+                </button>
+              </div>
             ) : (
               <Link className="primary-chip nav-cta" to="/login" onClick={() => setMobileOpen(false)}>
                 Login
