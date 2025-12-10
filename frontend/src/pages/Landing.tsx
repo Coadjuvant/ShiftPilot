@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { fetchLatestSchedule, SavedSchedule } from "../api/client";
 
 const IconCalendar = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -31,6 +33,18 @@ const IconExport = () => (
   </svg>
 );
 
+const IconChevronLeft = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="M15 19 8 12l7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const IconChevronRight = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="m9 5 7 7-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const steps = [
   {
     title: "Set your guardrails",
@@ -47,6 +61,95 @@ const steps = [
 ];
 
 export default function Landing() {
+  const [latestSchedule, setLatestSchedule] = useState<SavedSchedule | null>(null);
+  const [weekIndex, setWeekIndex] = useState(0);
+  const [scheduleError, setScheduleError] = useState<string>("");
+
+  useEffect(() => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+    if (!token) {
+      setLatestSchedule(null);
+      return;
+    }
+    fetchLatestSchedule()
+      .then((data) => {
+        setLatestSchedule(data);
+        setScheduleError("");
+        setWeekIndex(0);
+      })
+      .catch((err) => {
+        setLatestSchedule(null);
+        setScheduleError(err?.response?.status === 404 ? "No saved schedule yet" : "Unable to load latest schedule");
+      });
+  }, []);
+
+  const weeksData = useMemo(() => {
+    if (!latestSchedule) return [];
+    const reqs = latestSchedule.requirements || [];
+    if (!reqs.length) return [];
+    const totalDays = (latestSchedule.weeks || 0) * reqs.length;
+    const start = new Date(latestSchedule.start_date);
+    const staffMap = new Map((latestSchedule.staff || []).map((s) => [s.id, s]));
+    const addDays = (d: Date, n: number) => {
+      const dt = new Date(d);
+      dt.setDate(dt.getDate() + n);
+      return dt;
+    };
+    const weeks: any[][] = [];
+    for (let i = 0; i < totalDays; i++) {
+      const req = reqs[i % reqs.length];
+      const date = addDays(start, i);
+      const dateStr = date.toISOString().slice(0, 10);
+      const dayAssignments = (latestSchedule.assignments || []).filter((a) => a.date === dateStr);
+      const techReq = (req.tech_openers || 0) + (req.tech_mids || 0) + (req.tech_closers || 0);
+      const rnReq = req.rn_count || 0;
+      const adminReq = req.admin_count || 0;
+      const techFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "tech" && a.staff_id).length;
+      const rnFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "rn" && a.staff_id).length;
+      const adminFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "admin" && a.staff_id).length;
+      const techMissing = Math.max(techReq - techFilled, 0);
+      const rnMissing = Math.max(rnReq - rnFilled, 0);
+      const adminMissing = Math.max(adminReq - adminFilled, 0);
+      const deficits: string[] = [];
+      if (techMissing) deficits.push(`Needs ${techMissing} Tech${techMissing > 1 ? "s" : ""}`);
+      if (rnMissing) deficits.push(`Needs ${rnMissing} RN${rnMissing > 1 ? "s" : ""}`);
+      if (adminMissing) deficits.push(`Needs ${adminMissing} Admin${adminMissing > 1 ? "s" : ""}`);
+      const detailList: { label: string; value: string }[] = [];
+      const addRoleLines = (role: string, reqCount: number, assignments: typeof dayAssignments) => {
+        const roleAss = assignments.filter((a) => a.role?.toLowerCase() === role.toLowerCase());
+        for (let idx = 0; idx < Math.max(reqCount, roleAss.length); idx++) {
+          const a = roleAss[idx];
+          const staff = a && a.staff_id ? staffMap.get(a.staff_id) : null;
+          detailList.push({ label: role, value: staff?.name || "Open" });
+        }
+      };
+      addRoleLines("RN", rnReq, dayAssignments);
+      addRoleLines("Tech", techReq, dayAssignments);
+      addRoleLines("Admin", adminReq, dayAssignments);
+      const weekIdx = Math.floor(i / reqs.length);
+      weeks[weekIdx] = weeks[weekIdx] || [];
+      weeks[weekIdx].push({
+        date,
+        dateStr,
+        req,
+        deficits,
+        status: deficits.length ? "warn" : "ok",
+        detailList,
+        summary: {
+          techReq,
+          rnReq,
+          adminReq,
+          techFilled,
+          rnFilled,
+          adminFilled,
+        },
+      });
+    }
+    return weeks;
+  }, [latestSchedule]);
+
+  const currentWeek = weeksData[weekIndex] || [];
+
   return (
     <>
       <section className="hero-grid">
@@ -188,6 +291,71 @@ export default function Landing() {
               </article>
             ))}
           </div>
+        </section>
+
+        <section className="latest-schedule">
+          <div className="section-head">
+            <div>
+              <div className="eyebrow-pill muted-pill">Latest schedule</div>
+              <h2>Snapshot of your current roster</h2>
+              <p className="muted">Saved from your most recent run. Switch weeks to view coverage.</p>
+            </div>
+            <div className="week-nav">
+              <button
+                className="secondary-btn"
+                disabled={weekIndex <= 0}
+                onClick={() => setWeekIndex((w) => Math.max(0, w - 1))}
+                aria-label="Previous week"
+              >
+                <IconChevronLeft />
+              </button>
+              <span className="pill small-pill">Week {weekIndex + 1}</span>
+              <button
+                className="secondary-btn"
+                disabled={weekIndex >= weeksData.length - 1}
+                onClick={() => setWeekIndex((w) => Math.min(weeksData.length - 1, w + 1))}
+                aria-label="Next week"
+              >
+                <IconChevronRight />
+              </button>
+            </div>
+          </div>
+
+          {!latestSchedule ? (
+            <div className="card planner-shell">
+              <p className="muted">{scheduleError || "Log in and run the planner to see the latest schedule."}</p>
+            </div>
+          ) : (
+            <div className="day-grid">
+              {currentWeek.map((day) => (
+                <article key={day.dateStr} className="day-card">
+                  <div className="day-head">
+                    <div>
+                      <div className="pill small-pill">{day.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</div>
+                      <h4>{day.req.day_name}</h4>
+                      <p className="muted">
+                        RN {day.summary.rnFilled}/{day.summary.rnReq} · Tech {day.summary.techFilled}/{day.summary.techReq} · Admin{" "}
+                        {day.summary.adminFilled}/{day.summary.adminReq}
+                      </p>
+                    </div>
+                    <span className={`tag ${day.deficits.length ? "tag-warn" : ""}`}>
+                      {day.deficits.length ? day.deficits.join(", ") : "Fully staffed"}
+                    </span>
+                  </div>
+                  <details>
+                    <summary>Details</summary>
+                    <ul className="staff-list">
+                      {day.detailList.map((d, idx) => (
+                        <li key={`${d.label}-${idx}`}>
+                          <span className="staff-role">{d.label}:</span> <span className={d.value === "Open" ? "staff-open" : ""}>{d.value}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
       </main>
     </>

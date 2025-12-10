@@ -1,11 +1,18 @@
-import { useState } from "react";
-import { login, setAuthToken } from "../api/client";
+import { useEffect, useState } from "react";
+import { login, setAuthToken, fetchHealth } from "../api/client";
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [online, setOnline] = useState<"checking" | "ok" | "down">("checking");
+
+  useEffect(() => {
+    fetchHealth()
+      .then(() => setOnline("ok"))
+      .catch(() => setOnline("down"));
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,11 +51,13 @@ export default function Login() {
           </div>
         </div>
 
-        <div className="auth-card">
-          <div className="auth-card-head">
-            <p className="muted">Clinic manager sign-in</p>
-            <span className="pill success">Secure session</span>
-          </div>
+          <div className="auth-card">
+            <div className="auth-card-head">
+              <p className="muted">Clinic manager sign-in</p>
+              <span className={`pill ${online === "ok" ? "success" : "subtle"}`}>
+                {online === "checking" ? "Checking..." : online === "ok" ? "Online" : "Offline"}
+              </span>
+            </div>
           <form className="auth-form" onSubmit={handleLogin}>
             <label className="field">
               <span>Username</span>

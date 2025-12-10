@@ -143,6 +143,44 @@ export interface ScheduleResponse {
   excel?: string;
 }
 
+export interface SavedRequirement {
+  day_name: string;
+  patient_count: number;
+  tech_openers: number;
+  tech_mids: number;
+  tech_closers: number;
+  rn_count: number;
+  admin_count: number;
+}
+
+export interface SavedAssignment {
+  date: string;
+  day_name: string;
+  role: string;
+  duty: string;
+  staff_id: string | null;
+  notes: string[];
+  slot_index: number;
+  is_bleach: boolean;
+}
+
+export interface SavedSchedule {
+  clinic_name?: string;
+  timezone?: string;
+  start_date: string;
+  weeks: number;
+  requirements: SavedRequirement[];
+  assignments: SavedAssignment[];
+  staff?: Array<{ id: string; name: string; role: string }>;
+  stats?: Record<string, number>;
+  total_penalty?: number;
+  winning_seed?: number | null;
+  bleach_cursor?: number;
+  export_roles?: string[];
+  tournament_trials?: number;
+  generated_at?: string;
+}
+
 export const fetchHealth = async (): Promise<HealthResponse> => {
   const { data } = await api.get<HealthResponse>("health");
   return data;
@@ -165,6 +203,11 @@ export const saveConfig = async (req: SaveConfigRequest): Promise<{ status: stri
 
 export const runSchedule = async (req: ScheduleRequest): Promise<ScheduleResponse> => {
   const { data } = await api.post<ScheduleResponse>("schedule/run", req);
+  return data;
+};
+
+export const fetchLatestSchedule = async (): Promise<SavedSchedule> => {
+  const { data } = await api.get<SavedSchedule>("schedule/latest");
   return data;
 };
 

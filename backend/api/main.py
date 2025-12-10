@@ -48,6 +48,8 @@ from backend.auth_db import (
     list_configs as list_user_configs,
     load_config as load_user_config,
     save_config as save_user_config,
+    save_schedule as persist_schedule,
+    get_latest_schedule,
 )
 from .schemas import (
     AssignmentOut,
@@ -267,7 +269,7 @@ def reset_user_invite(user_id: int, payload: dict = Depends(require_auth)):
 
 
 @router.post("/schedule/run", response_model=ScheduleResponse, dependencies=[Depends(require_auth)])
-def run_schedule(request: ScheduleRequest) -> ScheduleResponse:
+def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)) -> ScheduleResponse:
     try:
         staff_members = [_to_staff_member(s) for s in request.staff]
         if not staff_members:
@@ -332,6 +334,36 @@ def run_schedule(request: ScheduleRequest) -> ScheduleResponse:
             pto_entries=pto_entries,
         )
         excel_b64 = base64.b64encode(excel_bytes).decode("utf-8")
+        # Persist latest schedule snapshot for this owner
+        owner = _schedule_owner(payload)
+        schedule_payload = {
+            "clinic_name": request.config.clinic_name,
+            "timezone": request.config.timezone,
+            "start_date": request.config.start_date,
+            "weeks": request.config.weeks,
+            "requirements": [
+                {
+                    "day_name": req.day_name,
+                    "patient_count": req.patient_count,
+                    "tech_openers": req.tech_openers,
+                    "tech_mids": req.tech_mids,
+                    "tech_closers": req.tech_closers,
+                    "rn_count": req.rn_count,
+                    "admin_count": req.admin_count,
+                }
+                for req in request.requirements
+            ],
+            "assignments": [a.dict() for a in assignments],
+            "staff": [{"id": s.id, "name": s.name, "role": s.role} for s in staff_members],
+            "stats": result.stats,
+            "total_penalty": result.total_penalty,
+            "winning_seed": winning_seed,
+            "bleach_cursor": result.bleach_cursor,
+            "export_roles": request.export_roles,
+            "tournament_trials": request.tournament_trials,
+            "generated_at": datetime.utcnow().isoformat(),
+        }
+        persist_schedule(owner, schedule_payload)
         return ScheduleResponse(
             bleach_cursor=result.bleach_cursor,
             winning_seed=winning_seed,
@@ -351,6 +383,10 @@ def _slugify(name: str) -> str:
 
 def _config_owner(payload: dict) -> str:
     return (payload.get("username") or str(payload.get("sub") or "") or "public").strip() or "public"
+
+
+def _schedule_owner(payload: dict) -> str:
+    return _config_owner(payload)
 
 
 @router.get("/configs")
@@ -385,6 +421,15 @@ def save_config(request: SaveConfigRequest, payload: dict = Depends(require_auth
         return {"status": "saved", "filename": filename}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Failed to save config: {exc}") from exc
+
+
+@router.get("/schedule/latest")
+def latest_schedule(payload: dict = Depends(require_auth)) -> dict:
+    owner = _schedule_owner(payload)
+    data = get_latest_schedule(owner)
+    if not data:
+        raise HTTPException(status_code=404, detail="No saved schedule")
+    return data
 
 
 app.include_router(router)

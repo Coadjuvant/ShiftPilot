@@ -8,6 +8,10 @@ import PlaceholderPage from "./pages/Placeholder";
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isAuthed, setIsAuthed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return Boolean(localStorage.getItem("auth_token"));
+  });
   const location = useLocation();
 
   useEffect(() => {
@@ -22,6 +26,21 @@ export default function App() {
     if (!link.parentNode) document.head.appendChild(link);
     document.title = "Clinic Scheduler";
   }, [theme]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => setIsAuthed(Boolean(localStorage.getItem("auth_token")));
+    window.addEventListener("storage", handler);
+    handler();
+    return () => window.removeEventListener("storage", handler);
+  }, []);
+
+  const handleLogout = () => {
+    if (typeof window === "undefined") return;
+    localStorage.removeItem("auth_token");
+    setIsAuthed(false);
+    window.location.href = "/";
+  };
 
   return (
     <div className={`page-shell ${theme === "dark" ? "dark" : "light"}`}>
@@ -74,13 +93,15 @@ export default function App() {
               <Link to="/features">Features</Link>
               <Link to="/contact">Contact</Link>
             </nav>
-            <Link
-              className="primary-chip nav-cta"
-              to={location.pathname === "/planner" ? "/" : "/planner"}
-              onClick={() => setMobileOpen(false)}
-            >
-              {location.pathname === "/planner" ? "Back to Home" : "Launch Planner"}
-            </Link>
+            {isAuthed ? (
+              <button className="primary-chip nav-cta" onClick={handleLogout}>
+                Logout
+              </button>
+            ) : (
+              <Link className="primary-chip nav-cta" to="/login" onClick={() => setMobileOpen(false)}>
+                Login
+              </Link>
+            )}
           </div>
         </header>
 

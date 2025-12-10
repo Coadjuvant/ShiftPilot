@@ -133,6 +133,20 @@ class PostgresAuth:
             );
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schedules (
+                id SERIAL PRIMARY KEY,
+                owner TEXT NOT NULL UNIQUE,
+                clinic_name TEXT,
+                start_date DATE,
+                weeks INTEGER,
+                payload JSONB NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            );
+            """
+        )
         conn.commit()
         conn.close()
 
@@ -203,6 +217,45 @@ class PostgresAuth:
         )
         conn.commit()
         conn.close()
+
+    # --- schedules (latest per owner) ---
+    def save_schedule(self, owner: str, payload: Dict[str, Any]) -> None:
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO schedules (owner, clinic_name, start_date, weeks, payload, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
+            ON CONFLICT (owner) DO UPDATE SET
+                clinic_name = EXCLUDED.clinic_name,
+                start_date = EXCLUDED.start_date,
+                weeks = EXCLUDED.weeks,
+                payload = EXCLUDED.payload,
+                updated_at = NOW();
+            """,
+            (
+                owner,
+                payload.get("clinic_name"),
+                payload.get("start_date"),
+                payload.get("weeks"),
+                json.dumps(payload),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_latest_schedule(self, owner: str) -> Optional[Dict[str, Any]]:
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("SELECT payload FROM schedules WHERE owner=%s", (owner,))
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return None
+        try:
+            return row[0] if isinstance(row[0], dict) else json.loads(row[0])
+        except Exception:
+            return None
         return token
 
     def update_role(self, user_id: int, role: str):
@@ -436,6 +489,45 @@ class PostgresAuth:
         )
         conn.commit()
         conn.close()
+
+    # --- schedules (latest per owner) ---
+    def save_schedule(self, owner: str, payload: Dict[str, Any]) -> None:
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO schedules (owner, clinic_name, start_date, weeks, payload, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
+            ON CONFLICT (owner) DO UPDATE SET
+                clinic_name = EXCLUDED.clinic_name,
+                start_date = EXCLUDED.start_date,
+                weeks = EXCLUDED.weeks,
+                payload = EXCLUDED.payload,
+                updated_at = NOW();
+            """,
+            (
+                owner,
+                payload.get("clinic_name"),
+                payload.get("start_date"),
+                payload.get("weeks"),
+                json.dumps(payload),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    def get_latest_schedule(self, owner: str) -> Optional[Dict[str, Any]]:
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("SELECT payload FROM schedules WHERE owner=%s", (owner,))
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return None
+        try:
+            return row[0] if isinstance(row[0], dict) else json.loads(row[0])
+        except Exception:
+            return None
 
 
 # -----------------------
@@ -702,6 +794,23 @@ class JsonAuth:
                 u["role"] = role
         _save_json(data)
 
+    # --- schedules (latest per owner) ---
+    def save_schedule(self, owner: str, payload: Dict[str, Any]) -> None:
+        data = _load_json()
+        schedules = data.get("schedules", {})
+        schedules[owner] = {"payload": payload, "updated_at": _now()}
+        data["schedules"] = schedules
+        _save_json(data)
+
+    def get_latest_schedule(self, owner: str) -> Optional[Dict[str, Any]]:
+        data = _load_json()
+        schedules = data.get("schedules", {})
+        entry = schedules.get(owner)
+        if not entry:
+            return None
+        payload = entry.get("payload")
+        return payload if isinstance(payload, dict) else None
+
 # -----------------------
 # Backend selector
 # -----------------------
@@ -787,3 +896,12 @@ def load_config(owner: str, filename: str) -> Optional[dict]:
 
 def save_config(owner: str, filename: str, payload: dict):
     return _backend.save_config(owner, filename, payload)
+
+
+# Schedule helpers (latest per owner)
+def save_schedule(owner: str, payload: dict):
+    return _backend.save_schedule(owner, payload)
+
+
+def get_latest_schedule(owner: str) -> Optional[dict]:
+    return _backend.get_latest_schedule(owner)
