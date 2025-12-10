@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { login, setAuthToken, fetchHealth } from "../api/client";
 
 export default function Login() {
@@ -7,6 +8,8 @@ export default function Login() {
   const [status, setStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [online, setOnline] = useState<"checking" | "ok" | "down">("checking");
+  const [loginSuccess, setLoginSuccess] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchHealth()
@@ -22,13 +25,30 @@ export default function Login() {
       const res = await login(username, password);
       setAuthToken(res.token);
       localStorage.setItem("auth_token", res.token);
-      setStatus("Logged in");
+      setLoginSuccess(true);
+      setStatus(`Logged in as ${username || "user"}`);
+      setTimeout(() => navigate("/"), 1200);
     } catch {
       setStatus("Login failed. Check credentials.");
+      setLoginSuccess(false);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const handleLogout = () => {
+    localStorage.removeItem("auth_token");
+    setLoginSuccess(false);
+    setStatus("Logged out");
+    // Notify other listeners and return home
+    window.dispatchEvent(new Event("storage"));
+    navigate("/");
+  };
+
+  const onlineLabel =
+    online === "checking" ? "Checking..." : online === "ok" ? "Online" : "Offline";
+  const onlineTitle =
+    online === "ok" ? "Backend health: 200 OK" : online === "checking" ? "Checking backend health..." : "Backend health unavailable";
 
   return (
     <main className="auth-shell">
@@ -51,13 +71,20 @@ export default function Login() {
           </div>
         </div>
 
-          <div className="auth-card">
-            <div className="auth-card-head">
-              <p className="muted">Clinic manager sign-in</p>
-              <span className={`pill ${online === "ok" ? "success" : "subtle"}`}>
-                {online === "checking" ? "Checking..." : online === "ok" ? "Online" : "Offline"}
+        <div className="auth-card">
+          <div className="auth-card-head">
+            <p className="muted">Clinic manager sign-in</p>
+            <div style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "wrap" }}>
+              <span className={`pill ${online === "ok" ? "success" : "subtle"}`} title={onlineTitle}>
+                {onlineLabel}
               </span>
+              {loginSuccess && (
+                <span className="pill subtle" title={status || ""}>
+                  Welcome back, {username || "user"}
+                </span>
+              )}
             </div>
+          </div>
           <form className="auth-form" onSubmit={handleLogin}>
             <label className="field">
               <span>Username</span>
@@ -67,8 +94,12 @@ export default function Login() {
               <span>Password</span>
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
             </label>
-            <button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Signing in..." : "Log in"}
+            <button
+              type={loginSuccess ? "button" : "submit"}
+              onClick={loginSuccess ? handleLogout : undefined}
+              disabled={isSubmitting}
+            >
+              {loginSuccess ? "Logout" : isSubmitting ? "Signing in..." : "Log in"}
             </button>
             {status && <p className="status">{status}</p>}
           </form>

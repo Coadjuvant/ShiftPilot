@@ -323,7 +323,12 @@ export default function Landing() {
 
           {!latestSchedule ? (
             <div className="card planner-shell">
-              <p className="muted">{scheduleError || "Log in and run the planner to see the latest schedule."}</p>
+              <p className="muted">
+                {scheduleError || "No schedule saved. "}
+                <Link className="secondary-link" to="/planner">
+                  Head to Planner to make one.
+                </Link>
+              </p>
             </div>
           ) : (
             <div className="day-grid">
