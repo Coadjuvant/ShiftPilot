@@ -860,14 +860,6 @@ export default function StaffPlanner() {
             )}
           </div>
         )}
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginLeft: "auto" }}>
-          <span className="muted">{authToken ? `Logged in as ${currentUser || "user"}` : "Not authenticated"}</span>
-          {authToken && (
-            <button className="secondary-btn" onClick={handleLogout}>
-              Logout
-            </button>
-          )}
-        </div>
       </div>
       {lastError && <p style={{ color: "#b45309", marginTop: "0.35rem" }}>{lastError}</p>}
       <div

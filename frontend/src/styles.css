@@ -173,6 +173,19 @@ body {
   align-items: center;
   gap: 0.5rem;
 }
+.week-nav .secondary-btn {
+  padding: 0.35rem 0.65rem;
+  min-height: 32px;
+  border-radius: 10px;
+  box-shadow: none;
+  border: 1px solid rgba(0, 51, 160, 0.14);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--deep-blue);
+}
+.week-nav .secondary-btn:hover {
+  background: rgba(12, 75, 223, 0.08);
+  box-shadow: none;
+}
 
 .day-grid {
   display: grid;
@@ -251,8 +264,8 @@ select:focus {
 }
 
 button {
-  background: linear-gradient(135deg, #0033a0, #28aeca);
-  color: var(--white);
+  background: linear-gradient(135deg, #0c4bdf, #32b5e6);
+  color: #fff;
   border: none;
   padding: 0.65rem 1.15rem;
   min-height: 42px;
@@ -263,7 +276,7 @@ button {
 }
 
 button:hover {
-  box-shadow: 0 14px 26px rgba(0, 51, 160, 0.35);
+  box-shadow: 0 14px 26px rgba(12, 75, 223, 0.32);
 }
 
 button:active {
@@ -271,14 +284,22 @@ button:active {
 }
 
 .secondary-btn {
-  background-color: rgba(255, 255, 255, 0.92);
+  background-color: rgba(255, 255, 255, 0.96);
   color: var(--deep-blue);
-  border: 1px solid rgba(0, 51, 160, 0.14);
-  box-shadow: 0 8px 16px rgba(7, 27, 69, 0.12);
+  border: 1px solid rgba(0, 51, 160, 0.12);
+  box-shadow: 0 8px 16px rgba(7, 27, 69, 0.1);
 }
 
 .secondary-btn:hover {
-  background-color: rgba(0, 51, 160, 0.08);
+  background-color: rgba(12, 75, 223, 0.08);
+}
+
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #0c4bdf;
+  box-shadow: none;
+  background: transparent;
 }
 
 .stack {
@@ -313,7 +334,7 @@ button:active {
 }
 
 .tab-btn:not(.active):hover {
-  background: rgba(0, 51, 160, 0.08);
+  background: rgba(12, 75, 223, 0.1);
   color: var(--deep-blue);
 }
 
@@ -458,13 +479,15 @@ table th {
 }
 
 .muted-pill {
-  background: rgba(0, 51, 160, 0.08);
+  background: rgba(0, 51, 160, 0.14);
   color: var(--deep-blue);
+  border: 1px solid rgba(0, 51, 160, 0.18);
 }
 
 .page-shell.dark .muted-pill {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.12);
   color: #fff;
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .small-pill {
@@ -1010,14 +1033,21 @@ table th {
 }
 
 .pill.subtle {
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: rgba(0, 51, 160, 0.18);
   background: rgba(0, 51, 160, 0.14);
+  color: var(--deep-blue);
+}
+
+.page-shell.dark .pill.subtle {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .pill.success {
   background: rgba(0, 163, 222, 0.12);
   border-color: rgba(0, 163, 222, 0.32);
-  color: #b6e8ff;
+  color: #0c4bdf;
 }
 .pill.small-pill {
   font-size: 0.8rem;
