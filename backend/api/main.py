@@ -6,6 +6,7 @@ import json
 import re
 import base64
 import os
+import csv
 import jwt
 from datetime import datetime, timedelta
 from fastapi import Request
@@ -50,10 +51,13 @@ from backend.auth_db import (
     save_config as save_user_config,
     save_schedule as persist_schedule,
     get_latest_schedule,
+    export_config as export_user_config,
+    import_config as import_user_config,
 )
 from .schemas import (
     AssignmentOut,
     ConfigPayload,
+    ConfigSchedule,
     SaveConfigRequest,
     ScheduleRequest,
     ScheduleResponse,
@@ -297,6 +301,7 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
             bleach_day=request.config.bleach_day,
             bleach_rotation=request.config.bleach_rotation,
             bleach_cursor=request.config.bleach_cursor,
+            bleach_frequency=request.config.bleach_frequency,
             patients_per_tech=request.config.patients_per_tech,
             patients_per_rn=request.config.patients_per_rn,
             techs_per_rn=request.config.techs_per_rn,
@@ -341,6 +346,7 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
             "timezone": request.config.timezone,
             "start_date": request.config.start_date,
             "weeks": request.config.weeks,
+            "bleach_frequency": request.config.bleach_frequency,
             "requirements": [
                 {
                     "day_name": req.day_name,
@@ -430,6 +436,119 @@ def latest_schedule(payload: dict = Depends(require_auth)) -> dict:
     if not data:
         return {"status": "none"}
     return data
+
+
+@router.get("/schedule/export/csv")
+def export_schedule_csv(payload: dict = Depends(require_auth)):
+    owner = _schedule_owner(payload)
+    data = get_latest_schedule(owner)
+    if not data or not data.get("assignments"):
+        raise HTTPException(status_code=404, detail="No saved schedule")
+    staff_map = {s.get("id"): s for s in data.get("staff", [])}
+    output_rows = []
+    for a in data.get("assignments", []):
+        staff = staff_map.get(a.get("staff_id"))
+        output_rows.append(
+            {
+                "date": a.get("date"),
+                "day_name": a.get("day_name"),
+                "role": a.get("role"),
+                "duty": a.get("duty"),
+                "staff_name": staff.get("name") if staff else "",
+                "staff_key": staff.get("id") if staff else "",
+                "is_bleach": a.get("is_bleach"),
+                "slot_index": a.get("slot_index"),
+                "notes": "|".join(a.get("notes", [])) if a.get("notes") else "",
+            }
+        )
+    # Return as CSV text for download
+    fieldnames = ["date", "day_name", "role", "duty", "staff_name", "staff_key", "is_bleach", "slot_index", "notes"]
+    import io
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(output_rows)
+    buf.seek(0)
+    from fastapi.responses import PlainTextResponse
+
+    return PlainTextResponse(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="schedule.csv"'},
+    )
+
+
+@router.post("/schedule/import/csv")
+async def import_schedule_csv(request: Request, payload: dict = Depends(require_auth)) -> dict:
+    owner = _schedule_owner(payload)
+    form = await request.form()
+    file = form.get("file")
+    if not file:
+        raise HTTPException(status_code=400, detail="CSV file required")
+    content = (await file.read()).decode("utf-8", errors="ignore")
+    reader = csv.DictReader(content.splitlines())
+    assignments = []
+    staff_entries = {}
+    for row in reader:
+        staff_key = row.get("staff_key", "") or row.get("staff_id", "")
+        staff_name = row.get("staff_name", "") or ""
+        if staff_key and staff_name and staff_key not in staff_entries:
+            staff_entries[staff_key] = {"id": staff_key, "name": staff_name, "role": row.get("role", "Tech")}
+        assignments.append(
+            {
+                "date": row.get("date"),
+                "day_name": row.get("day_name"),
+                "role": row.get("role"),
+                "duty": row.get("duty"),
+                "staff_id": staff_key or None,
+                "notes": [n for n in (row.get("notes", "") or "").split("|") if n],
+                "slot_index": int(row.get("slot_index") or 0),
+                "is_bleach": str(row.get("is_bleach") or "").lower() in ["true", "1", "yes"],
+            }
+        )
+    if not assignments:
+        raise HTTPException(status_code=400, detail="No assignments found in CSV")
+    snapshot = {
+        "clinic_name": "Imported schedule",
+        "timezone": "UTC",
+        "start_date": assignments[0].get("date") or datetime.utcnow().date().isoformat(),
+        "weeks": 1,
+        "requirements": [],
+        "assignments": assignments,
+        "staff": list(staff_entries.values()),
+        "stats": {},
+        "total_penalty": 0,
+        "winning_seed": None,
+        "bleach_cursor": 0,
+        "generated_at": datetime.utcnow().isoformat(),
+    }
+    persist_schedule(owner, snapshot)
+    return {"status": "imported", "assignments": len(assignments)}
+
+
+@router.get("/configs/export/{filename}")
+def export_config(filename: str, payload: dict = Depends(require_auth)) -> dict:
+    owner = _config_owner(payload)
+    safe_name = Path(filename).name
+    data = export_user_config(owner, safe_name)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Config not found")
+    encoded = base64.b64encode(json.dumps(data, default=str).encode("utf-8")).decode("utf-8")
+    return {"filename": safe_name, "payload": data, "encoded": encoded}
+
+
+@router.post("/configs/import")
+def import_config(request: SaveConfigRequest, payload: dict = Depends(require_auth)) -> dict:
+    owner = _config_owner(payload)
+    filename = request.filename.strip() if request.filename else ""
+    if not filename:
+        filename = f"{_slugify(request.payload.clinic.name)}.config"
+    try:
+        import_user_config(owner, Path(filename).name, request.payload.dict())
+        return {"status": "imported", "filename": filename}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to import config: {exc}") from exc
 
 
 app.include_router(router)

@@ -30,6 +30,7 @@ import DemandEditor from "../components/DemandEditor";
 import PTOEditor from "../components/PTOEditor";
 import { DemandRow, PTORow, StaffRow } from "../types";
 import { DAYS } from "../constants";
+import { exportConfig, importConfig, exportScheduleCsv, importScheduleCsv } from "../api/client";
 
 export default function StaffPlanner() {
   const genId = () => {
@@ -67,7 +68,7 @@ export default function StaffPlanner() {
     return err?.message ?? fallback;
   };
   const formatDateTime = (value?: string | null) => {
-    if (!value) return "—";
+        if (!value) return "";
     const dt = new Date(value);
     if (Number.isNaN(dt.getTime())) return value;
     return dt.toLocaleString(undefined, {
@@ -81,7 +82,7 @@ export default function StaffPlanner() {
   };
 
   const [status, setStatus] = useState<string>("Checking API...");
-  const [activeTab, setActiveTab] = useState<"staff" | "avail" | "prefs" | "demand" | "pto" | "run" | "admin">("staff");
+  const [activeTab, setActiveTab] = useState<"staff" | "avail" | "prefs" | "demand" | "pto" | "run" | "bleach" | "admin">("staff");
   const defaultAvailability = DAYS.reduce<Record<string, boolean>>((acc, day) => {
     acc[day] = true;
     return acc;
@@ -156,6 +157,7 @@ export default function StaffPlanner() {
   const [bleachDay, setBleachDay] = useState<string>("Thu");
   const [bleachCursor, setBleachCursor] = useState<number>(0);
   const [bleachRotation, setBleachRotation] = useState<string[]>([]);
+  const [bleachFrequency, setBleachFrequency] = useState<string>("weekly");
   const [trials, setTrials] = useState<number>(20);
   const [exportRoles, setExportRoles] = useState<string[]>(["Tech", "RN", "Admin"]);
   const [enforceThree, setEnforceThree] = useState<boolean>(true);
@@ -176,6 +178,9 @@ export default function StaffPlanner() {
   const [progress, setProgress] = useState<number>(0);
   const [autoLoadedConfig, setAutoLoadedConfig] = useState<boolean>(false);
   const isAuthed = Boolean(authToken && authToken.length > 0);
+  const [importingConfig, setImportingConfig] = useState(false);
+  const [importingSchedule, setImportingSchedule] = useState(false);
+  const [configImportString, setConfigImportString] = useState("");
   const uniqueStaffIds = Array.from(
     new Set(staffRows.filter((s) => s.can_bleach).map((s) => s.id).filter((v) => v && v.trim().length > 0))
   );
@@ -236,6 +241,7 @@ export default function StaffPlanner() {
     setBleachDay("Thu");
     setBleachCursor(0);
     setBleachRotation([]);
+    setBleachFrequency("weekly");
     setTrials(20);
     setExportRoles(["Tech", "RN", "Admin"]);
     setEnforceThree(true);
@@ -293,6 +299,10 @@ export default function StaffPlanner() {
         setIsAdmin((data?.role || "").toLowerCase() === "admin");
         setCurrentUser(data?.username || "");
         setMeLoaded(true);
+        if (data?.username) {
+          localStorage.setItem("auth_user", data.username);
+          window.dispatchEvent(new Event("storage"));
+        }
       })
       .catch(() => {
         setIsAdmin(false);
@@ -449,14 +459,15 @@ export default function StaffPlanner() {
       setPatientsPerTech(Number(cfg.ratios?.patients_per_tech ?? patientsPerTech));
       setPatientsPerRn(Number(cfg.ratios?.patients_per_rn ?? patientsPerRn));
       setTechsPerRn(Number(cfg.ratios?.techs_per_rn ?? techsPerRn));
-      setBleachDay(cfg.bleach?.day ?? bleachDay);
-      setBleachCursor(Number(cfg.bleach?.cursor ?? bleachCursor));
-      setBleachRotation(Array.isArray(cfg.bleach?.rotation) ? cfg.bleach.rotation.map(String) : []);
-      setTrials(Number(cfg.tournament?.trials ?? trials));
-      setEnforceThree(Boolean(cfg.constraints?.enforce_three_day_cap ?? enforceThree));
-      setEnforcePostBleach(Boolean(cfg.constraints?.enforce_post_bleach_rest ?? enforcePostBleach));
-      setEnforceAltSat(Boolean(cfg.constraints?.enforce_alt_saturdays ?? enforceAltSat));
-      setLimitTechFour(Boolean(cfg.constraints?.limit_tech_four_days ?? limitTechFour));
+        setBleachDay(cfg.bleach?.day ?? bleachDay);
+        setBleachCursor(Number(cfg.bleach?.cursor ?? bleachCursor));
+        setBleachRotation(Array.isArray(cfg.bleach?.rotation) ? cfg.bleach.rotation.map(String) : []);
+        setBleachFrequency(cfg.schedule?.bleach_frequency || cfg.bleach?.frequency || "weekly");
+        setTrials(Number(cfg.tournament?.trials ?? trials));
+        setEnforceThree(Boolean(cfg.constraints?.enforce_three_day_cap ?? enforceThree));
+        setEnforcePostBleach(Boolean(cfg.constraints?.enforce_post_bleach_rest ?? enforcePostBleach));
+        setEnforceAltSat(Boolean(cfg.constraints?.enforce_alt_saturdays ?? enforceAltSat));
+        setLimitTechFour(Boolean(cfg.constraints?.limit_tech_four_days ?? limitTechFour));
       setLimitRnFour(Boolean(cfg.constraints?.limit_rn_four_days ?? limitRnFour));
       if (cfg.staff && Array.isArray(cfg.staff)) {
         const normalized = cfg.staff.map((row: any) => ({
@@ -522,7 +533,7 @@ export default function StaffPlanner() {
 
     const payload: ConfigPayload = {
       clinic: { name: configName || "Demo Clinic", timezone },
-      schedule: { start: scheduleStart, weeks },
+      schedule: { start: scheduleStart, weeks, bleach_frequency: bleachFrequency },
       ratios: {
         patients_per_tech: patientsPerTech,
         patients_per_rn: patientsPerRn,
@@ -535,7 +546,7 @@ export default function StaffPlanner() {
         limit_tech_four_days: limitTechFour,
         limit_rn_four_days: limitRnFour
       },
-      bleach: { day: bleachDay, rotation: bleachRotation, cursor: bleachCursor },
+      bleach: { day: bleachDay, rotation: bleachRotation, cursor: bleachCursor, frequency: bleachFrequency },
       tournament: { trials, last_seed: 0 },
       staff: staffRows.map((s) => ({
         ...s,
@@ -563,6 +574,80 @@ export default function StaffPlanner() {
       const msg = backendDetail ? `Save failed: ${backendDetail}` : friendlyError(err, "Failed to save config");
       setStatus(msg);
       setLastError(msg);
+    }
+  };
+
+  const handleExportConfig = async (mode: "json" | "string") => {
+    try {
+      const name = `${configName || "clinic"}.config`;
+      const res = await exportConfig(name);
+      if (mode === "json") {
+        const blob = new Blob([JSON.stringify(res.payload, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = name;
+        link.click();
+        URL.revokeObjectURL(url);
+        setStatus("Config exported as JSON.");
+      } else {
+        const encoded = res.encoded;
+        setConfigImportString(encoded);
+        await copyText(encoded);
+        setStatus("Encoded config copied. Paste to import.");
+      }
+    } catch (err: any) {
+      setStatus(err?.message ?? "Failed to export config");
+    }
+  };
+
+  const handleImportConfig = async (file?: File, encoded?: string) => {
+    try {
+      setImportingConfig(true);
+      let payload = null;
+      if (encoded) {
+        payload = JSON.parse(atob(encoded));
+      } else if (file) {
+        const text = await file.text();
+        payload = JSON.parse(text);
+      } else {
+        throw new Error("No file or string provided");
+      }
+      const filename = `${payload?.clinic?.name || "imported"}.config`;
+      await importConfig({ payload, filename });
+      setStatus("Config imported. Reload configs to use it.");
+    } catch (err: any) {
+      setStatus(err?.message ?? "Failed to import config");
+    } finally {
+      setImportingConfig(false);
+    }
+  };
+
+  const handleExportScheduleCsv = async () => {
+    try {
+      const blob = await exportScheduleCsv();
+      const csvBlob = blob instanceof Blob ? blob : new Blob([blob as any], { type: "text/csv" });
+      const url = URL.createObjectURL(csvBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "schedule.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+      setStatus("Schedule CSV exported.");
+    } catch (err: any) {
+      setStatus(err?.message ?? "Failed to export schedule");
+    }
+  };
+
+  const handleImportScheduleCsv = async (file: File) => {
+    try {
+      setImportingSchedule(true);
+      await importScheduleCsv(file);
+      setStatus("Schedule imported as latest snapshot.");
+    } catch (err: any) {
+      setStatus(err?.message ?? "Failed to import schedule");
+    } finally {
+      setImportingSchedule(false);
     }
   };
 
@@ -818,16 +903,87 @@ export default function StaffPlanner() {
           />
           <button onClick={handleSaveConfig}>Save</button>
         </div>
+        <div
+          className="controls-row"
+          style={{ flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end", marginBottom: "0.5rem" }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+            <strong>Config import/export</strong>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+              <button className="secondary-btn" onClick={() => handleExportConfig("json")}>
+                Download config (.json)
+              </button>
+              <button className="secondary-btn" onClick={() => handleExportConfig("string")}>
+                Copy encoded config
+              </button>
+              <label className="secondary-btn" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                Import config file
+                <input
+                  type="file"
+                  accept=".json,.config"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleImportConfig(file);
+                      e.target.value = "";
+                    }
+                  }}
+                />
+              </label>
+              <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+                <input
+                  placeholder="Paste encoded config string"
+                  value={configImportString}
+                  onChange={(e) => setConfigImportString(e.target.value)}
+                  style={{ minWidth: "220px" }}
+                />
+                <button
+                  className="secondary-btn"
+                  disabled={!configImportString.trim()}
+                  onClick={() => handleImportConfig(undefined, configImportString.trim())}
+                >
+                  Import string
+                </button>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+            <strong>Schedule import/export</strong>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+              <button className="secondary-btn" onClick={handleExportScheduleCsv} disabled={importingSchedule}>
+                Export schedule (CSV)
+              </button>
+              <label className="secondary-btn" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                Import schedule CSV
+                <input
+                  type="file"
+                  accept=".csv"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleImportScheduleCsv(file);
+                      e.target.value = "";
+                    }
+                  }}
+                />
+              </label>
+              {importingSchedule && <span className="muted">Importing…</span>}
+            </div>
+          </div>
+        </div>
         <div className="tabs">
           {[
             { key: "staff", label: "Staff" },
-            { key: "avail", label: "Availability" },
-            { key: "prefs", label: "Prefs" },
-            { key: "demand", label: "Demand" },
-            { key: "pto", label: "PTO" },
-            { key: "run", label: "Run" },
-            ...(isAdmin ? [{ key: "admin", label: "Admin" }] : [])
-          ].map((tab) => (
+          { key: "avail", label: "Availability" },
+          { key: "prefs", label: "Prefs" },
+          { key: "demand", label: "Demand" },
+          { key: "pto", label: "PTO" },
+          { key: "run", label: "Run" },
+          { key: "bleach", label: "Bleach" },
+          ...(isAdmin ? [{ key: "admin", label: "Admin" }] : [])
+        ].map((tab) => (
             <button
               key={tab.key}
               className={`tab-btn ${activeTab === tab.key ? "active" : ""}`}
@@ -1098,114 +1254,11 @@ export default function StaffPlanner() {
                 onChange={(e) => setWeeks(Number(e.target.value))}
               />
             </label>
-            <label>
-              Bleach day
-              <select value={bleachDay} onChange={(e) => setBleachDay(e.target.value)}>
-                {DAYS.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Bleach cursor
-              <input
-                type="number"
-                min={0}
-                value={bleachCursor}
-                onChange={(e) => setBleachCursor(Number(e.target.value))}
-              />
-            </label>
-          </div>
-          <div className="stack" style={{ alignItems: "flex-start" }}>
-            <div style={{ minWidth: "280px" }}>
-              <p style={{ margin: "0 0 4px 0" }}>Bleach rotation (ordered)</p>
-              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
-                <select
-                  value=""
-                  onChange={(e) => {
-                    const sid = e.target.value;
-                    if (!sid) return;
-                    setBleachRotation((prev) => [...prev, sid]);
-                  }}
-                >
-                  <option value="">Add bleacher...</option>
-                  {availableBleachIds.map((sid) => (
-                    <option key={sid} value={sid}>
-                      {staffNameMap[sid] || sid}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="secondary-btn"
-                  onClick={() => setBleachRotation([])}
-                  disabled={bleachRotation.length === 0}
-                >
-                  Clear
-                </button>
-              </div>
-              {bleachRotation.length === 0 && <p className="muted">No bleach rotation set.</p>}
-              {bleachRotation.map((sid, idx) => (
-                <div
-                  key={`${sid}-${idx}`}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                    marginBottom: "0.25rem"
-                  }}
-                >
-                  <span style={{ minWidth: 24, textAlign: "right" }}>{idx + 1}.</span>
-                  <span style={{ flex: 1 }}>{staffNameMap[sid] || sid}</span>
-                  <button
-                    className="secondary-btn"
-                    onClick={() =>
-                      setBleachRotation((prev) => {
-                        const next = [...prev];
-                        if (idx > 0) [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-                        return next;
-                      })
-                    }
-                    disabled={idx === 0}
-                  >
-                    ↑
-                  </button>
-                  <button
-                    className="secondary-btn"
-                    onClick={() =>
-                      setBleachRotation((prev) => {
-                        const next = [...prev];
-                        if (idx < next.length - 1) [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
-                        return next;
-                      })
-                    }
-                    disabled={idx === bleachRotation.length - 1}
-                  >
-                    ↓
-                  </button>
-                  <button
-                    className="secondary-btn"
-                    onClick={() => setBleachRotation((prev) => prev.filter((_, i) => i !== idx))}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
           </div>
           <div className="stack">
             <label>
               Enforce 2-day max
               <input type="checkbox" checked={enforceThree} onChange={(e) => setEnforceThree(e.target.checked)} />
-            </label>
-            <label>
-              No post-bleach day
-              <input
-                type="checkbox"
-                checked={enforcePostBleach}
-                onChange={(e) => setEnforcePostBleach(e.target.checked)}
-              />
             </label>
             <label>
               No consecutive Saturdays
@@ -1367,6 +1420,7 @@ export default function StaffPlanner() {
                     bleach_day: bleachDay,
                     bleach_rotation: bleachRotation,
                     bleach_cursor: bleachCursor,
+                    bleach_frequency: bleachFrequency,
                     patients_per_tech: patientsPerTech,
                     patients_per_rn: patientsPerRn,
                     techs_per_rn: techsPerRn,
@@ -1611,6 +1665,130 @@ export default function StaffPlanner() {
               </table>
             </div>
           )}
+        </div>
+      )}
+      {activeTab === "bleach" && (
+        <div className="card" style={{ marginTop: "1rem" }}>
+          <h3>Bleach planning</h3>
+          <p className="muted">
+            Weekly runs use your chosen bleach day. Quarterly runs schedule bleach on the second week of Feb, May, Aug, and Nov.
+          </p>
+          <div className="stack">
+            <label>
+              Bleach day
+              <select value={bleachDay} onChange={(e) => setBleachDay(e.target.value)}>
+                {DAYS.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Bleach frequency
+              <select value={bleachFrequency} onChange={(e) => setBleachFrequency(e.target.value)}>
+                <option value="weekly">Weekly</option>
+                <option value="quarterly">Quarterly</option>
+              </select>
+            </label>
+            <label>
+              Bleach cursor
+              <input
+                type="number"
+                min={0}
+                value={bleachCursor}
+                onChange={(e) => setBleachCursor(Number(e.target.value))}
+              />
+            </label>
+          </div>
+          <div className="stack" style={{ alignItems: "flex-start" }}>
+            <div style={{ minWidth: "280px" }}>
+              <p style={{ margin: "0 0 4px 0" }}>Bleach rotation (ordered)</p>
+              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const sid = e.target.value;
+                    if (!sid) return;
+                    setBleachRotation((prev) => [...prev, sid]);
+                  }}
+                >
+                  <option value="">Add bleacher...</option>
+                  {availableBleachIds.map((sid) => (
+                    <option key={sid} value={sid}>
+                      {staffNameMap[sid] || sid}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="secondary-btn"
+                  onClick={() => setBleachRotation([])}
+                  disabled={bleachRotation.length === 0}
+                >
+                  Clear
+                </button>
+              </div>
+              {bleachRotation.length === 0 && <p className="muted">No bleach rotation set.</p>}
+              {bleachRotation.map((sid, idx) => (
+                <div
+                  key={`${sid}-${idx}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    marginBottom: "0.25rem"
+                  }}
+                >
+                  <span style={{ minWidth: 24, textAlign: "right" }}>{idx + 1}.</span>
+                  <span style={{ flex: 1 }}>{staffNameMap[sid] || sid}</span>
+                  <button
+                    className="secondary-btn"
+                    onClick={() =>
+                      setBleachRotation((prev) => {
+                        const next = [...prev];
+                        if (idx > 0) [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                        return next;
+                      })
+                    }
+                    disabled={idx === 0}
+                  >
+                    Move up
+                  </button>
+                  <button
+                    className="secondary-btn"
+                    onClick={() =>
+                      setBleachRotation((prev) => {
+                        const next = [...prev];
+                        if (idx < next.length - 1) [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
+                        return next;
+                      })
+                    }
+                    disabled={idx === bleachRotation.length - 1}
+                  >
+                    Move down
+                  </button>
+                  <button
+                    className="secondary-btn"
+                    onClick={() => setBleachRotation((prev) => prev.filter((_, i) => i !== idx))}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="stack">
+            <label style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+              <input
+                type="checkbox"
+                checked={enforcePostBleach}
+                onChange={(e) => setEnforcePostBleach(e.target.checked)}
+                style={{ marginRight: "4px" }}
+              />
+              Require day off after bleach
+            </label>
+            <p className="muted">Cursor advances after a bleach assignment; PTO will skip to the next person.</p>
+          </div>
         </div>
       )}
       {activeTab === "admin" && isAdmin && (
