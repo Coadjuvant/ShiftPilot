@@ -186,6 +186,15 @@ body {
   background: rgba(12, 75, 223, 0.08);
   box-shadow: none;
 }
+.week-nav svg {
+  width: 16px;
+  height: 16px;
+}
+.page-shell.light .week-nav .secondary-btn {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(0, 51, 160, 0.12);
+  color: #0f1c3d;
+}
 
 .day-grid {
   display: grid;
@@ -295,8 +304,8 @@ button:active {
 }
 
 input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   accent-color: #0c4bdf;
   box-shadow: none;
   background: transparent;
@@ -336,6 +345,17 @@ input[type="checkbox"] {
 .tab-btn:not(.active):hover {
   background: rgba(12, 75, 223, 0.1);
   color: var(--deep-blue);
+}
+
+.page-shell.dark .tab-btn:not(.active) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #dce5ff;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.page-shell.dark .tab-btn:not(.active):hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
 }
 
 table td,
@@ -479,9 +499,15 @@ table th {
 }
 
 .muted-pill {
-  background: rgba(0, 51, 160, 0.14);
+  background: rgba(0, 51, 160, 0.18);
   color: var(--deep-blue);
-  border: 1px solid rgba(0, 51, 160, 0.18);
+  border: 1px solid rgba(0, 51, 160, 0.22);
+}
+
+.page-shell.dark .muted-pill {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .page-shell.dark .muted-pill {
@@ -590,12 +616,16 @@ table th {
 }
 
 .row-sub {
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 0.95rem;
 }
 
 .page-shell.light .row-sub {
-  color: #2f3a52;
+  color: #1f2f52;
+}
+
+.page-shell.light .row-title {
+  color: #0f1c3d;
 }
 
 .dot {
@@ -976,19 +1006,19 @@ table th {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem 1.25rem;
-  color: rgba(255, 255, 255, 0.88);
+  color: rgba(255, 255, 255, 0.92);
   font-weight: 600;
 }
 
 .hero-checklist li::before {
-  content: "•";
+  content: "›";
   display: inline-block;
   margin-right: 0.4rem;
   color: var(--concise-blue);
 }
 
 .page-shell.light .hero-checklist {
-  color: #2f3a52;
+  color: #1f2f52;
 }
 
 .auth-shell {
@@ -1030,6 +1060,12 @@ table th {
   border: 1px solid rgba(255, 255, 255, 0.16);
   color: var(--warm-1);
   background: rgba(255, 255, 255, 0.08);
+}
+
+.page-shell.light .pill {
+  color: #0f1c3d;
+  border: 1px solid rgba(0, 51, 160, 0.18);
+  background: rgba(0, 51, 160, 0.08);
 }
 
 .pill.subtle {
