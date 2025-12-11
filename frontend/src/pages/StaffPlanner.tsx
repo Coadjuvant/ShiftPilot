@@ -916,7 +916,16 @@ export default function StaffPlanner() {
               <button className="secondary-btn" onClick={() => handleExportConfig("string")}>
                 Copy encoded config
               </button>
-              <label className="secondary-btn" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+              <label
+                className="secondary-btn"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  padding: "0.55rem 0.9rem",
+                  minHeight: "40px"
+                }}
+              >
                 Import config file
                 <input
                   type="file"
@@ -954,7 +963,16 @@ export default function StaffPlanner() {
               <button className="secondary-btn" onClick={handleExportScheduleCsv} disabled={importingSchedule}>
                 Export schedule (CSV)
               </button>
-              <label className="secondary-btn" style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+              <label
+                className="secondary-btn"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  padding: "0.55rem 0.9rem",
+                  minHeight: "40px"
+                }}
+              >
                 Import schedule CSV
                 <input
                   type="file"
