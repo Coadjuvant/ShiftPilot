@@ -976,14 +976,14 @@ export default function StaffPlanner() {
         <div className="tabs">
           {[
             { key: "staff", label: "Staff" },
-          { key: "avail", label: "Availability" },
-          { key: "prefs", label: "Prefs" },
-          { key: "demand", label: "Demand" },
-          { key: "pto", label: "PTO" },
-          { key: "run", label: "Run" },
-          { key: "bleach", label: "Bleach" },
-          ...(isAdmin ? [{ key: "admin", label: "Admin" }] : [])
-        ].map((tab) => (
+            { key: "avail", label: "Availability" },
+            { key: "prefs", label: "Prefs" },
+            { key: "demand", label: "Demand" },
+            { key: "pto", label: "PTO" },
+            { key: "bleach", label: "Bleach" },
+            { key: "run", label: "Run" },
+            ...(isAdmin ? [{ key: "admin", label: "Admin" }] : [])
+          ].map((tab) => (
             <button
               key={tab.key}
               className={`tab-btn ${activeTab === tab.key ? "active" : ""}`}
