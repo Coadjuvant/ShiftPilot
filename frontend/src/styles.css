@@ -304,13 +304,30 @@ button:active {
 }
 
 input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
+  width: 32px;
+  height: 32px;
   accent-color: #0c4bdf;
   box-shadow: none;
   background: transparent;
 }
 
+.page-shell.dark input[type="checkbox"] {
+  accent-color: #32b5e6;
+}
+
+.secondary-btn,
+label.secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  text-decoration: none;
+}
+
+.secondary-btn:hover,
+label.secondary-btn:hover {
+  background-color: rgba(12, 75, 223, 0.08);
+}
 .stack {
   display: flex;
   gap: 0.5rem;
