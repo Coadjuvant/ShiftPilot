@@ -119,7 +119,17 @@ def _build_slots(requirements: Dict[str, DailyRequirement], cfg: ScheduleConfig)
 
             add_slot("Tech", "open", req.tech_openers)
             add_slot("Tech", "mid", req.tech_mids)
-            bleach = day_name == cfg.bleach_day and req.tech_closers > 0
+            bleach = False
+            if req.tech_closers > 0:
+                freq = (cfg.bleach_frequency or "weekly").lower()
+                if freq == "weekly":
+                    bleach = day_name == cfg.bleach_day
+                elif freq == "quarterly":
+                    # second week (index 1) of Feb/May/Aug/Nov using the schedule date month
+                    if week == 1 and schedule_date.month in (2, 5, 8, 11) and day_name == cfg.bleach_day:
+                        bleach = True
+                else:
+                    bleach = day_name == cfg.bleach_day
             add_slot("Tech", "close", req.tech_closers, bleach=bleach)
             add_slot("RN", "coverage", req.rn_count)
             add_slot("Admin", "coverage", req.admin_count)

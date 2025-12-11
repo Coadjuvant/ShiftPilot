@@ -73,6 +73,7 @@ class ScheduleConfigIn(BaseModel):
     bleach_day: str = "Thu"
     bleach_rotation: List[str] = Field(default_factory=list)
     bleach_cursor: int = 0
+    bleach_frequency: str = "weekly"  # weekly | quarterly | custom?
     patients_per_tech: int = 4
     patients_per_rn: int = 12
     techs_per_rn: int = 4
@@ -122,6 +123,7 @@ class ConfigClinic(BaseModel):
 class ConfigSchedule(BaseModel):
     start: date
     weeks: int
+    bleach_frequency: str = "weekly"
 
 
 class ConfigRatios(BaseModel):

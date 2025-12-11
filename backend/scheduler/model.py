@@ -84,6 +84,7 @@ class ScheduleConfig:
     bleach_day: str  # Mon..Sat
     bleach_rotation: List[str]
     bleach_cursor: int = 0
+    bleach_frequency: str = "weekly"
     patients_per_tech: int = 4
     patients_per_rn: int = 12
     techs_per_rn: int = 4

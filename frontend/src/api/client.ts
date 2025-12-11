@@ -57,7 +57,7 @@ export interface ConfigSummary {
 
 export interface ConfigPayload {
   clinic: { name: string; timezone: string };
-  schedule: { start: string; weeks: number };
+  schedule: { start: string; weeks: number; bleach_frequency?: string };
   ratios: { patients_per_tech: number; patients_per_rn: number; techs_per_rn: number };
   constraints: Record<string, boolean>;
   bleach: { day: string; rotation: string[]; cursor: number };
@@ -114,6 +114,7 @@ export interface ScheduleRequest {
     bleach_day: string;
     bleach_rotation: string[];
     bleach_cursor: number;
+    bleach_frequency?: string;
     patients_per_tech: number;
     patients_per_rn: number;
     techs_per_rn: number;
@@ -169,6 +170,7 @@ export interface SavedSchedule {
   timezone?: string;
   start_date: string;
   weeks: number;
+  bleach_frequency?: string;
   requirements: SavedRequirement[];
   assignments: SavedAssignment[];
   staff?: Array<{ id: string; name: string; role: string }>;
@@ -208,6 +210,33 @@ export const runSchedule = async (req: ScheduleRequest): Promise<ScheduleRespons
 
 export const fetchLatestSchedule = async (): Promise<SavedSchedule> => {
   const { data } = await api.get<SavedSchedule>("schedule/latest");
+  return data;
+};
+
+export const exportConfig = async (filename: string) => {
+  const { data } = await api.get<{ filename: string; payload: any; encoded: string }>(`configs/export/${filename}`);
+  return data;
+};
+
+export const importConfig = async (req: SaveConfigRequest & { encoded?: string }) => {
+  // allow encoded payload or full payload
+  if (req.encoded) {
+    const decoded = JSON.parse(atob(req.encoded));
+    return api.post("configs/import", { payload: decoded, filename: req.filename || "" });
+  }
+  return api.post("configs/import", req);
+};
+
+export const importScheduleCsv = async (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<{ status: string; assignments: number }>("schedule/import/csv", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+export const exportScheduleCsv = async () => {
+  const { data } = await api.get<Blob>("schedule/export/csv", { responseType: "blob" });
   return data;
 };
 

@@ -905,3 +905,12 @@ def save_schedule(owner: str, payload: dict):
 
 def get_latest_schedule(owner: str) -> Optional[dict]:
     return _backend.get_latest_schedule(owner)
+
+
+# Config import/export helpers
+def export_config(owner: str, filename: str) -> Optional[dict]:
+    return _backend.load_config(owner, filename)
+
+
+def import_config(owner: str, filename: str, payload: dict):
+    return _backend.save_config(owner, filename, payload)
