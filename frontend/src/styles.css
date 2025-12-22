@@ -311,10 +311,6 @@ input[type="checkbox"] {
   background: transparent;
 }
 
-.page-shell.dark input[type="checkbox"] {
-  accent-color: #32b5e6;
-}
-
 .secondary-btn,
 label.secondary-btn {
   display: inline-flex;
@@ -322,11 +318,37 @@ label.secondary-btn {
   justify-content: center;
   gap: 0.35rem;
   text-decoration: none;
+  padding: 0.65rem 1.15rem;
+  min-height: 42px;
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, 0.96);
+  color: var(--deep-blue);
+  border: 1px solid rgba(0, 51, 160, 0.12);
+  box-shadow: 0 8px 16px rgba(7, 27, 69, 0.1);
 }
 
 .secondary-btn:hover,
 label.secondary-btn:hover {
   background-color: rgba(12, 75, 223, 0.08);
+  box-shadow: 0 10px 18px rgba(7, 27, 69, 0.12);
+}
+
+[data-theme="dark"] button,
+[data-theme="dark"] .secondary-btn,
+[data-theme="dark"] label.secondary-btn {
+  color: #ffffff;
+}
+
+[data-theme="dark"] .secondary-btn,
+[data-theme="dark"] label.secondary-btn {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="dark"] .secondary-btn:hover,
+[data-theme="dark"] label.secondary-btn:hover {
+  background-color: rgba(255, 255, 255, 0.14);
 }
 .stack {
   display: flex;
@@ -393,7 +415,15 @@ table th {
   flex-direction: column;
   gap: 4px;
   font-size: 0.95rem;
-  color: var(--deep-blue);
+  color: inherit;
+}
+
+[data-theme="dark"] .controls-row label {
+  color: #e6edff;
+}
+
+.page-shell.light .controls-row label {
+  color: #0f1c3d;
 }
 
 @keyframes progressPulse {
