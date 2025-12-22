@@ -60,7 +60,7 @@ export interface ConfigPayload {
   schedule: { start: string; weeks: number; bleach_frequency?: string };
   ratios: { patients_per_tech: number; patients_per_rn: number; techs_per_rn: number };
   constraints: Record<string, boolean>;
-  bleach: { day: string; rotation: string[]; cursor: number };
+  bleach: { day: string; rotation: string[]; cursor: number; frequency?: string };
   tournament: { trials: number; last_seed: number };
   staff: Array<Record<string, unknown>>;
   demand: Array<Record<string, unknown>>;

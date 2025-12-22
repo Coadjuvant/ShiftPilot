@@ -459,10 +459,10 @@ export default function StaffPlanner() {
       setPatientsPerTech(Number(cfg.ratios?.patients_per_tech ?? patientsPerTech));
       setPatientsPerRn(Number(cfg.ratios?.patients_per_rn ?? patientsPerRn));
       setTechsPerRn(Number(cfg.ratios?.techs_per_rn ?? techsPerRn));
-        setBleachDay(cfg.bleach?.day ?? bleachDay);
-        setBleachCursor(Number(cfg.bleach?.cursor ?? bleachCursor));
-        setBleachRotation(Array.isArray(cfg.bleach?.rotation) ? cfg.bleach.rotation.map(String) : []);
-        setBleachFrequency(cfg.schedule?.bleach_frequency || cfg.bleach?.frequency || "weekly");
+      setBleachDay(cfg.bleach?.day ?? bleachDay);
+      setBleachCursor(Number(cfg.bleach?.cursor ?? bleachCursor));
+      setBleachRotation(Array.isArray(cfg.bleach?.rotation) ? cfg.bleach.rotation.map(String) : []);
+      setBleachFrequency(cfg.schedule?.bleach_frequency || (cfg as any)?.bleach?.frequency || "weekly");
         setTrials(Number(cfg.tournament?.trials ?? trials));
         setEnforceThree(Boolean(cfg.constraints?.enforce_three_day_cap ?? enforceThree));
         setEnforcePostBleach(Boolean(cfg.constraints?.enforce_post_bleach_rest ?? enforcePostBleach));
@@ -869,7 +869,7 @@ export default function StaffPlanner() {
         }}
       >
         <div className="controls-row">
-          <label>
+          <label style={{ color: "var(--deep-blue)" }}>
             Load config:
             <select
               value={selectedConfig}
