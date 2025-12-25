@@ -158,6 +158,7 @@ class ConfigPayload(BaseModel):
     constraints: ConfigConstraints
     bleach: ConfigBleach
     tournament: ConfigTournament
+    export_roles: List[str] = Field(default_factory=list)
     staff: List[Dict[str, object]]
     demand: List[Dict[str, object]]
     pto: List[Dict[str, object]] = Field(default_factory=list)
@@ -193,4 +194,3 @@ class UserInfo(BaseModel):
     sub: str
     username: str
     role: str = "user"
-

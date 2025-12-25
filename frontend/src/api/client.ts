@@ -62,6 +62,7 @@ export interface ConfigPayload {
   constraints: Record<string, boolean>;
   bleach: { day: string; rotation: string[]; cursor: number; frequency?: string };
   tournament: { trials: number; last_seed: number };
+  export_roles?: string[];
   staff: Array<Record<string, unknown>>;
   demand: Array<Record<string, unknown>>;
   pto: Array<Record<string, unknown>>;

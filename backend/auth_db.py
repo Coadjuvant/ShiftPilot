@@ -222,6 +222,7 @@ class PostgresAuth:
     def save_schedule(self, owner: str, payload: Dict[str, Any]) -> None:
         conn = self._conn()
         cur = conn.cursor()
+        serial = json.dumps(payload, default=str)
         cur.execute(
             """
             INSERT INTO schedules (owner, clinic_name, start_date, weeks, payload, created_at, updated_at)
@@ -238,7 +239,7 @@ class PostgresAuth:
                 payload.get("clinic_name"),
                 payload.get("start_date"),
                 payload.get("weeks"),
-                json.dumps(payload),
+                serial,
             ),
         )
         conn.commit()
@@ -798,7 +799,8 @@ class JsonAuth:
     def save_schedule(self, owner: str, payload: Dict[str, Any]) -> None:
         data = _load_json()
         schedules = data.get("schedules", {})
-        schedules[owner] = {"payload": payload, "updated_at": _now()}
+        safe_payload = json.loads(json.dumps(payload, default=str))
+        schedules[owner] = {"payload": safe_payload, "updated_at": _now()}
         data["schedules"] = schedules
         _save_json(data)
 
