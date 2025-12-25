@@ -463,12 +463,15 @@ export default function StaffPlanner() {
       setBleachCursor(Number(cfg.bleach?.cursor ?? bleachCursor));
       setBleachRotation(Array.isArray(cfg.bleach?.rotation) ? cfg.bleach.rotation.map(String) : []);
       setBleachFrequency(cfg.schedule?.bleach_frequency || (cfg as any)?.bleach?.frequency || "weekly");
-        setTrials(Number(cfg.tournament?.trials ?? trials));
-        setEnforceThree(Boolean(cfg.constraints?.enforce_three_day_cap ?? enforceThree));
-        setEnforcePostBleach(Boolean(cfg.constraints?.enforce_post_bleach_rest ?? enforcePostBleach));
-        setEnforceAltSat(Boolean(cfg.constraints?.enforce_alt_saturdays ?? enforceAltSat));
-        setLimitTechFour(Boolean(cfg.constraints?.limit_tech_four_days ?? limitTechFour));
+      setTrials(Number(cfg.tournament?.trials ?? trials));
+      setEnforceThree(Boolean(cfg.constraints?.enforce_three_day_cap ?? enforceThree));
+      setEnforcePostBleach(Boolean(cfg.constraints?.enforce_post_bleach_rest ?? enforcePostBleach));
+      setEnforceAltSat(Boolean(cfg.constraints?.enforce_alt_saturdays ?? enforceAltSat));
+      setLimitTechFour(Boolean(cfg.constraints?.limit_tech_four_days ?? limitTechFour));
       setLimitRnFour(Boolean(cfg.constraints?.limit_rn_four_days ?? limitRnFour));
+      if (Array.isArray(cfg.export_roles)) {
+        setExportRoles(cfg.export_roles as string[]);
+      }
       if (cfg.staff && Array.isArray(cfg.staff)) {
         const normalized = cfg.staff.map((row: any) => ({
           id: String(row.id ?? genId()),
@@ -548,6 +551,7 @@ export default function StaffPlanner() {
       },
       bleach: { day: bleachDay, rotation: bleachRotation, cursor: bleachCursor, frequency: bleachFrequency },
       tournament: { trials, last_seed: 0 },
+      export_roles: exportRoles,
       staff: staffRows.map((s) => ({
         ...s,
         pref_open_mwf: 5 - (s.pref_open_mwf ?? 5),
@@ -908,16 +912,7 @@ export default function StaffPlanner() {
               <button className="secondary-btn" onClick={() => handleExportConfig("string")}>
                 Copy encoded config
               </button>
-              <label
-                className="secondary-btn"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.35rem",
-                  padding: "0.55rem 0.9rem",
-                  minHeight: "40px"
-                }}
-              >
+              <label className="secondary-btn">
                 Import config file
                 <input
                   type="file"
@@ -955,16 +950,7 @@ export default function StaffPlanner() {
               <button className="secondary-btn" onClick={handleExportScheduleCsv} disabled={importingSchedule}>
                 Export schedule (CSV)
               </button>
-              <label
-                className="secondary-btn"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.35rem",
-                  padding: "0.55rem 0.9rem",
-                  minHeight: "40px"
-                }}
-              >
+              <label className="secondary-btn">
                 Import schedule CSV
                 <input
                   type="file"
