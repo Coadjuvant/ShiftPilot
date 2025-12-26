@@ -5,7 +5,7 @@ Data structures for the scheduler.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import Dict, List, Optional
 
 DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -95,6 +95,10 @@ class ScheduleConfig:
 class PTOEntry:
     staff_id: str
     date: date
+
+    def as_dict(self) -> Dict[str, str]:
+        d = self.date.isoformat() if isinstance(self.date, (date, datetime)) else self.date
+        return {"staff_id": self.staff_id, "date": d}
 
 
 @dataclass

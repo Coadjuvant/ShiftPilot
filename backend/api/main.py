@@ -95,7 +95,7 @@ async def add_security_headers(request, call_next):
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     csp = (
         "default-src 'self'; "
-        "script-src 'self'; "
+        "script-src 'self' https://static.cloudflareinsights.com; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: https:; "
         "font-src 'self' data:; "
@@ -362,6 +362,23 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
         excel_b64 = base64.b64encode(excel_bytes).decode("utf-8")
         # Persist latest schedule snapshot for this owner
         owner = _schedule_owner(payload)
+        def _serialize_assignments():
+            out = []
+            for a in assignments:
+                out.append(
+                    {
+                        "date": a.date.isoformat() if hasattr(a, "date") else getattr(a, "date", None),
+                        "day_name": getattr(a, "day_name", None),
+                        "role": getattr(a, "role", None),
+                        "duty": getattr(a, "duty", None),
+                        "staff_id": getattr(a, "staff_id", None),
+                        "notes": getattr(a, "notes", []),
+                        "slot_index": getattr(a, "slot_index", None),
+                        "is_bleach": getattr(a, "is_bleach", False),
+                    }
+                )
+            return out
+
         schedule_payload = {
             "clinic_name": request.config.clinic_name,
             "timezone": request.config.timezone,
@@ -380,7 +397,7 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
                 }
                 for req in request.requirements
             ],
-            "assignments": [a.dict() for a in assignments],
+            "assignments": _serialize_assignments(),
             "staff": [{"id": s.id, "name": s.name, "role": s.role} for s in staff_members],
             "stats": result.stats,
             "total_penalty": result.total_penalty,
