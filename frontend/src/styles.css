@@ -321,16 +321,16 @@ label.secondary-btn {
   padding: 0.65rem 1.15rem;
   min-height: 42px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #f3f4f6, #e7ebf5);
-  color: var(--deep-blue);
-  border: 1px solid rgba(0, 51, 160, 0.12);
-  box-shadow: 0 8px 16px rgba(7, 27, 69, 0.1);
+  background: linear-gradient(135deg, #0c4bdf, #32b5e6);
+  color: #fff;
+  border: 1px solid rgba(0, 51, 160, 0.16);
+  box-shadow: 0 10px 18px rgba(7, 27, 69, 0.14);
 }
 
 .secondary-btn:hover,
 label.secondary-btn:hover {
-  background: linear-gradient(135deg, #e9ecf4, #dbe2f2);
-  box-shadow: 0 10px 18px rgba(7, 27, 69, 0.14);
+  background: linear-gradient(135deg, #0b43c8, #2aa6d7);
+  box-shadow: 0 12px 20px rgba(7, 27, 69, 0.18);
 }
 
 [data-theme="dark"] button,
@@ -341,14 +341,14 @@ label.secondary-btn:hover {
 
 [data-theme="dark"] .secondary-btn,
 [data-theme="dark"] label.secondary-btn {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.1));
+  background: linear-gradient(135deg, #0c4bdf, #32b5e6);
   border-color: rgba(255, 255, 255, 0.2);
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.35);
 }
 
 [data-theme="dark"] .secondary-btn:hover,
 [data-theme="dark"] label.secondary-btn:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.14));
+  background: linear-gradient(135deg, #0b43c8, #2aa6d7);
 }
 .stack {
   display: flex;

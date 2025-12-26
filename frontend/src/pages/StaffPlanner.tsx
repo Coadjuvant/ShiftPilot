@@ -873,7 +873,7 @@ export default function StaffPlanner() {
         }}
       >
         <div className="controls-row">
-          <label style={{ color: "var(--deep-blue)" }}>
+          <label>
             Load config:
             <select
               value={selectedConfig}

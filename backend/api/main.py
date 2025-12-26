@@ -382,7 +382,7 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
         schedule_payload = {
             "clinic_name": request.config.clinic_name,
             "timezone": request.config.timezone,
-            "start_date": request.config.start_date,
+            "start_date": request.config.start_date.isoformat() if hasattr(request.config.start_date, "isoformat") else request.config.start_date,
             "weeks": request.config.weeks,
             "bleach_frequency": request.config.bleach_frequency,
             "requirements": [
@@ -407,7 +407,11 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
             "tournament_trials": request.tournament_trials,
             "generated_at": datetime.utcnow().isoformat(),
         }
-        persist_schedule(owner, schedule_payload)
+        # ensure fully serializable before persisting
+        import json as _json
+
+        safe_payload = _json.loads(_json.dumps(schedule_payload, default=str))
+        persist_schedule(owner, safe_payload)
         return ScheduleResponse(
             bleach_cursor=result.bleach_cursor,
             winning_seed=winning_seed,
