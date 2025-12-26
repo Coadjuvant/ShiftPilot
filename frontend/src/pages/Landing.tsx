@@ -103,6 +103,11 @@ export default function Landing() {
     if (!latestSchedule) return [];
     const reqs = latestSchedule.requirements || [];
     if (!reqs.length) return [];
+    const allowedRoles = new Set(
+      (latestSchedule as any).export_roles && Array.isArray((latestSchedule as any).export_roles)
+        ? (latestSchedule as any).export_roles
+        : ["Tech", "RN", "Admin"]
+    );
     const totalDays = (latestSchedule.weeks || 0) * reqs.length;
     const start = new Date(latestSchedule.start_date);
     const staffMap = new Map((latestSchedule.staff || []).map((s) => [s.id, s]));
@@ -116,10 +121,12 @@ export default function Landing() {
       const req = reqs[i % reqs.length];
       const date = addDays(start, i);
       const dateStr = date.toISOString().slice(0, 10);
-      const dayAssignments = (latestSchedule.assignments || []).filter((a) => a.date === dateStr);
-      const techReq = (req.tech_openers || 0) + (req.tech_mids || 0) + (req.tech_closers || 0);
-      const rnReq = req.rn_count || 0;
-      const adminReq = req.admin_count || 0;
+      const dayAssignments = (latestSchedule.assignments || [])
+        .filter((a) => a.date === dateStr)
+        .filter((a) => allowedRoles.has((a.role || "").toString()));
+      const techReq = allowedRoles.has("Tech") ? (req.tech_openers || 0) + (req.tech_mids || 0) + (req.tech_closers || 0) : 0;
+      const rnReq = allowedRoles.has("RN") ? req.rn_count || 0 : 0;
+      const adminReq = allowedRoles.has("Admin") ? req.admin_count || 0 : 0;
       const techFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "tech" && a.staff_id).length;
       const rnFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "rn" && a.staff_id).length;
       const adminFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "admin" && a.staff_id).length;
@@ -139,9 +146,9 @@ export default function Landing() {
           detailList.push({ label: role, value: staff?.name || "Open" });
         }
       };
-      addRoleLines("RN", rnReq, dayAssignments);
-      addRoleLines("Tech", techReq, dayAssignments);
-      addRoleLines("Admin", adminReq, dayAssignments);
+      if (allowedRoles.has("RN")) addRoleLines("RN", rnReq, dayAssignments);
+      if (allowedRoles.has("Tech")) addRoleLines("Tech", techReq, dayAssignments);
+      if (allowedRoles.has("Admin")) addRoleLines("Admin", adminReq, dayAssignments);
       const weekIdx = Math.floor(i / reqs.length);
       weeks[weekIdx] = weeks[weekIdx] || [];
       weeks[weekIdx].push({
@@ -165,6 +172,12 @@ export default function Landing() {
   }, [latestSchedule]);
 
   const currentWeek = weeksData[weekIndex] || [];
+  useEffect(() => {
+    if (weekIndex > weeksData.length - 1) {
+      setWeekIndex(Math.max(weeksData.length - 1, 0));
+    }
+  }, [weeksData.length]);
+
   const weekLabel = useMemo(() => {
     if (!latestSchedule || !weeksData.length) return "Week 1";
     const start = new Date(latestSchedule.start_date);
@@ -274,9 +287,9 @@ export default function Landing() {
                         <div className="row-title">
                           {day.req.day_name} • {day.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                         </div>
-                        <div className="row-sub">
-                          RN {day.summary.rnFilled}/{day.summary.rnReq} | Tech {day.summary.techFilled}/{day.summary.techReq} | Admin{" "}
-                          {day.summary.adminFilled}/{day.summary.adminReq}
+        <div className="row-sub">
+                          RN ({day.summary.rnFilled}/{day.summary.rnReq}) | Tech ({day.summary.techFilled}/{day.summary.techReq}) | Admin{" "}
+                          ({day.summary.adminFilled}/{day.summary.adminReq})
                         </div>
                       </div>
                       <span className={`tag ${day.deficits.length ? "tag-warn" : ""}`}>
