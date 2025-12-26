@@ -416,6 +416,7 @@ table th {
   gap: 4px;
   font-size: 0.95rem;
   color: inherit;
+  font-weight: 600;
 }
 
 [data-theme="dark"] .controls-row label {

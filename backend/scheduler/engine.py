@@ -307,12 +307,10 @@ def generate_schedule(
         candidates: List[Tuple[StaffMember, _StaffState]] = gather_candidates()
         relaxed_note = None
         if not candidates:
-            # Allow violating alt Saturdays first, then 3-day cap, then week cap, then post-bleach rest
+            # Allow violating alt Saturdays first, then 3-day cap (keep 4-day/week cap and post-bleach rest hard)
             for ignore_alt, ignore_three, ignore_week, ignore_post, note in [
                 (True, False, False, False, "Relax: alt Saturdays"),
                 (True, True, False, False, "Relax: 3-day cap"),
-                (True, True, True, False, "Relax: 4-day/week cap"),
-                (True, True, True, True, "Relax: post-bleach rest"),
             ]:
                 candidates = gather_candidates(
                     ignore_post_bleach=ignore_post,
@@ -338,7 +336,6 @@ def generate_schedule(
                 (False, False, False, False, None),
                 (False, False, False, True, "Relax: alt Saturdays"),
                 (False, False, True, True, "Relax: 3-day cap"),
-                (False, True, True, True, "Relax: 4-day/week cap"),
             ]
             for ignore_post, ignore_week, ignore_three, ignore_alt, relax_note in relax_options:
                 for offset in range(len(cfg.bleach_rotation)):
