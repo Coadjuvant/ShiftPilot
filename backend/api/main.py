@@ -452,6 +452,26 @@ def _schedule_owners(payload: dict) -> List[str]:
     return _owner_candidates(payload)
 
 
+def _parse_generated_at(value: object) -> datetime:
+    if isinstance(value, str) and value:
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except Exception:
+            return datetime.min
+    return datetime.min
+
+
+def _latest_schedule_for(payload: dict) -> dict | None:
+    candidates: List[dict] = []
+    for owner in _schedule_owners(payload):
+        data = get_latest_schedule(owner)
+        if isinstance(data, dict):
+            candidates.append(data)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda d: _parse_generated_at(d.get("generated_at")))
+
+
 @router.get("/configs")
 def list_configs(payload: dict = Depends(require_auth)) -> List[str]:
     owner = _config_owner(payload)
@@ -491,11 +511,7 @@ def latest_schedule(response: Response, payload: dict = Depends(require_auth)) -
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
-    data = None
-    for owner in _schedule_owners(payload):
-        data = get_latest_schedule(owner)
-        if data:
-            break
+    data = _latest_schedule_for(payload)
     if not data:
         return {"status": "none"}
     return data
@@ -503,11 +519,7 @@ def latest_schedule(response: Response, payload: dict = Depends(require_auth)) -
 
 @router.get("/schedule/export/csv")
 def export_schedule_csv(payload: dict = Depends(require_auth)):
-    data = None
-    for owner in _schedule_owners(payload):
-        data = get_latest_schedule(owner)
-        if data:
-            break
+    data = _latest_schedule_for(payload)
     if not data or not data.get("assignments"):
         raise HTTPException(status_code=404, detail="No saved schedule")
     staff_map = {s.get("id"): s for s in data.get("staff", [])}
