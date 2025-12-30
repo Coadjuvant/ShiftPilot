@@ -155,17 +155,20 @@ export default function Landing() {
       const dayAssignments = (latestSchedule.assignments || [])
         .filter((a) => a.date === dateStr)
         .filter((a) => allowedRoles.has((a.role || "").toString()));
-      const techReq = allowedRoles.has("Tech") ? (req.tech_openers || 0) + (req.tech_mids || 0) + (req.tech_closers || 0) : 0;
-      const rnReq = allowedRoles.has("RN") ? req.rn_count || 0 : 0;
-      const adminReq = allowedRoles.has("Admin") ? req.admin_count || 0 : 0;
       const isOpenSlot = (assignment: { staff_id?: string | null }) => {
         if (!assignment.staff_id) return true;
         return assignment.staff_id.toString().toUpperCase() === "OPEN";
       };
       const isFilled = (assignment: { staff_id?: string | null }) => !isOpenSlot(assignment);
-      const techFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "tech" && isFilled(a)).length;
-      const rnFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "rn" && isFilled(a)).length;
-      const adminFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "admin" && isFilled(a)).length;
+      const techAssignments = dayAssignments.filter((a) => a.role?.toLowerCase() === "tech");
+      const rnAssignments = dayAssignments.filter((a) => a.role?.toLowerCase() === "rn");
+      const adminAssignments = dayAssignments.filter((a) => a.role?.toLowerCase() === "admin");
+      const techReq = allowedRoles.has("Tech") ? techAssignments.length : 0;
+      const rnReq = allowedRoles.has("RN") ? rnAssignments.length : 0;
+      const adminReq = allowedRoles.has("Admin") ? adminAssignments.length : 0;
+      const techFilled = techAssignments.filter((a) => isFilled(a)).length;
+      const rnFilled = rnAssignments.filter((a) => isFilled(a)).length;
+      const adminFilled = adminAssignments.filter((a) => isFilled(a)).length;
       const techMissing = Math.max(techReq - techFilled, 0);
       const rnMissing = Math.max(rnReq - rnFilled, 0);
       const adminMissing = Math.max(adminReq - adminFilled, 0);
@@ -185,25 +188,22 @@ export default function Landing() {
             details.push({ label, value: staffName || "--" });
           }
         };
-      if (allowedRoles.has("Tech")) {
-        const techAssignments = dayAssignments.filter((a) => a.role?.toLowerCase() === "tech");
-        const techOpen = techAssignments.filter((a) => a.duty === "open");
-        const techMid = techAssignments.filter((a) => a.duty === "mid").sort((a, b) => (a.slot_index ?? 0) - (b.slot_index ?? 0));
-        const techClose = techAssignments.filter((a) => a.duty === "close");
-        const techBleach = techAssignments.filter((a) => a.duty === "bleach" || a.is_bleach);
-        pushSlots("Open", req.tech_openers || 0, techOpen);
-        pushSlots("Mid", req.tech_mids || 0, techMid, true);
-        pushSlots("Close", req.tech_closers || 0, techClose);
-        if (techBleach.length) pushSlots("Bleach", techBleach.length, techBleach);
-      }
-      if (allowedRoles.has("RN")) {
-        const rnAssignments = dayAssignments.filter((a) => a.role?.toLowerCase() === "rn");
-        pushSlots("RN", rnReq, rnAssignments, true);
-      }
-      if (allowedRoles.has("Admin")) {
-        const adminAssignments = dayAssignments.filter((a) => a.role?.toLowerCase() === "admin");
-        pushSlots("Admin", adminReq, adminAssignments, true);
-      }
+        if (allowedRoles.has("Tech")) {
+          const techOpen = techAssignments.filter((a) => a.duty === "open");
+          const techMid = techAssignments.filter((a) => a.duty === "mid").sort((a, b) => (a.slot_index ?? 0) - (b.slot_index ?? 0));
+          const techClose = techAssignments.filter((a) => a.duty === "close");
+          const techBleach = techAssignments.filter((a) => a.duty === "bleach" || a.is_bleach);
+          pushSlots("Open", techOpen.length, techOpen);
+          pushSlots("Mid", techMid.length, techMid, true);
+          pushSlots("Close", techClose.length, techClose);
+          if (techBleach.length) pushSlots("Bleach", techBleach.length, techBleach);
+        }
+        if (allowedRoles.has("RN")) {
+          pushSlots("RN", rnAssignments.length, rnAssignments, true);
+        }
+        if (allowedRoles.has("Admin")) {
+          pushSlots("Admin", adminAssignments.length, adminAssignments, true);
+        }
       weeks[weekIdx] = weeks[weekIdx] || [];
       weeks[weekIdx].push({
         date,
