@@ -317,11 +317,11 @@ export default function Landing() {
                 </div>
               ) : (
                 <div className="schedule-list">
-                  {currentWeek.map((day) => {
-                    const isOpen = expandedDay === day.dateStr;
-                    return (
-                      <div
-                        className={`schedule-row ${isOpen ? "open" : ""}`}
+              {currentWeek.map((day) => {
+                const isOpen = expandedDay === day.dateStr;
+                return (
+                  <div
+                    className={`schedule-row ${isOpen ? "open" : ""}`}
                         key={day.dateStr}
                         role="button"
                         tabIndex={0}
@@ -357,10 +357,15 @@ export default function Landing() {
                           </div>
                         ) : null}
                       </div>
-                    );
-                  })}
+                );
+              })}
+            </div>
+          )}
+              {latestSchedule?.generated_at ? (
+                <div className="schedule-meta">
+                  Generated {new Date(latestSchedule.generated_at).toLocaleString()}
                 </div>
-              )}
+              ) : null}
               <div className="schedule-foot">
                 <div className="pill muted-pill">Soft constraints honored</div>
                 <div className="pill muted-pill">Exports: Excel / PDF</div>

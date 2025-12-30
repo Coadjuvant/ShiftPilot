@@ -808,6 +808,16 @@ table th {
   margin-top: 1rem;
 }
 
+.schedule-meta {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.page-shell.light .schedule-meta {
+  color: #4b5563;
+}
+
 .planner-link {
   display: block;
   margin-top: 0.5rem;
