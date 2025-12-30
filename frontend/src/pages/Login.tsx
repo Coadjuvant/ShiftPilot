@@ -9,7 +9,7 @@ export default function Login() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [online, setOnline] = useState<"checking" | "ok" | "down">("checking");
   const [loginSuccess, setLoginSuccess] = useState(false);
-  const [loginUserDisplay, setLoginUserDisplay] = useState("");
+  const [statusTone, setStatusTone] = useState<"default" | "success" | "error">("default");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -22,19 +22,22 @@ export default function Login() {
     e.preventDefault();
     setIsSubmitting(true);
     setStatus("");
+    setStatusTone("default");
     try {
       const res = await login(username, password);
       setAuthToken(res.token);
       localStorage.setItem("auth_token", res.token);
       localStorage.setItem("auth_user", username || "user");
       setLoginSuccess(true);
-      setLoginUserDisplay(username || "user");
-      setStatus(`Logged in as ${username || "user"}`);
+      const message = "Login successful. Redirecting to home...";
+      setStatus(message);
+      setStatusTone("success");
       window.dispatchEvent(new Event("storage"));
-      setTimeout(() => navigate("/"), 1200);
+      setTimeout(() => navigate("/"), 2000);
     } catch {
       setStatus("Login failed. Check credentials.");
       setLoginSuccess(false);
+      setStatusTone("error");
     } finally {
       setIsSubmitting(false);
     }
@@ -45,6 +48,7 @@ export default function Login() {
     localStorage.removeItem("auth_user");
     setLoginSuccess(false);
     setStatus("Logged out");
+    setStatusTone("default");
     // Notify other listeners and return home
     window.dispatchEvent(new Event("storage"));
     navigate("/");
@@ -62,7 +66,7 @@ export default function Login() {
           <div className="eyebrow-pill">Access your planner</div>
           <h1>Log in to ShiftPilot</h1>
           <p className="hero-sub">
-            One set of clinic manager credentials—open the planner, run scenarios, and export clean handoffs for floor teams and leadership.
+            One set of clinic manager credentials - open the planner, run scenarios, and export clean handoffs for floor teams and leadership.
           </p>
           <ul className="hero-checklist">
             <li>Guardrails for Tech / RN / Admin</li>
@@ -77,8 +81,8 @@ export default function Login() {
         </div>
 
         <div className="auth-card">
-            <div className="auth-card-head">
-              <p className="muted">Clinic manager sign-in</p>
+          <div className="auth-card-head">
+            <p className="muted">Clinic manager sign-in</p>
             <div style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "wrap" }}>
               <span className={`pill ${online === "ok" ? "success" : "subtle"}`} title={onlineTitle}>
                 {onlineLabel}
@@ -101,7 +105,7 @@ export default function Login() {
             >
               {loginSuccess ? "Logout" : isSubmitting ? "Signing in..." : "Log in"}
             </button>
-            {status && <p className="status">{status}</p>}
+            {status && <p className={`status ${statusTone !== "default" ? statusTone : ""}`}>{status}</p>}
           </form>
           <p className="muted small-note">Need access? Ask your admin to share the clinic credentials.</p>
         </div>

@@ -51,10 +51,6 @@ export interface HealthResponse {
   status: string;
 }
 
-export interface ConfigSummary {
-  name: string;
-}
-
 export interface ConfigPayload {
   clinic: { name: string; timezone: string };
   schedule: { start: string; weeks: number; bleach_frequency?: string };
@@ -210,7 +206,7 @@ export const runSchedule = async (req: ScheduleRequest): Promise<ScheduleRespons
 };
 
 export const fetchLatestSchedule = async (): Promise<SavedSchedule> => {
-  const { data } = await api.get<SavedSchedule>("schedule/latest");
+  const { data } = await api.get<SavedSchedule>(`schedule/latest?ts=${Date.now()}`);
   return data;
 };
 

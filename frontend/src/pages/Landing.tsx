@@ -68,10 +68,31 @@ export default function Landing() {
   const [latestSchedule, setLatestSchedule] = useState<SavedSchedule | null>(null);
   const [weekIndex, setWeekIndex] = useState(0);
   const [scheduleError, setScheduleError] = useState<string>("");
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
+  const [scheduleTick, setScheduleTick] = useState(0);
+  const plannerRoute = isAuthed ? "/planner" : "/login";
+
+  const parseISODate = (value: string) => {
+    const parts = value.split("-").map(Number);
+    if (parts.length >= 3 && parts.every((n) => Number.isFinite(n))) {
+      return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    }
+    return new Date(value);
+  };
+
+  const addDaysUTC = (date: Date, days: number) => {
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days));
+  };
+
+  const formatScheduleDate = (date: Date) =>
+    date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const handler = () => setIsAuthed(Boolean(localStorage.getItem("auth_token")));
+    const handler = () => {
+      setIsAuthed(Boolean(localStorage.getItem("auth_token")));
+      setScheduleTick((tick) => tick + 1);
+    };
     window.addEventListener("storage", handler);
     handler();
     return () => window.removeEventListener("storage", handler);
@@ -80,6 +101,7 @@ export default function Landing() {
   useEffect(() => {
     if (!isAuthed) {
       setLatestSchedule(null);
+      setExpandedDay(null);
       return;
     }
     fetchLatestSchedule()
@@ -87,34 +109,33 @@ export default function Landing() {
         if (data && (data as any).status === "none") {
           setLatestSchedule(null);
           setScheduleError("No saved schedule yet");
+          setExpandedDay(null);
           return;
         }
         setLatestSchedule(data);
         setScheduleError("");
         setWeekIndex(0);
+        setExpandedDay(null);
       })
       .catch((err) => {
         setLatestSchedule(null);
         setScheduleError("Unable to load latest schedule");
+        setExpandedDay(null);
       });
-  }, [isAuthed]);
+  }, [isAuthed, scheduleTick]);
 
   const weeksData = useMemo(() => {
     if (!latestSchedule) return [];
     const reqs = latestSchedule.requirements || [];
     if (!reqs.length) return [];
     const allowedRoles = new Set(
-      (latestSchedule as any).export_roles && Array.isArray((latestSchedule as any).export_roles)
-        ? (latestSchedule as any).export_roles
-        : ["Tech", "RN", "Admin"]
+      latestSchedule.export_roles && Array.isArray(latestSchedule.export_roles) ? latestSchedule.export_roles : ["Tech", "RN", "Admin"]
     );
     const totalDays = (latestSchedule.weeks || 0) * reqs.length;
-    const start = new Date(latestSchedule.start_date);
+    const start = parseISODate(latestSchedule.start_date);
     const staffMap = new Map((latestSchedule.staff || []).map((s) => [s.id, s]));
     const addDays = (d: Date, n: number) => {
-      const dt = new Date(d);
-      dt.setDate(dt.getDate() + n);
-      return dt;
+      return addDaysUTC(d, n);
     };
     const weeks: any[][] = [];
     for (let i = 0; i < totalDays; i++) {
@@ -137,18 +158,36 @@ export default function Landing() {
       if (techMissing) deficits.push(`Needs ${techMissing} Tech${techMissing > 1 ? "s" : ""}`);
       if (rnMissing) deficits.push(`Needs ${rnMissing} RN${rnMissing > 1 ? "s" : ""}`);
       if (adminMissing) deficits.push(`Needs ${adminMissing} Admin${adminMissing > 1 ? "s" : ""}`);
-      const detailList: { label: string; value: string }[] = [];
-      const addRoleLines = (role: string, reqCount: number, assignments: typeof dayAssignments) => {
-        const roleAss = assignments.filter((a) => a.role?.toLowerCase() === role.toLowerCase());
-        for (let idx = 0; idx < Math.max(reqCount, roleAss.length); idx++) {
-          const a = roleAss[idx];
-          const staff = a && a.staff_id ? staffMap.get(a.staff_id) : null;
-          detailList.push({ label: role, value: staff?.name || "Open" });
+      const details: { label: string; value: string }[] = [];
+      const pushSlots = (labelBase: string, count: number, assignments: typeof dayAssignments, useIndex = false) => {
+        const totalSlots = Math.max(count, assignments.length);
+        if (!totalSlots) return;
+        for (let idx = 0; idx < totalSlots; idx++) {
+          const assignment = assignments[idx];
+          const staffName = assignment?.staff_id ? staffMap.get(assignment.staff_id)?.name : null;
+          const label = useIndex && totalSlots > 1 ? `${labelBase} ${idx + 1}` : labelBase;
+          details.push({ label, value: staffName || "Open" });
         }
       };
-      if (allowedRoles.has("RN")) addRoleLines("RN", rnReq, dayAssignments);
-      if (allowedRoles.has("Tech")) addRoleLines("Tech", techReq, dayAssignments);
-      if (allowedRoles.has("Admin")) addRoleLines("Admin", adminReq, dayAssignments);
+      if (allowedRoles.has("Tech")) {
+        const techAssignments = dayAssignments.filter((a) => a.role?.toLowerCase() === "tech");
+        const techOpen = techAssignments.filter((a) => a.duty === "open");
+        const techMid = techAssignments.filter((a) => a.duty === "mid").sort((a, b) => (a.slot_index ?? 0) - (b.slot_index ?? 0));
+        const techClose = techAssignments.filter((a) => a.duty === "close");
+        const techBleach = techAssignments.filter((a) => a.duty === "bleach" || a.is_bleach);
+        pushSlots("Open", req.tech_openers || 0, techOpen);
+        pushSlots("Mid", req.tech_mids || 0, techMid, true);
+        pushSlots("Close", req.tech_closers || 0, techClose);
+        if (techBleach.length) pushSlots("Bleach", techBleach.length, techBleach);
+      }
+      if (allowedRoles.has("RN")) {
+        const rnAssignments = dayAssignments.filter((a) => a.role?.toLowerCase() === "rn");
+        pushSlots("RN", rnReq, rnAssignments, true);
+      }
+      if (allowedRoles.has("Admin")) {
+        const adminAssignments = dayAssignments.filter((a) => a.role?.toLowerCase() === "admin");
+        pushSlots("Admin", adminReq, adminAssignments, true);
+      }
       const weekIdx = Math.floor(i / reqs.length);
       weeks[weekIdx] = weeks[weekIdx] || [];
       weeks[weekIdx].push({
@@ -156,8 +195,7 @@ export default function Landing() {
         dateStr,
         req,
         deficits,
-        status: deficits.length ? "warn" : "ok",
-        detailList,
+        details,
         summary: {
           techReq,
           rnReq,
@@ -180,10 +218,9 @@ export default function Landing() {
 
   const weekLabel = useMemo(() => {
     if (!latestSchedule || !weeksData.length) return "Week 1";
-    const start = new Date(latestSchedule.start_date);
-    const dt = new Date(start);
-    dt.setDate(dt.getDate() + weekIndex * (latestSchedule.requirements?.length || 0));
-    return `Week of ${dt.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+    const start = parseISODate(latestSchedule.start_date);
+    const dt = addDaysUTC(start, weekIndex * (latestSchedule.requirements?.length || 0));
+    return `Week of ${formatScheduleDate(dt)}`;
   }, [latestSchedule, weekIndex, weeksData.length]);
 
   const scheduleStatus = useMemo(() => {
@@ -207,7 +244,7 @@ export default function Landing() {
             losing override control.
           </p>
           <div className="hero-actions">
-            <Link className="primary-chip" to="/planner">
+            <Link className="primary-chip" to={plannerRoute}>
               Launch planner
             </Link>
             <Link className="secondary-link" to="/features">
@@ -262,8 +299,8 @@ export default function Landing() {
                   <div className="schedule-row">
                     <div>
                       <div className="row-title">No schedule saved</div>
-                      <div className="row-sub">
-                        <Link className="secondary-link" to="/planner">
+                                      <div className="row-sub">
+                        <Link className="secondary-link" to={plannerRoute}>
                           Head to Planner to make one.
                         </Link>
                       </div>
@@ -280,23 +317,48 @@ export default function Landing() {
                 </div>
               ) : (
                 <div className="schedule-list">
-                  {currentWeek.map((day) => (
-                    <div className="schedule-row" key={day.dateStr}>
-                      <span className={`dot ${day.deficits.length ? "dot-amber" : "dot-blue"}`} />
-                      <div>
-                        <div className="row-title">
-                          {day.req.day_name} • {day.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  {currentWeek.map((day) => {
+                    const isOpen = expandedDay === day.dateStr;
+                    return (
+                      <div
+                        className={`schedule-row ${isOpen ? "open" : ""}`}
+                        key={day.dateStr}
+                        role="button"
+                        tabIndex={0}
+                        aria-expanded={isOpen}
+                        onClick={() => setExpandedDay(isOpen ? null : day.dateStr)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setExpandedDay(isOpen ? null : day.dateStr);
+                          }
+                        }}
+                      >
+                        <span className={`dot ${day.deficits.length ? "dot-amber" : "dot-blue"}`} />
+                        <div>
+                          <div className="row-title">
+                            {day.req.day_name} - {formatScheduleDate(day.date)}
+                          </div>
+                          <div className="row-sub">
+                            RN ({day.summary.rnFilled}/{day.summary.rnReq}) | Tech ({day.summary.techFilled}/{day.summary.techReq}) | Admin (
+                            {day.summary.adminFilled}/{day.summary.adminReq})
+                          </div>
                         </div>
-        <div className="row-sub">
-                          RN ({day.summary.rnFilled}/{day.summary.rnReq}) | Tech ({day.summary.techFilled}/{day.summary.techReq}) | Admin{" "}
-                          ({day.summary.adminFilled}/{day.summary.adminReq})
-                        </div>
+                        <span className={`tag ${day.deficits.length ? "tag-warn" : ""}`}>
+                          {day.deficits.length ? day.deficits.join(", ") : "Fully staffed"}
+                        </span>
+                        {isOpen && day.details?.length ? (
+                          <div className="schedule-row-details">
+                            {day.details.map((detail: { label: string; value: string }, idx: number) => (
+                              <div className="schedule-detail" key={`${day.dateStr}-${detail.label}-${idx}`}>
+                                <span className="schedule-detail-role">{detail.label}:</span> {detail.value}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
-                      <span className={`tag ${day.deficits.length ? "tag-warn" : ""}`}>
-                        {day.deficits.length ? day.deficits.join(", ") : "Fully staffed"}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
               <div className="schedule-foot">
@@ -307,9 +369,9 @@ export default function Landing() {
           ) : (
             <div className="schedule-card">
               <div className="schedule-card__head">
-                <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
                   <span className="pill small-pill">Week of Jun 10</span>
-                  <h4>Dialysis coverage</h4>
+                  <h4 style={{ margin: 0 }}>Dialysis coverage</h4>
                 </div>
                 <div className="pill success-pill">Conflicts resolved</div>
               </div>
@@ -373,7 +435,7 @@ export default function Landing() {
             </span>
             <div>
               <h3>Manager-run, no self-serve</h3>
-              <p>Stay in control with one clinic login—designed to reduce manual scheduling time without staff-facing portals.</p>
+              <p>Stay in control with one clinic login - designed to reduce manual scheduling time without staff-facing portals.</p>
             </div>
           </article>
           <article className="feature-card">

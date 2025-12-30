@@ -1,36 +1,35 @@
 import { useEffect, useRef, useState } from "react";
 import api, {
-  fetchHealth,
-  listConfigs,
-  loadConfig,
-  saveConfig,
+  AuditEntry,
   ConfigPayload,
   SaveConfigRequest,
-  runSchedule,
+  UserSummary,
+  createInvite,
+  deleteUser,
+  fetchHealth,
+  listAudit,
+  listConfigs,
+  listUsers,
+  loadConfig,
   login,
+  resetUserInvite,
+  revokeInvite,
+  runSchedule,
+  saveConfig,
   setAuthToken,
   setupUser,
-  createInvite,
-  listUsers,
-  deleteUser,
-  revokeInvite,
-  listAudit,
-  updateUserRole,
-  resetUserInvite,
-  UserSummary,
-  AuditEntry
+  updateUserRole
 } from "../api/client";
+import DemandEditor from "../components/DemandEditor";
+import PTOEditor from "../components/PTOEditor";
+import { DemandRow, PTORow, StaffRow } from "../types";
+import { DAYS } from "../constants";
 
 type UserInfo = {
   sub: string;
   username: string;
   role: string;
 };
-import DemandEditor from "../components/DemandEditor";
-import PTOEditor from "../components/PTOEditor";
-import { DemandRow, PTORow, StaffRow } from "../types";
-import { DAYS } from "../constants";
-import { exportConfig, importConfig, exportScheduleCsv, importScheduleCsv } from "../api/client";
 
 export default function StaffPlanner() {
   const genId = () => {
@@ -68,7 +67,7 @@ export default function StaffPlanner() {
     return err?.message ?? fallback;
   };
   const formatDateTime = (value?: string | null) => {
-        if (!value) return "";
+    if (!value) return "";
     const dt = new Date(value);
     if (Number.isNaN(dt.getTime())) return value;
     return dt.toLocaleString(undefined, {
@@ -146,7 +145,6 @@ export default function StaffPlanner() {
   const [loginPass, setLoginPass] = useState<string>("");
   const [inviteToken, setInviteToken] = useState<string>("");
   const [loginError, setLoginError] = useState<string>("");
-  const [meLoaded, setMeLoaded] = useState<boolean>(false);
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [weeks, setWeeks] = useState<number>(1);
   const [patientsPerTech, setPatientsPerTech] = useState<number>(4);
@@ -178,9 +176,6 @@ export default function StaffPlanner() {
   const [progress, setProgress] = useState<number>(0);
   const [autoLoadedConfig, setAutoLoadedConfig] = useState<boolean>(false);
   const isAuthed = Boolean(authToken && authToken.length > 0);
-  const [importingConfig, setImportingConfig] = useState(false);
-  const [importingSchedule, setImportingSchedule] = useState(false);
-  const [configImportString, setConfigImportString] = useState("");
   const uniqueStaffIds = Array.from(
     new Set(staffRows.filter((s) => s.can_bleach).map((s) => s.id).filter((v) => v && v.trim().length > 0))
   );
@@ -288,7 +283,6 @@ export default function StaffPlanner() {
   useEffect(() => {
     if (!isAuthed) {
       setIsAdmin(false);
-      setMeLoaded(false);
       setCurrentUser("");
       return;
     }
@@ -298,7 +292,6 @@ export default function StaffPlanner() {
         const data = r.data;
         setIsAdmin((data?.role || "").toLowerCase() === "admin");
         setCurrentUser(data?.username || "");
-        setMeLoaded(true);
         if (data?.username) {
           localStorage.setItem("auth_user", data.username);
           window.dispatchEvent(new Event("storage"));
@@ -306,7 +299,6 @@ export default function StaffPlanner() {
       })
       .catch(() => {
         setIsAdmin(false);
-        setMeLoaded(false);
         setCurrentUser("");
       });
   }, [isAuthed, authToken]);
@@ -581,79 +573,6 @@ export default function StaffPlanner() {
     }
   };
 
-  const handleExportConfig = async (mode: "json" | "string") => {
-    try {
-      const name = `${configName || "clinic"}.config`;
-      const res = await exportConfig(name);
-      if (mode === "json") {
-        const blob = new Blob([JSON.stringify(res.payload, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = name;
-        link.click();
-        URL.revokeObjectURL(url);
-        setStatus("Config exported as JSON.");
-      } else {
-        const encoded = res.encoded;
-        setConfigImportString(encoded);
-        await copyText(encoded);
-        setStatus("Encoded config copied. Paste to import.");
-      }
-    } catch (err: any) {
-      setStatus(err?.message ?? "Failed to export config");
-    }
-  };
-
-  const handleImportConfig = async (file?: File, encoded?: string) => {
-    try {
-      setImportingConfig(true);
-      let payload = null;
-      if (encoded) {
-        payload = JSON.parse(atob(encoded));
-      } else if (file) {
-        const text = await file.text();
-        payload = JSON.parse(text);
-      } else {
-        throw new Error("No file or string provided");
-      }
-      const filename = `${payload?.clinic?.name || "imported"}.config`;
-      await importConfig({ payload, filename });
-      setStatus("Config imported. Reload configs to use it.");
-    } catch (err: any) {
-      setStatus(err?.message ?? "Failed to import config");
-    } finally {
-      setImportingConfig(false);
-    }
-  };
-
-  const handleExportScheduleCsv = async () => {
-    try {
-      const blob = await exportScheduleCsv();
-      const csvBlob = blob instanceof Blob ? blob : new Blob([blob as any], { type: "text/csv" });
-      const url = URL.createObjectURL(csvBlob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "schedule.csv";
-      link.click();
-      URL.revokeObjectURL(url);
-      setStatus("Schedule CSV exported.");
-    } catch (err: any) {
-      setStatus(err?.message ?? "Failed to export schedule");
-    }
-  };
-
-  const handleImportScheduleCsv = async (file: File) => {
-    try {
-      setImportingSchedule(true);
-      await importScheduleCsv(file);
-      setStatus("Schedule imported as latest snapshot.");
-    } catch (err: any) {
-      setStatus(err?.message ?? "Failed to import schedule");
-    } finally {
-      setImportingSchedule(false);
-    }
-  };
 
   const handleLogin = async () => {
     try {
@@ -668,7 +587,7 @@ export default function StaffPlanner() {
         const names = await listConfigs();
         setConfigs(names);
       } catch {
-        /* ignore – useEffect will retry */
+        /* ignore - useEffect will retry */
       }
     } catch (err: any) {
       setAuthTokenState(null);
@@ -714,7 +633,6 @@ export default function StaffPlanner() {
     setCurrentUser("");
     setUsers([]);
     setIsAdmin(false);
-    setMeLoaded(false);
     resetWorkspaceState("Logged out.");
   };
 
@@ -898,76 +816,6 @@ export default function StaffPlanner() {
             style={{ maxWidth: "180px" }}
           />
           <button onClick={handleSaveConfig}>Save</button>
-        </div>
-        <div
-          className="controls-row"
-          style={{ flexWrap: "wrap", gap: "0.75rem", alignItems: "flex-end", marginBottom: "0.5rem" }}
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-            <strong>Config import/export</strong>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-              <button className="secondary-btn" onClick={() => handleExportConfig("json")}>
-                Download config (.json)
-              </button>
-              <button className="secondary-btn" onClick={() => handleExportConfig("string")}>
-                Copy encoded config
-              </button>
-              <label className="secondary-btn">
-                Import config file
-                <input
-                  type="file"
-                  accept=".json,.config"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      handleImportConfig(file);
-                      e.target.value = "";
-                    }
-                  }}
-                />
-              </label>
-              <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-                <input
-                  placeholder="Paste encoded config string"
-                  value={configImportString}
-                  onChange={(e) => setConfigImportString(e.target.value)}
-                  style={{ minWidth: "220px" }}
-                />
-                <button
-                  className="secondary-btn"
-                  disabled={!configImportString.trim()}
-                  onClick={() => handleImportConfig(undefined, configImportString.trim())}
-                >
-                  Import string
-                </button>
-              </div>
-            </div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-            <strong>Schedule import/export</strong>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-              <button className="secondary-btn" onClick={handleExportScheduleCsv} disabled={importingSchedule}>
-                Export schedule (CSV)
-              </button>
-              <label className="secondary-btn">
-                Import schedule CSV
-                <input
-                  type="file"
-                  accept=".csv"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      handleImportScheduleCsv(file);
-                      e.target.value = "";
-                    }
-                  }}
-                />
-              </label>
-              {importingSchedule && <span className="muted">Importing…</span>}
-            </div>
-          </div>
         </div>
         <div className="tabs">
           {[
@@ -1245,7 +1093,6 @@ export default function StaffPlanner() {
               <input
                 type="number"
                 min={1}
-                max={6}
                 value={weeks}
                 onChange={(e) => setWeeks(Number(e.target.value))}
               />
@@ -1455,6 +1302,12 @@ export default function StaffPlanner() {
                   } | Next bleach cursor: ${res.bleach_cursor} | Assignments: ${res.assignments.length}`
                 );
                 setStatus("Schedule generated.");
+                try {
+                  localStorage.setItem("latest_schedule_ts", new Date().toISOString());
+                  window.dispatchEvent(new Event("storage"));
+                } catch {
+                  /* ignore localStorage errors */
+                }
               } catch (err: any) {
                 const msg = friendlyError(err, "Failed to generate schedule");
                 setStatus(msg);
@@ -1538,6 +1391,9 @@ export default function StaffPlanner() {
             <div style={{ marginTop: "1rem", overflowX: "auto" }}>
               {(() => {
                 const uniqueDates = Array.from(new Set(assignments.map((a) => a.date))).sort();
+                const exportRoleSet = new Set(exportRoles.map((role) => role.toLowerCase()));
+                const matrixAssignments = assignments.filter((a) => exportRoleSet.has((a.role || "").toLowerCase()));
+                const knownStaffIds = new Set(Object.keys(staffNameMap));
                 const dateDayMap = uniqueDates.reduce<Record<string, string>>((acc, d) => {
                   const found = assignments.find((a) => a.date === d);
                   acc[d] = found?.day_name || "";
@@ -1549,22 +1405,26 @@ export default function StaffPlanner() {
                   return acc;
                 }, {});
                 const staffIdsByRole = ["Tech", "RN", "Admin"].reduce<Record<string, string[]>>((acc, role) => {
+                  if (!exportRoleSet.has(role.toLowerCase())) {
+                    acc[role] = [];
+                    return acc;
+                  }
                   acc[role] = Array.from(
                     new Set(
-                      assignments
-                        .filter((a) => a.role === role && a.staff_id)
+                      matrixAssignments
+                        .filter((a) => a.role === role && a.staff_id && knownStaffIds.has(a.staff_id))
                         .map((a) => a.staff_id as string)
                     )
                   );
                   return acc;
                 }, {});
-                const dateMapByStaff = assignments.reduce<Record<string, Set<string>>>((acc, a) => {
+                const dateMapByStaff = matrixAssignments.reduce<Record<string, Set<string>>>((acc, a) => {
                   if (!a.staff_id) return acc;
                   acc[a.staff_id] = acc[a.staff_id] || new Set();
                   acc[a.staff_id].add(a.date);
                   return acc;
                 }, {});
-                const labelMapByStaff = assignments.reduce<Record<string, Record<string, string>>>((acc, a) => {
+                const labelMapByStaff = matrixAssignments.reduce<Record<string, Record<string, string>>>((acc, a) => {
                   if (!a.staff_id) return acc;
                   acc[a.staff_id] = acc[a.staff_id] || {};
                   const label =
@@ -1581,11 +1441,14 @@ export default function StaffPlanner() {
                   return acc;
                 }, {});
                 const hasMatrix = uniqueDates.length > 0;
-                const weekBreaks = uniqueDates.reduce<Record<string, boolean>>((acc, d, idx) => {
+                const columns = uniqueDates.reduce<Array<{ key: string; date?: string; label?: string; isSeparator?: boolean }>>((acc, d) => {
+                  acc.push({ key: d, date: d, label: dateLabelMap[d] });
                   const day = dateDayMap[d];
-                  if (idx > 0 && day === "Mon") acc[d] = true;
+                  if (day && day.toLowerCase().startsWith("sat")) {
+                    acc.push({ key: `${d}-sep`, isSeparator: true });
+                  }
                   return acc;
-                }, {});
+                }, []);
                 if (!hasMatrix) return null;
                 return (
                   <div style={{ marginTop: "1rem" }}>
@@ -1603,31 +1466,28 @@ export default function StaffPlanner() {
                             <thead>
                               <tr>
                                 <th>Staff</th>
-                                {uniqueDates.map((d) => (
-                                  <th
-                                    key={d}
-                                    style={weekBreaks[d] ? { borderLeft: "2px solid var(--slate-200)" } : undefined}
-                                  >
-                                    {dateLabelMap[d]}
-                                  </th>
-                                ))}
+                                {columns.map((col) =>
+                                  col.isSeparator ? (
+                                    <th key={col.key} className="matrix-sep" aria-hidden="true" />
+                                  ) : (
+                                    <th key={col.key}>{col.label}</th>
+                                  )
+                                )}
                               </tr>
                             </thead>
                             <tbody>
                               {staffIds.map((sid) => (
                                 <tr key={`${role}-${sid}`}>
                             <td>{staffNameMap[sid] || sid}</td>
-                            {uniqueDates.map((d) => (
-                              <td
-                                key={`${sid}-${d}`}
-                                style={{
-                                  textAlign: "center",
-                                  ...(weekBreaks[d] ? { borderLeft: "2px solid var(--slate-200)" } : undefined)
-                                }}
-                              >
-                                {labelMapByStaff[sid]?.[d] || ""}
-                              </td>
-                            ))}
+                            {columns.map((col) =>
+                              col.isSeparator ? (
+                                <td key={`${sid}-${col.key}`} className="matrix-sep" aria-hidden="true" />
+                              ) : (
+                                <td key={`${sid}-${col.key}`} style={{ textAlign: "center" }}>
+                                  {labelMapByStaff[sid]?.[col.date as string] || ""}
+                                </td>
+                              )
+                            )}
                           </tr>
                         ))}
                             </tbody>
@@ -1841,7 +1701,7 @@ export default function StaffPlanner() {
                       </td>
                       <td>{u.status}</td>
                       <td>{formatDateTime(u.last_login)}</td>
-                      <td>{u.status === "active" ? "—" : formatDateTime(u.invite_expires_at)}</td>
+                      <td>{u.status === "active" ? "-" : formatDateTime(u.invite_expires_at)}</td>
                       <td
                         style={{
                           display: "flex",
@@ -1919,9 +1779,9 @@ export default function StaffPlanner() {
                       <tr key={a.id}>
                         <td>{formatDateTime(a.created_at)}</td>
                         <td>{a.event}</td>
-                        <td>{a.user_id != null ? `${userNameMap[a.user_id] ?? a.user_id}` : "—"}</td>
-                        <td>{a.detail || "—"}</td>
-                        <td>{a.ip || "—"}</td>
+                        <td>{a.user_id != null ? `${userNameMap[a.user_id] ?? a.user_id}` : "-"}</td>
+                        <td>{a.detail || "-"}</td>
+                        <td>{a.ip || "-"}</td>
                       </tr>
                     ))}
                   </tbody>
