@@ -4,6 +4,7 @@ import StaffPlanner from "./pages/StaffPlanner";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import PlaceholderPage from "./pages/Placeholder";
+import Features from "./pages/Features";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
@@ -120,8 +121,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/planner" element={<StaffPlanner />} />
-          <Route path="/features" element={<PlaceholderPage title="Features" />} />
+          <Route path="/planner" element={isAuthed ? <StaffPlanner /> : <Navigate to="/login" replace />} />
+          <Route path="/features" element={<Features />} />
           <Route path="/contact" element={<PlaceholderPage title="Contact" />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

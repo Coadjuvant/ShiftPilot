@@ -18,7 +18,7 @@ try:
 except Exception:
     # dotenv is optional; ignore if not installed
     pass
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.scheduler import (
@@ -57,7 +57,6 @@ from backend.auth_db import (
 from .schemas import (
     AssignmentOut,
     ConfigPayload,
-    ConfigSchedule,
     SaveConfigRequest,
     ScheduleRequest,
     ScheduleResponse,
@@ -472,7 +471,10 @@ def save_config(request: SaveConfigRequest, payload: dict = Depends(require_auth
 
 
 @router.get("/schedule/latest")
-def latest_schedule(payload: dict = Depends(require_auth)) -> dict:
+def latest_schedule(response: Response, payload: dict = Depends(require_auth)) -> dict:
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     owner = _schedule_owner(payload)
     data = get_latest_schedule(owner)
     if not data:

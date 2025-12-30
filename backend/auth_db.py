@@ -257,7 +257,6 @@ class PostgresAuth:
             return row[0] if isinstance(row[0], dict) else json.loads(row[0])
         except Exception:
             return None
-        return token
 
     def update_role(self, user_id: int, role: str):
         conn = self._conn()
@@ -490,46 +489,6 @@ class PostgresAuth:
         )
         conn.commit()
         conn.close()
-
-    # --- schedules (latest per owner) ---
-    def save_schedule(self, owner: str, payload: Dict[str, Any]) -> None:
-        conn = self._conn()
-        cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO schedules (owner, clinic_name, start_date, weeks, payload, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
-            ON CONFLICT (owner) DO UPDATE SET
-                clinic_name = EXCLUDED.clinic_name,
-                start_date = EXCLUDED.start_date,
-                weeks = EXCLUDED.weeks,
-                payload = EXCLUDED.payload,
-                updated_at = NOW();
-            """,
-            (
-                owner,
-                payload.get("clinic_name"),
-                payload.get("start_date"),
-                payload.get("weeks"),
-                json.dumps(payload),
-            ),
-        )
-        conn.commit()
-        conn.close()
-
-    def get_latest_schedule(self, owner: str) -> Optional[Dict[str, Any]]:
-        conn = self._conn()
-        cur = conn.cursor()
-        cur.execute("SELECT payload FROM schedules WHERE owner=%s", (owner,))
-        row = cur.fetchone()
-        conn.close()
-        if not row:
-            return None
-        try:
-            return row[0] if isinstance(row[0], dict) else json.loads(row[0])
-        except Exception:
-            return None
-
 
 # -----------------------
 # JSON backend (fallback)

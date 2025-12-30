@@ -118,7 +118,6 @@ def _build_slots(requirements: Dict[str, DailyRequirement], cfg: ScheduleConfig)
                     )
 
             add_slot("Tech", "open", req.tech_openers)
-            add_slot("Tech", "mid", req.tech_mids)
             bleach = False
             if req.tech_closers > 0:
                 freq = (cfg.bleach_frequency or "weekly").lower()
@@ -131,6 +130,7 @@ def _build_slots(requirements: Dict[str, DailyRequirement], cfg: ScheduleConfig)
                 else:
                     bleach = day_name == cfg.bleach_day
             add_slot("Tech", "close", req.tech_closers, bleach=bleach)
+            add_slot("Tech", "mid", req.tech_mids)
             add_slot("RN", "coverage", req.rn_count)
             add_slot("Admin", "coverage", req.admin_count)
 
@@ -307,20 +307,15 @@ def generate_schedule(
         candidates: List[Tuple[StaffMember, _StaffState]] = gather_candidates()
         relaxed_note = None
         if not candidates:
-            # Allow violating alt Saturdays first, then 3-day cap (keep 4-day/week cap and post-bleach rest hard)
-            for ignore_alt, ignore_three, ignore_week, ignore_post, note in [
-                (True, False, False, False, "Relax: alt Saturdays"),
-                (True, True, False, False, "Relax: 3-day cap"),
-            ]:
-                candidates = gather_candidates(
-                    ignore_post_bleach=ignore_post,
-                    ignore_week_cap=ignore_week,
-                    ignore_three_day=ignore_three,
-                    ignore_alt_sat=ignore_alt,
-                )
-                if candidates:
-                    relaxed_note = note
-                    break
+            # Allow violating alt Saturdays (keep 3-day cap, 4-day/week cap, and post-bleach rest hard)
+            candidates = gather_candidates(
+                ignore_post_bleach=False,
+                ignore_week_cap=False,
+                ignore_three_day=False,
+                ignore_alt_sat=True,
+            )
+            if candidates:
+                relaxed_note = "Relax: alt Saturdays"
 
         chosen: Optional[StaffMember] = None
         chosen_state: Optional[_StaffState] = None
@@ -335,7 +330,6 @@ def generate_schedule(
             relax_options = [
                 (False, False, False, False, None),
                 (False, False, False, True, "Relax: alt Saturdays"),
-                (False, False, True, True, "Relax: 3-day cap"),
             ]
             for ignore_post, ignore_week, ignore_three, ignore_alt, relax_note in relax_options:
                 for offset in range(len(cfg.bleach_rotation)):
@@ -399,7 +393,10 @@ def generate_schedule(
             if relaxed_note:
                 notes.append(relaxed_note)
             notes.append("Needs coverage")
-            assignments.append(Assignment(slot=slot, staff_id=OPEN_LABEL, notes=notes))
+            if slot.role == "Tech" and slot.duty in ("open", "close"):
+                assignments.append(Assignment(slot=slot, staff_id=None, notes=notes))
+            else:
+                assignments.append(Assignment(slot=slot, staff_id=OPEN_LABEL, notes=notes))
             continue
 
         # Update state
