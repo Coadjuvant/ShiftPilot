@@ -158,9 +158,11 @@ export default function Landing() {
       const techReq = allowedRoles.has("Tech") ? (req.tech_openers || 0) + (req.tech_mids || 0) + (req.tech_closers || 0) : 0;
       const rnReq = allowedRoles.has("RN") ? req.rn_count || 0 : 0;
       const adminReq = allowedRoles.has("Admin") ? req.admin_count || 0 : 0;
-      const techFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "tech" && a.staff_id).length;
-      const rnFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "rn" && a.staff_id).length;
-      const adminFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "admin" && a.staff_id).length;
+      const isFilled = (assignment: { staff_id?: string | null }) =>
+        Boolean(assignment.staff_id) && assignment.staff_id !== "OPEN";
+      const techFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "tech" && isFilled(a)).length;
+      const rnFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "rn" && isFilled(a)).length;
+      const adminFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "admin" && isFilled(a)).length;
       const techMissing = Math.max(techReq - techFilled, 0);
       const rnMissing = Math.max(rnReq - rnFilled, 0);
       const adminMissing = Math.max(adminReq - adminFilled, 0);
@@ -173,12 +175,13 @@ export default function Landing() {
         const totalSlots = Math.max(count, assignments.length);
         if (!totalSlots) return;
         for (let idx = 0; idx < totalSlots; idx++) {
-          const assignment = assignments[idx];
-          const staffName = assignment?.staff_id ? staffMap.get(assignment.staff_id)?.name : null;
-          const label = useIndex && totalSlots > 1 ? `${labelBase} ${idx + 1}` : labelBase;
-          details.push({ label, value: staffName || "Open" });
-        }
-      };
+            const assignment = assignments[idx];
+            const staffName =
+              assignment?.staff_id && assignment.staff_id !== "OPEN" ? staffMap.get(assignment.staff_id)?.name : null;
+            const label = useIndex && totalSlots > 1 ? `${labelBase} ${idx + 1}` : labelBase;
+            details.push({ label, value: staffName || "--" });
+          }
+        };
       if (allowedRoles.has("Tech")) {
         const techAssignments = dayAssignments.filter((a) => a.role?.toLowerCase() === "tech");
         const techOpen = techAssignments.filter((a) => a.duty === "open");
