@@ -431,19 +431,21 @@ def _slugify(name: str) -> str:
 
 def _owner_candidates(payload: dict) -> List[str]:
     owners: List[str] = []
-    sub = str(payload.get("sub") or "").strip()
     username = (payload.get("username") or "").strip()
-    if sub:
-        owners.append(sub)
-    if username and username not in owners:
+    sub = str(payload.get("sub") or "").strip()
+    if username:
         owners.append(username)
+    if sub and sub not in owners:
+        owners.append(sub)
     if not owners:
         owners.append("public")
     return owners
 
 
 def _config_owner(payload: dict) -> str:
-    return _owner_candidates(payload)[0]
+    username = (payload.get("username") or "").strip()
+    sub = str(payload.get("sub") or "").strip()
+    return username or sub or "public"
 
 
 def _schedule_owners(payload: dict) -> List[str]:
