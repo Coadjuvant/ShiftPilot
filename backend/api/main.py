@@ -359,8 +359,8 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
             pto_entries=pto_entries,
         )
         excel_b64 = base64.b64encode(excel_bytes).decode("utf-8")
-        # Persist latest schedule snapshot for this owner
-        owner = _schedule_owner(payload)
+        # Persist latest schedule snapshot for this owner (save under both id + username if present)
+        owners = _schedule_owners(payload)
         def _serialize_assignments():
             out = []
             for a in assignments:
@@ -410,7 +410,8 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
         import json as _json
 
         safe_payload = _json.loads(_json.dumps(schedule_payload, default=str))
-        persist_schedule(owner, safe_payload)
+        for owner in owners:
+            persist_schedule(owner, safe_payload)
         return ScheduleResponse(
             bleach_cursor=result.bleach_cursor,
             winning_seed=winning_seed,
@@ -428,12 +429,25 @@ def _slugify(name: str) -> str:
     return slug or "clinic"
 
 
+def _owner_candidates(payload: dict) -> List[str]:
+    owners: List[str] = []
+    sub = str(payload.get("sub") or "").strip()
+    username = (payload.get("username") or "").strip()
+    if sub:
+        owners.append(sub)
+    if username and username not in owners:
+        owners.append(username)
+    if not owners:
+        owners.append("public")
+    return owners
+
+
 def _config_owner(payload: dict) -> str:
-    return (payload.get("username") or str(payload.get("sub") or "") or "public").strip() or "public"
+    return _owner_candidates(payload)[0]
 
 
-def _schedule_owner(payload: dict) -> str:
-    return _config_owner(payload)
+def _schedule_owners(payload: dict) -> List[str]:
+    return _owner_candidates(payload)
 
 
 @router.get("/configs")
@@ -475,8 +489,11 @@ def latest_schedule(response: Response, payload: dict = Depends(require_auth)) -
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
-    owner = _schedule_owner(payload)
-    data = get_latest_schedule(owner)
+    data = None
+    for owner in _schedule_owners(payload):
+        data = get_latest_schedule(owner)
+        if data:
+            break
     if not data:
         return {"status": "none"}
     return data
@@ -484,8 +501,11 @@ def latest_schedule(response: Response, payload: dict = Depends(require_auth)) -
 
 @router.get("/schedule/export/csv")
 def export_schedule_csv(payload: dict = Depends(require_auth)):
-    owner = _schedule_owner(payload)
-    data = get_latest_schedule(owner)
+    data = None
+    for owner in _schedule_owners(payload):
+        data = get_latest_schedule(owner)
+        if data:
+            break
     if not data or not data.get("assignments"):
         raise HTTPException(status_code=404, detail="No saved schedule")
     staff_map = {s.get("id"): s for s in data.get("staff", [])}
