@@ -1305,25 +1305,6 @@ export default function StaffPlanner() {
                 );
                 setStatus("Schedule generated.");
                 try {
-                  const localSnapshot = {
-                    owner: latestScheduleOwner,
-                    clinic_name: configName || "Demo Clinic",
-                    timezone,
-                    start_date: startDate,
-                    weeks,
-                    bleach_frequency: bleachFrequency,
-                    requirements,
-                    assignments: res.assignments,
-                    staff: staffRows.map((s) => ({ id: s.id, name: s.name, role: s.role })),
-                    stats: res.stats,
-                    total_penalty: res.total_penalty,
-                    winning_seed: res.winning_seed,
-                    bleach_cursor: res.bleach_cursor,
-                    export_roles: exportRoles,
-                    tournament_trials: trials,
-                    generated_at: new Date().toISOString(),
-                  };
-                  localStorage.setItem("latest_schedule_local", JSON.stringify(localSnapshot));
                   localStorage.setItem("latest_schedule_ts", new Date().toISOString());
                   window.dispatchEvent(new Event("storage"));
                 } catch {
