@@ -158,8 +158,11 @@ export default function Landing() {
       const techReq = allowedRoles.has("Tech") ? (req.tech_openers || 0) + (req.tech_mids || 0) + (req.tech_closers || 0) : 0;
       const rnReq = allowedRoles.has("RN") ? req.rn_count || 0 : 0;
       const adminReq = allowedRoles.has("Admin") ? req.admin_count || 0 : 0;
-      const isFilled = (assignment: { staff_id?: string | null }) =>
-        Boolean(assignment.staff_id) && assignment.staff_id !== "OPEN";
+      const isOpenSlot = (assignment: { staff_id?: string | null }) => {
+        if (!assignment.staff_id) return true;
+        return assignment.staff_id.toString().toUpperCase() === "OPEN";
+      };
+      const isFilled = (assignment: { staff_id?: string | null }) => !isOpenSlot(assignment);
       const techFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "tech" && isFilled(a)).length;
       const rnFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "rn" && isFilled(a)).length;
       const adminFilled = dayAssignments.filter((a) => a.role?.toLowerCase() === "admin" && isFilled(a)).length;
@@ -177,7 +180,7 @@ export default function Landing() {
         for (let idx = 0; idx < totalSlots; idx++) {
             const assignment = assignments[idx];
             const staffName =
-              assignment?.staff_id && assignment.staff_id !== "OPEN" ? staffMap.get(assignment.staff_id)?.name : null;
+              assignment && !isOpenSlot(assignment) ? staffMap.get(assignment.staff_id as string)?.name : null;
             const label = useIndex && totalSlots > 1 ? `${labelBase} ${idx + 1}` : labelBase;
             details.push({ label, value: staffName || "--" });
           }
