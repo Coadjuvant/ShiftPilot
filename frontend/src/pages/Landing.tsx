@@ -87,6 +87,14 @@ export default function Landing() {
   const formatScheduleDate = (date: Date) =>
     date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
 
+  const formatGeneratedAt = (value?: string) => {
+    if (!value) return "";
+    const hasTimeZone = /([zZ]|[+-]\d{2}:\d{2})$/.test(value);
+    const date = new Date(hasTimeZone ? value : `${value}Z`);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString();
+  };
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handler = () => {
@@ -139,8 +147,10 @@ export default function Landing() {
     };
     const weeks: any[][] = [];
     for (let i = 0; i < totalDays; i++) {
-      const req = reqs[i % reqs.length];
-      const date = addDays(start, i);
+      const dayPos = i % reqs.length;
+      const weekIdx = Math.floor(i / reqs.length);
+      const req = reqs[dayPos];
+      const date = addDays(start, weekIdx * 7 + dayPos);
       const dateStr = date.toISOString().slice(0, 10);
       const dayAssignments = (latestSchedule.assignments || [])
         .filter((a) => a.date === dateStr)
@@ -188,7 +198,6 @@ export default function Landing() {
         const adminAssignments = dayAssignments.filter((a) => a.role?.toLowerCase() === "admin");
         pushSlots("Admin", adminReq, adminAssignments, true);
       }
-      const weekIdx = Math.floor(i / reqs.length);
       weeks[weekIdx] = weeks[weekIdx] || [];
       weeks[weekIdx].push({
         date,
@@ -219,7 +228,7 @@ export default function Landing() {
   const weekLabel = useMemo(() => {
     if (!latestSchedule || !weeksData.length) return "Week 1";
     const start = parseISODate(latestSchedule.start_date);
-    const dt = addDaysUTC(start, weekIndex * (latestSchedule.requirements?.length || 0));
+    const dt = addDaysUTC(start, weekIndex * 7);
     return `Week of ${formatScheduleDate(dt)}`;
   }, [latestSchedule, weekIndex, weeksData.length]);
 
@@ -362,9 +371,7 @@ export default function Landing() {
             </div>
           )}
               {latestSchedule?.generated_at ? (
-                <div className="schedule-meta">
-                  Generated {new Date(latestSchedule.generated_at).toLocaleString()}
-                </div>
+                <div className="schedule-meta">Generated {formatGeneratedAt(latestSchedule.generated_at)}</div>
               ) : null}
               <div className="schedule-foot">
                 <div className="pill muted-pill">Soft constraints honored</div>

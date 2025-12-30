@@ -8,7 +8,7 @@ import base64
 import os
 import csv
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import Request
 
 try:
@@ -404,7 +404,7 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
             "bleach_cursor": result.bleach_cursor,
             "export_roles": request.export_roles,
             "tournament_trials": request.tournament_trials,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
         # ensure fully serializable before persisting
         import json as _json
