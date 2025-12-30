@@ -104,40 +104,23 @@ export default function Landing() {
       setExpandedDay(null);
       return;
     }
-    const localOwner = typeof window !== "undefined" ? localStorage.getItem("auth_user") : null;
-    const localSnapshotRaw = typeof window !== "undefined" ? localStorage.getItem("latest_schedule_local") : null;
-    const localSnapshot = localSnapshotRaw ? (JSON.parse(localSnapshotRaw) as SavedSchedule & { owner?: string }) : null;
-    const localGenerated = localSnapshot?.generated_at ? Date.parse(localSnapshot.generated_at) : 0;
-    if (localSnapshot && (!localSnapshot.owner || localSnapshot.owner === localOwner) && localGenerated) {
-      setLatestSchedule(localSnapshot);
-      setScheduleError("");
-      setWeekIndex(0);
-      setExpandedDay(null);
-    }
     fetchLatestSchedule()
       .then((data) => {
         if (data && (data as any).status === "none") {
-          if (!localSnapshot) {
-            setLatestSchedule(null);
-            setScheduleError("No saved schedule yet");
-            setExpandedDay(null);
-          }
+          setLatestSchedule(null);
+          setScheduleError("No saved schedule yet");
+          setExpandedDay(null);
           return;
         }
-        const serverGenerated = data?.generated_at ? Date.parse(data.generated_at) : 0;
-        if (!localSnapshot || (serverGenerated && serverGenerated >= localGenerated)) {
-          setLatestSchedule(data);
-          setScheduleError("");
-          setWeekIndex(0);
-          setExpandedDay(null);
-        }
+        setLatestSchedule(data);
+        setScheduleError("");
+        setWeekIndex(0);
+        setExpandedDay(null);
       })
       .catch(() => {
-        if (!localSnapshot) {
-          setLatestSchedule(null);
-          setScheduleError("Unable to load latest schedule");
-          setExpandedDay(null);
-        }
+        setLatestSchedule(null);
+        setScheduleError("Unable to load latest schedule");
+        setExpandedDay(null);
       });
   }, [isAuthed, scheduleTick]);
 
