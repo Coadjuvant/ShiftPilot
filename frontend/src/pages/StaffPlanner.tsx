@@ -6,6 +6,8 @@ import api, {
   UserSummary,
   createInvite,
   deleteUser,
+  exportScheduleCsv,
+  exportScheduleExcel,
   fetchHealth,
   listAudit,
   listConfigs,
@@ -78,6 +80,38 @@ export default function StaffPlanner() {
       minute: "2-digit",
       second: "2-digit"
     });
+  };
+  const downloadSavedSchedule = async () => {
+    try {
+      const blob = await exportScheduleExcel();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const fileBase = (configName || "schedule").trim().replace(/\s+/g, "-").toLowerCase();
+      link.href = url;
+      link.download = `${fileBase || "schedule"}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setStatus("Download started.");
+    } catch (err: any) {
+      const status = err?.response?.status;
+      setStatus(status === 404 ? "No saved schedule to download." : friendlyError(err, "Download failed."));
+    }
+  };
+  const downloadSavedScheduleCsv = async () => {
+    try {
+      const blob = await exportScheduleCsv();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const fileBase = (configName || "schedule").trim().replace(/\s+/g, "-").toLowerCase();
+      link.href = url;
+      link.download = `${fileBase || "schedule"}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setStatus("CSV download started.");
+    } catch (err: any) {
+      const status = err?.response?.status;
+      setStatus(status === 404 ? "No saved schedule to download." : friendlyError(err, "Download failed."));
+    }
   };
 
   const [status, setStatus] = useState<string>("Checking API...");
@@ -1375,19 +1409,15 @@ export default function StaffPlanner() {
             </div>
           ) : null}
           {runResult && <p style={{ marginTop: "0.75rem" }}>{runResult}</p>}
-          {excelUrl && (
-            <button
-              className="primary-btn"
-              style={{ marginTop: "0.75rem" }}
-              onClick={() => {
-                const link = document.createElement("a");
-                link.href = excelUrl;
-                link.download = "schedule.xlsx";
-                link.click();
-              }}
-            >
-              Download Excel
-            </button>
+          {isAuthed && (
+            <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button className="primary-btn" onClick={downloadSavedSchedule}>
+                Download Latest Schedule
+              </button>
+              <button className="secondary-btn" onClick={downloadSavedScheduleCsv}>
+                Download CSV
+              </button>
+            </div>
           )}
           {assignments.length > 0 && (
             <div style={{ marginTop: "1rem", overflowX: "auto" }}>

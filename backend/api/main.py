@@ -31,7 +31,7 @@ from backend.scheduler import (
     export_schedule_to_excel,
     run_tournament,
 )
-from backend.scheduler.model import DAYS
+from backend.scheduler.model import DAYS, Assignment, ScheduleResult, ScheduleSlot
 from backend.auth_db import (
     init_db,
     create_invite,
@@ -472,6 +472,68 @@ def _latest_schedule_for(payload: dict) -> dict | None:
     return max(candidates, key=lambda d: _parse_generated_at(d.get("generated_at")))
 
 
+def _parse_schedule_date(value: object) -> datetime.date:
+    if isinstance(value, datetime):
+        return value.date()
+    if hasattr(value, "year") and hasattr(value, "month") and hasattr(value, "day"):
+        return value  # date-like
+    if isinstance(value, str) and value:
+        try:
+            return datetime.fromisoformat(value).date()
+        except Exception:
+            pass
+    return datetime.now(timezone.utc).date()
+
+
+def _hydrate_schedule_result(data: dict) -> tuple[ScheduleResult, dict[str, StaffMember]]:
+    staff_map: dict[str, StaffMember] = {}
+    for entry in data.get("staff", []) or []:
+        staff_id = entry.get("id") or entry.get("staff_id")
+        if not staff_id:
+            continue
+        staff_map[staff_id] = StaffMember(
+            id=staff_id,
+            name=entry.get("name") or staff_id,
+            role=entry.get("role") or "",
+        )
+
+    start_date = _parse_schedule_date(data.get("start_date")) if data.get("start_date") else None
+    assignments: list[Assignment] = []
+    for item in data.get("assignments", []) or []:
+        slot_date = _parse_schedule_date(item.get("date"))
+        day_index = 0
+        if start_date:
+            try:
+                day_index = max((slot_date - start_date).days, 0)
+            except Exception:
+                day_index = 0
+        slot = ScheduleSlot(
+            day_index=day_index,
+            date=slot_date,
+            day_name=item.get("day_name") or "",
+            role=item.get("role") or "",
+            duty=item.get("duty") or "",
+            slot_index=int(item.get("slot_index") or 0),
+            is_bleach=bool(item.get("is_bleach")),
+        )
+        assignments.append(
+            Assignment(
+                slot=slot,
+                staff_id=item.get("staff_id"),
+                notes=item.get("notes") or [],
+            )
+        )
+
+    result = ScheduleResult(
+        assignments=assignments,
+        bleach_cursor=int(data.get("bleach_cursor") or 0),
+        total_penalty=float(data.get("total_penalty") or 0.0),
+        stats=data.get("stats") or {},
+        seed=data.get("winning_seed"),
+    )
+    return result, staff_map
+
+
 @router.get("/configs")
 def list_configs(payload: dict = Depends(require_auth)) -> List[str]:
     owner = _config_owner(payload)
@@ -554,6 +616,26 @@ def export_schedule_csv(payload: dict = Depends(require_auth)):
         content=buf.getvalue(),
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="schedule.csv"'},
+    )
+
+
+@router.get("/schedule/export/excel")
+def export_schedule_excel(payload: dict = Depends(require_auth)):
+    data = _latest_schedule_for(payload)
+    if not data or not data.get("assignments"):
+        raise HTTPException(status_code=404, detail="No saved schedule")
+    result, staff = _hydrate_schedule_result(data)
+    excel_bytes = export_schedule_to_excel(
+        result,
+        staff,
+        export_roles=data.get("export_roles"),
+    )
+    clinic_name = data.get("clinic_name") or "schedule"
+    filename = f"{_slugify(clinic_name)}-schedule.xlsx"
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
