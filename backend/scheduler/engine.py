@@ -366,8 +366,6 @@ def generate_schedule(
                     break
             if chosen is None:
                 note = "Bleach rotation unavailable"
-                if cfg.bleach_rotation:
-                    bleach_cursor = (bleach_cursor + 1) % len(cfg.bleach_rotation)
 
         if chosen is None and candidates and not slot.is_bleach:
             scored: List[Tuple[float, float, StaffMember, _StaffState]] = []
