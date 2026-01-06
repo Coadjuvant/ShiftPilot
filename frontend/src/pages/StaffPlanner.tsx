@@ -1335,7 +1335,7 @@ export default function StaffPlanner() {
                 setRunResult(
                   `Winning seed: ${res.winning_seed ?? "n/a"} | Score: ${
                     res.total_penalty?.toFixed ? res.total_penalty.toFixed(2) : res.total_penalty ?? "n/a"
-                  } | Next bleach cursor: ${res.bleach_cursor} | Assignments: ${res.assignments.length}`
+                  } | Next bleach in rotation: ${res.bleach_cursor} | Assignments: ${res.assignments.length}`
                 );
                 setStatus("Schedule generated.");
                 try {
@@ -1580,7 +1580,7 @@ export default function StaffPlanner() {
               </select>
             </label>
             <label>
-              Bleach cursor
+              Bleach rotation position
               <input
                 type="number"
                 min={0}
