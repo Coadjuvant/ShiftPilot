@@ -1526,19 +1526,6 @@ export default function StaffPlanner() {
                     }
                     return acc;
                   }, []);
-                  const notesByDate = assignments.reduce<Record<string, Set<string>>>((acc, a) => {
-                    if (!a.notes || !a.notes.length) return acc;
-                    acc[a.date] = acc[a.date] || new Set();
-                    a.notes.forEach((note) => acc[a.date].add(note));
-                    return acc;
-                  }, {});
-                  const noteRows = Object.entries(notesByDate)
-                    .map(([date, notes]) => ({
-                      date,
-                      label: dateLabelMap[date] || date,
-                      notes: Array.from(notes).join("; ")
-                    }))
-                    .sort((a, b) => a.date.localeCompare(b.date));
                   if (!hasMatrix) return null;
                   return (
                     <div style={{ marginTop: "1rem" }}>
@@ -1585,27 +1572,6 @@ export default function StaffPlanner() {
                         </div>
                       );
                       })}
-                      {noteRows.length > 0 && (
-                        <div style={{ marginTop: "1rem" }}>
-                          <h5 style={{ margin: "0 0 0.5rem 0" }}>Coverage Notes</h5>
-                          <table cellPadding={6} style={{ minWidth: "400px", borderCollapse: "collapse", fontSize: "0.9rem" }}>
-                            <thead>
-                              <tr>
-                                <th>Date</th>
-                                <th>Notes</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {noteRows.map((row) => (
-                                <tr key={`note-${row.date}`}>
-                                  <td>{row.label}</td>
-                                  <td>{row.notes}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
                     </div>
                   );
                 })()}
