@@ -31,7 +31,7 @@ from backend.scheduler import (
     export_schedule_to_excel,
     run_tournament,
 )
-from backend.scheduler.model import DAYS, Assignment, ScheduleResult, ScheduleSlot
+from backend.scheduler.model import DAYS, Assignment, ScheduleResult, ScheduleSlot, PTOEntry
 from backend.auth_db import (
     init_db,
     create_invite,
@@ -404,6 +404,13 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
             "bleach_cursor": result.bleach_cursor,
             "export_roles": request.export_roles,
             "tournament_trials": request.tournament_trials,
+            "pto": [
+                {
+                    "staff_id": item.staff_id,
+                    "date": item.date.isoformat() if hasattr(item.date, "isoformat") else item.date,
+                }
+                for item in request.pto
+            ],
             "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
         # ensure fully serializable before persisting
@@ -534,6 +541,21 @@ def _hydrate_schedule_result(data: dict) -> tuple[ScheduleResult, dict[str, Staf
     return result, staff_map
 
 
+def _hydrate_pto_entries(data: dict) -> List[PTOEntry]:
+    entries: List[PTOEntry] = []
+    for entry in data.get("pto", []) or []:
+        if isinstance(entry, dict):
+            staff_id = entry.get("staff_id")
+            date_val = entry.get("date")
+        else:
+            staff_id = getattr(entry, "staff_id", None)
+            date_val = getattr(entry, "date", None)
+        if not staff_id or not date_val:
+            continue
+        entries.append(PTOEntry(staff_id=staff_id, date=_parse_schedule_date(date_val)))
+    return entries
+
+
 @router.get("/configs")
 def list_configs(payload: dict = Depends(require_auth)) -> List[str]:
     owner = _config_owner(payload)
@@ -625,10 +647,12 @@ def export_schedule_excel(payload: dict = Depends(require_auth)):
     if not data or not data.get("assignments"):
         raise HTTPException(status_code=404, detail="No saved schedule")
     result, staff = _hydrate_schedule_result(data)
+    pto_entries = _hydrate_pto_entries(data)
     excel_bytes = export_schedule_to_excel(
         result,
         staff,
         export_roles=data.get("export_roles"),
+        pto_entries=pto_entries,
     )
     clinic_name = data.get("clinic_name") or "schedule"
     filename = f"{_slugify(clinic_name)}-schedule.xlsx"
