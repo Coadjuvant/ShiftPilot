@@ -8,6 +8,7 @@ import api, {
   deleteUser,
   exportScheduleCsv,
   exportScheduleExcel,
+  fetchLatestSchedule,
   fetchHealth,
   listAudit,
   listConfigs,
@@ -113,6 +114,37 @@ export default function StaffPlanner() {
       setStatus(status === 404 ? "No saved schedule to download." : friendlyError(err, "Download failed."));
     }
   };
+  const loadLatestSavedSchedule = async () => {
+    try {
+      const data = await fetchLatestSchedule();
+      if ((data as any)?.status === "none" || !data?.assignments?.length) {
+        setStatus("No saved schedule found.");
+        return;
+      }
+      setAssignments(data.assignments);
+      setStats(data.stats || {});
+      if (Array.isArray(data.export_roles) && data.export_roles.length) {
+        setExportRoles(data.export_roles);
+      }
+      if (Array.isArray(data.staff) && data.staff.length) {
+        const map = data.staff.reduce<Record<string, string>>((acc, staff) => {
+          if (staff.id) acc[staff.id] = staff.name || staff.id;
+          return acc;
+        }, {});
+        setScheduleStaffMap(map);
+      } else {
+        setScheduleStaffMap(null);
+      }
+      if (data.generated_at) {
+        setRunResult(`Loaded saved schedule (Generated ${formatDateTime(data.generated_at)})`);
+      } else {
+        setRunResult("Loaded saved schedule.");
+      }
+      setStatus("Loaded latest saved schedule.");
+    } catch (err: any) {
+      setStatus(friendlyError(err, "Failed to load latest schedule."));
+    }
+  };
 
   const [status, setStatus] = useState<string>("Checking API...");
   const [activeTab, setActiveTab] = useState<"staff" | "avail" | "prefs" | "demand" | "pto" | "run" | "bleach" | "admin">("staff");
@@ -206,6 +238,7 @@ export default function StaffPlanner() {
   const [currentUser, setCurrentUser] = useState<string>("");
   const [auditFeed, setAuditFeed] = useState<AuditEntry[]>([]);
   const [lastError, setLastError] = useState<string>("");
+  const [scheduleStaffMap, setScheduleStaffMap] = useState<Record<string, string> | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [progress, setProgress] = useState<number>(0);
   const [autoLoadedConfig, setAutoLoadedConfig] = useState<boolean>(false);
@@ -219,6 +252,10 @@ export default function StaffPlanner() {
     if (row.id) acc[row.id] = row.name?.trim() ? row.name : "(no name set)";
     return acc;
   }, {});
+  const displayStaffMap = {
+    ...staffNameMap,
+    ...(scheduleStaffMap || {})
+  };
   const availableBleachIds = uniqueStaffIds.filter((sid) => !bleachRotation.includes(sid));
   const userNameMap = users.reduce<Record<number, string>>((acc, u) => {
     acc[u.id] = u.username;
@@ -273,6 +310,7 @@ export default function StaffPlanner() {
     setBleachCursor(0);
     setBleachRotation([]);
     setBleachFrequency("weekly");
+    setScheduleStaffMap(null);
     setTrials(20);
     setExportRoles(["Tech", "RN", "Admin"]);
     setEnforceThree(true);
@@ -1317,11 +1355,15 @@ export default function StaffPlanner() {
                   export_roles: exportRoles
                 };
                 const res = await runSchedule(payload);
-                setAssignments(res.assignments);
-                setStats(res.stats);
-                setWinningSeed(res.winning_seed ?? null);
-                setWinningScore(typeof res.total_penalty === "number" ? res.total_penalty : null);
-                setProgress(100);
+                  setAssignments(res.assignments);
+                  setStats(res.stats);
+                  setWinningSeed(res.winning_seed ?? null);
+                  setWinningScore(typeof res.total_penalty === "number" ? res.total_penalty : null);
+                  setScheduleStaffMap(null);
+                  if (typeof res.bleach_cursor === "number") {
+                    setBleachCursor(res.bleach_cursor);
+                  }
+                  setProgress(100);
                 if (res.excel) {
                   const blob = Uint8Array.from(window.atob(res.excel), (c) => c.charCodeAt(0));
                   const file = new Blob([blob], {
@@ -1409,23 +1451,26 @@ export default function StaffPlanner() {
             </div>
           ) : null}
           {runResult && <p style={{ marginTop: "0.75rem" }}>{runResult}</p>}
-          {isAuthed && (
-            <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              <button className="primary-btn" onClick={downloadSavedSchedule}>
-                Download Latest Schedule
-              </button>
-              <button className="secondary-btn" onClick={downloadSavedScheduleCsv}>
-                Download CSV
-              </button>
-            </div>
-          )}
+            {isAuthed && (
+              <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <button className="primary-btn" onClick={downloadSavedSchedule}>
+                  Download Latest Schedule
+                </button>
+                <button className="secondary-btn" onClick={downloadSavedScheduleCsv}>
+                  Download CSV
+                </button>
+                <button className="secondary-btn" onClick={loadLatestSavedSchedule}>
+                  Load Latest Schedule
+                </button>
+              </div>
+            )}
           {assignments.length > 0 && (
             <div style={{ marginTop: "1rem", overflowX: "auto" }}>
               {(() => {
                 const uniqueDates = Array.from(new Set(assignments.map((a) => a.date))).sort();
                 const exportRoleSet = new Set(exportRoles.map((role) => role.toLowerCase()));
                 const matrixAssignments = assignments.filter((a) => exportRoleSet.has((a.role || "").toLowerCase()));
-                const knownStaffIds = new Set(Object.keys(staffNameMap));
+                  const knownStaffIds = new Set(Object.keys(displayStaffMap));
                 const dateDayMap = uniqueDates.reduce<Record<string, string>>((acc, d) => {
                   const found = assignments.find((a) => a.date === d);
                   acc[d] = found?.day_name || "";
@@ -1472,19 +1517,32 @@ export default function StaffPlanner() {
                   acc[a.staff_id][a.date] = label;
                   return acc;
                 }, {});
-                const hasMatrix = uniqueDates.length > 0;
-                const columns = uniqueDates.reduce<Array<{ key: string; date?: string; label?: string; isSeparator?: boolean }>>((acc, d) => {
-                  acc.push({ key: d, date: d, label: dateLabelMap[d] });
-                  const day = dateDayMap[d];
-                  if (day && day.toLowerCase().startsWith("sat")) {
-                    acc.push({ key: `${d}-sep`, isSeparator: true });
-                  }
-                  return acc;
-                }, []);
-                if (!hasMatrix) return null;
-                return (
-                  <div style={{ marginTop: "1rem" }}>
-                    <h4>Schedule Matrix</h4>
+                  const hasMatrix = uniqueDates.length > 0;
+                  const columns = uniqueDates.reduce<Array<{ key: string; date?: string; label?: string; isSeparator?: boolean }>>((acc, d) => {
+                    acc.push({ key: d, date: d, label: dateLabelMap[d] });
+                    const day = dateDayMap[d];
+                    if (day && day.toLowerCase().startsWith("sat")) {
+                      acc.push({ key: `${d}-sep`, isSeparator: true });
+                    }
+                    return acc;
+                  }, []);
+                  const notesByDate = assignments.reduce<Record<string, Set<string>>>((acc, a) => {
+                    if (!a.notes || !a.notes.length) return acc;
+                    acc[a.date] = acc[a.date] || new Set();
+                    a.notes.forEach((note) => acc[a.date].add(note));
+                    return acc;
+                  }, {});
+                  const noteRows = Object.entries(notesByDate)
+                    .map(([date, notes]) => ({
+                      date,
+                      label: dateLabelMap[date] || date,
+                      notes: Array.from(notes).join("; ")
+                    }))
+                    .sort((a, b) => a.date.localeCompare(b.date));
+                  if (!hasMatrix) return null;
+                  return (
+                    <div style={{ marginTop: "1rem" }}>
+                      <h4>Schedule Matrix</h4>
                     {["Tech", "RN", "Admin"].map((role) => {
                       const staffIds = staffIdsByRole[role] || [];
                       if (!staffIds.length) return null;
@@ -1510,7 +1568,7 @@ export default function StaffPlanner() {
                             <tbody>
                               {staffIds.map((sid) => (
                                 <tr key={`${role}-${sid}`}>
-                            <td>{staffNameMap[sid] || sid}</td>
+                      <td>{displayStaffMap[sid] || sid}</td>
                             {columns.map((col) =>
                               col.isSeparator ? (
                                 <td key={`${sid}-${col.key}`} className="matrix-sep" aria-hidden="true" />
@@ -1526,11 +1584,32 @@ export default function StaffPlanner() {
                           </table>
                         </div>
                       );
-                    })}
-                  </div>
-                );
-              })()}
-            </div>
+                      })}
+                      {noteRows.length > 0 && (
+                        <div style={{ marginTop: "1rem" }}>
+                          <h5 style={{ margin: "0 0 0.5rem 0" }}>Coverage Notes</h5>
+                          <table cellPadding={6} style={{ minWidth: "400px", borderCollapse: "collapse", fontSize: "0.9rem" }}>
+                            <thead>
+                              <tr>
+                                <th>Date</th>
+                                <th>Notes</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {noteRows.map((row) => (
+                                <tr key={`note-${row.date}`}>
+                                  <td>{row.label}</td>
+                                  <td>{row.notes}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
           )}
           {stats && Object.keys(stats).length > 0 && (
             <div style={{ marginTop: "1rem" }}>
@@ -1545,7 +1624,7 @@ export default function StaffPlanner() {
                 <tbody>
                   {Object.entries(stats).map(([k, v]) => (
                     <tr key={k}>
-                      <td>{staffNameMap[k] || k}</td>
+                        <td>{displayStaffMap[k] || k}</td>
                       <td>{v}</td>
                     </tr>
                   ))}
