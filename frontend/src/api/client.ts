@@ -237,6 +237,11 @@ export const exportScheduleCsv = async () => {
   return data;
 };
 
+export const exportScheduleExcel = async () => {
+  const { data } = await api.get<Blob>("schedule/export/excel", { responseType: "blob" });
+  return data;
+};
+
 export default api;
 
 export const login = async (username: string, password: string): Promise<{ token: string }> => {

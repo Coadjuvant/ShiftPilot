@@ -244,6 +244,18 @@ export default function Landing() {
     return hasDeficit ? "Needs attention" : "Fully staffed";
   }, [currentWeek]);
 
+  const scheduleAuditLine = useMemo(() => {
+    if (!latestSchedule) return "";
+    const parts: string[] = [];
+    if (latestSchedule.clinic_name) parts.push(`Config: ${latestSchedule.clinic_name}`);
+    if (typeof latestSchedule.weeks === "number") parts.push(`Weeks: ${latestSchedule.weeks}`);
+    if (typeof latestSchedule.tournament_trials === "number") parts.push(`Trials: ${latestSchedule.tournament_trials}`);
+    if (latestSchedule.winning_seed !== undefined && latestSchedule.winning_seed !== null) {
+      parts.push(`Seed: ${latestSchedule.winning_seed}`);
+    }
+    return parts.join(" • ");
+  }, [latestSchedule]);
+
   return (
     <>
       <section className="hero-grid">
@@ -376,8 +388,13 @@ export default function Landing() {
               })}
             </div>
           )}
-              {latestSchedule?.generated_at ? (
-                <div className="schedule-meta">Generated {formatGeneratedAt(latestSchedule.generated_at)}</div>
+              {latestSchedule && (latestSchedule.generated_at || scheduleAuditLine) ? (
+                <div className="schedule-meta">
+                  {latestSchedule.generated_at ? (
+                    <div>Generated {formatGeneratedAt(latestSchedule.generated_at)}</div>
+                  ) : null}
+                  {scheduleAuditLine ? <div className="schedule-meta-row">{scheduleAuditLine}</div> : null}
+                </div>
               ) : null}
               <div className="schedule-foot">
                 <div className="pill muted-pill">Soft constraints honored</div>
