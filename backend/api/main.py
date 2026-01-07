@@ -94,10 +94,34 @@ _login_lockouts: dict[str, float] = {}
 
 
 def _client_ip(request: Request) -> str:
-    header = request.headers.get("CF-Connecting-IP") or request.headers.get("X-Forwarded-For")
+    header = request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for")
     if header:
         return header.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
+
+
+def _client_location(request: Request) -> str:
+    headers = request.headers
+    city = headers.get("cf-ipcity") or headers.get("cf-city") or headers.get("x-geo-city")
+    region = headers.get("cf-region") or headers.get("cf-region-code") or headers.get("x-geo-region")
+    country = headers.get("cf-ipcountry") or headers.get("x-geo-country")
+    if city and region:
+        return f"{city}, {region}"
+    if city and country:
+        return f"{city}, {country}"
+    if region and country:
+        return f"{region}, {country}"
+    if country:
+        return country
+    return ""
+
+
+def _request_meta(request: Request) -> tuple[str, str, str]:
+    return (
+        _client_ip(request),
+        request.headers.get("user-agent", ""),
+        _client_location(request),
+    )
 
 
 def rate_limit(key: str, *, limit: int, window_seconds: int):
@@ -278,7 +302,9 @@ def login(request: Request, creds: LoginRequest) -> LoginResponse:
         raise HTTPException(status_code=429, detail="Too many failed login attempts")
     user = validate_login(creds.username, creds.password)
     if not user:
-        log_event(None, "login_fail", "invalid_credentials", request.client.host if request.client else "", request.headers.get("user-agent", ""))
+        ip, user_agent, location = _request_meta(request)
+        detail = f"username={creds.username};result=fail;reason=invalid_credentials"
+        log_event(None, "login_fail", detail, ip, user_agent, location)
         _record_login_failure(lock_key)
         raise HTTPException(status_code=401, detail="Invalid credentials or license")
     _clear_login_failures(lock_key)
@@ -291,24 +317,28 @@ def login(request: Request, creds: LoginRequest) -> LoginResponse:
         "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS),
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
-    log_event(user["id"], "login_success", "", request.client.host if request.client else "", request.headers.get("user-agent", ""))
+    ip, user_agent, location = _request_meta(request)
+    detail = f"username={user['username']};method=password"
+    log_event(user["id"], "login_success", detail, ip, user_agent, location)
     return _token_response(token)
 
 
 @router.post("/auth/invite", response_model=LoginResponse, dependencies=[Depends(require_admin)])
-def invite_user(req: InviteRequest, payload: dict = Depends(require_admin)) -> dict:
+def invite_user(request: Request, req: InviteRequest, payload: dict = Depends(require_admin)) -> dict:
     creator = payload.get("sub")
     try:
         creator_id = int(creator) if creator is not None else None
     except Exception:
         creator_id = None
     token = create_invite(req.username, req.license_key, role=req.role or "user", created_by=creator_id)
+    ip, user_agent, location = _request_meta(request)
     log_event(
         creator_id,
         "invite_created",
         f"username={req.username or ''};token={token}",
-        "",
-        "",
+        ip,
+        user_agent,
+        location,
     )
     return {"token": token}
 
@@ -334,7 +364,8 @@ def setup_user(request: Request, body: SetupRequest) -> LoginResponse:
         "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS),
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
-    log_event(user["id"], "login_success", "invite_setup", request.client.host if request.client else "", request.headers.get("user-agent", ""))
+    ip, user_agent, location = _request_meta(request)
+    log_event(user["id"], "login_success", "invite_setup", ip, user_agent, location)
     return _token_response(token)
 
 
@@ -349,43 +380,56 @@ def list_users_admin():
 
 
 @router.delete("/auth/users/{user_id}", dependencies=[Depends(require_admin)])
-def delete_user_admin(user_id: int):
+def delete_user_admin(request: Request, user_id: int):
     try:
         delete_user(user_id)
         # log after deletion without FK reference
-        log_event(None, "user_deleted", f"user_id={user_id}", "", "")
+        ip, user_agent, location = _request_meta(request)
+        log_event(None, "user_deleted", f"user_id={user_id}", ip, user_agent, location)
         return {"status": "deleted", "id": user_id}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/auth/invite/revoke", dependencies=[Depends(require_admin)])
-def revoke_invite_admin(req: InviteRequest):
+def revoke_invite_admin(request: Request, req: InviteRequest):
     revoke_invite(req.username)
-    log_event(None, "invite_revoked", f"username={req.username}", "", "")
+    ip, user_agent, location = _request_meta(request)
+    log_event(None, "invite_revoked", f"username={req.username}", ip, user_agent, location)
     return {"status": "revoked", "username": req.username}
 
 
 @router.get("/auth/audit", dependencies=[Depends(require_admin)])
-def audit_feed(limit: int = 50):
-    return list_audit(limit=limit)
+def audit_feed(
+    limit: int = 50,
+    event: str | None = None,
+    user_id: int | None = None,
+    search: str | None = None,
+):
+    return list_audit(limit=limit, event=event, user_id=user_id, search=search)
 
 
 @router.post("/auth/users/{user_id}/role", dependencies=[Depends(require_admin)])
-def update_user_role(user_id: int, body: dict | None = None, payload: dict = Depends(require_auth)):
+def update_user_role(
+    request: Request,
+    user_id: int,
+    body: dict | None = None,
+    payload: dict = Depends(require_auth),
+):
     role = body.get("role") if body else None
     if not role:
         raise HTTPException(status_code=400, detail="Role required")
     try:
         update_role(user_id, role)
-        log_event(payload.get("sub"), "role_updated", f"user_id={user_id}, role={role}", "", "")
+        ip, user_agent, location = _request_meta(request)
+        log_event(payload.get("sub"), "role_updated", f"user_id={user_id}, role={role}", ip, user_agent, location)
         return {"status": "ok", "id": user_id, "role": role}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/auth/users/{user_id}/reset", dependencies=[Depends(require_admin)])
-def reset_user_invite(user_id: int, payload: dict = Depends(require_auth)):
+def reset_user_invite(request: Request, user_id: int, payload: dict = Depends(require_auth)):
     creator = payload.get("sub")
     try:
         creator_id = int(creator) if creator is not None else None
@@ -393,7 +437,8 @@ def reset_user_invite(user_id: int, payload: dict = Depends(require_auth)):
         creator_id = None
     try:
         token = reset_invite(user_id, created_by=creator_id)
-        log_event(creator_id, "reset_invite", f"user_id={user_id}", "", "")
+        ip, user_agent, location = _request_meta(request)
+        log_event(creator_id, "reset_invite", f"user_id={user_id}", ip, user_agent, location)
         return {"token": token}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -530,6 +575,22 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
         safe_payload = _json.loads(_json.dumps(schedule_payload, default=str))
         for owner in owners:
             persist_schedule(owner, safe_payload)
+        open_slots = sum(
+            1
+            for assignment in assignments
+            if assignment.staff_id is None or str(assignment.staff_id).upper() == "OPEN"
+        )
+        start_label = (
+            request.config.start_date.isoformat()
+            if hasattr(request.config.start_date, "isoformat")
+            else str(request.config.start_date)
+        )
+        detail = (
+            f"clinic={request.config.clinic_name};start={start_label};weeks={request.config.weeks};"
+            f"bleach={request.config.bleach_frequency or 'weekly'};seed={winning_seed};open_slots={open_slots}"
+        )
+        ip, user_agent, location = _request_meta(request)
+        log_event(payload.get("sub"), "schedule_run", detail, ip, user_agent, location)
         return ScheduleResponse(
             bleach_cursor=result.bleach_cursor,
             winning_seed=winning_seed,
@@ -702,15 +763,27 @@ def load_config(filename: str, payload: dict = Depends(require_auth)) -> ConfigP
 
 
 @router.post("/configs/save")
-def save_config(request: SaveConfigRequest, payload: dict = Depends(require_auth)) -> dict:
+def save_config(request: Request, body: SaveConfigRequest, payload: dict = Depends(require_auth)) -> dict:
     owner = _config_owner(payload)
-    filename = request.filename.strip() if request.filename else ""
+    filename = body.filename.strip() if body.filename else ""
     if not filename:
-        filename = f"{_slugify(request.payload.clinic.name)}.json"
+        filename = f"{_slugify(body.payload.clinic.name)}.json"
     if not filename.endswith(".json"):
         filename += ".json"
     try:
-        save_user_config(owner, Path(filename).name, request.payload.dict())
+        payload_dict = body.payload.dict()
+        safe_name = Path(filename).name
+        save_user_config(owner, safe_name, payload_dict)
+        size_kb = round(len(json.dumps(payload_dict, default=str)) / 1024, 1)
+        ip, user_agent, location = _request_meta(request)
+        log_event(
+            payload.get("sub"),
+            "config_save",
+            f"config={safe_name};size_kb={size_kb}",
+            ip,
+            user_agent,
+            location,
+        )
         return {"status": "saved", "filename": filename}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=_safe_error("Failed to save config", exc)) from exc
@@ -728,7 +801,7 @@ def latest_schedule(response: Response, payload: dict = Depends(require_auth)) -
 
 
 @router.get("/schedule/export/csv")
-def export_schedule_csv(payload: dict = Depends(require_auth)):
+def export_schedule_csv(request: Request, payload: dict = Depends(require_auth)):
     data = _latest_schedule_for(payload)
     if not data or not data.get("assignments"):
         raise HTTPException(status_code=404, detail="No saved schedule")
@@ -763,6 +836,15 @@ def export_schedule_csv(payload: dict = Depends(require_auth)):
     clinic_name = data.get("clinic_name") or "schedule"
     range_label = _schedule_date_range(data)
     filename = f"{_slugify(clinic_name)}-{range_label}.csv" if range_label else f"{_slugify(clinic_name)}.csv"
+    ip, user_agent, location = _request_meta(request)
+    log_event(
+        payload.get("sub"),
+        "schedule_export",
+        f"format=csv;clinic={clinic_name};range={range_label or 'unknown'}",
+        ip,
+        user_agent,
+        location,
+    )
     return PlainTextResponse(
         content=buf.getvalue(),
         media_type="text/csv",
@@ -771,7 +853,7 @@ def export_schedule_csv(payload: dict = Depends(require_auth)):
 
 
 @router.get("/schedule/export/excel")
-def export_schedule_excel(payload: dict = Depends(require_auth)):
+def export_schedule_excel(request: Request, payload: dict = Depends(require_auth)):
     data = _latest_schedule_for(payload)
     if not data or not data.get("assignments"):
         raise HTTPException(status_code=404, detail="No saved schedule")
@@ -787,6 +869,15 @@ def export_schedule_excel(payload: dict = Depends(require_auth)):
     range_label = _schedule_date_range(data)
     filename = (
         f"{_slugify(clinic_name)}-{range_label}.xlsx" if range_label else f"{_slugify(clinic_name)}.xlsx"
+    )
+    ip, user_agent, location = _request_meta(request)
+    log_event(
+        payload.get("sub"),
+        "schedule_export",
+        f"format=excel;clinic={clinic_name};range={range_label or 'unknown'}",
+        ip,
+        user_agent,
+        location,
     )
     return Response(
         content=excel_bytes,
@@ -850,28 +941,51 @@ async def import_schedule_csv(request: Request, payload: dict = Depends(require_
         "generated_at": datetime.utcnow().isoformat(),
     }
     persist_schedule(owner, snapshot)
+    ip, user_agent, location = _request_meta(request)
+    log_event(
+        payload.get("sub"),
+        "schedule_import",
+        f"format=csv;rows={len(assignments)}",
+        ip,
+        user_agent,
+        location,
+    )
     return {"status": "imported", "assignments": len(assignments)}
 
 
 @router.get("/configs/export/{filename}")
-def export_config(filename: str, payload: dict = Depends(require_auth)) -> dict:
+def export_config(request: Request, filename: str, payload: dict = Depends(require_auth)) -> dict:
     owner = _config_owner(payload)
     safe_name = Path(filename).name
     data = export_user_config(owner, safe_name)
     if data is None:
         raise HTTPException(status_code=404, detail="Config not found")
     encoded = base64.b64encode(json.dumps(data, default=str).encode("utf-8")).decode("utf-8")
+    ip, user_agent, location = _request_meta(request)
+    log_event(payload.get("sub"), "config_export", f"config={safe_name}", ip, user_agent, location)
     return {"filename": safe_name, "payload": data, "encoded": encoded}
 
 
 @router.post("/configs/import")
-def import_config(request: SaveConfigRequest, payload: dict = Depends(require_auth)) -> dict:
+def import_config(request: Request, body: SaveConfigRequest, payload: dict = Depends(require_auth)) -> dict:
     owner = _config_owner(payload)
-    filename = request.filename.strip() if request.filename else ""
+    filename = body.filename.strip() if body.filename else ""
     if not filename:
-        filename = f"{_slugify(request.payload.clinic.name)}.config"
+        filename = f"{_slugify(body.payload.clinic.name)}.config"
     try:
-        import_user_config(owner, Path(filename).name, request.payload.dict())
+        safe_name = Path(filename).name
+        payload_dict = body.payload.dict()
+        import_user_config(owner, safe_name, payload_dict)
+        size_kb = round(len(json.dumps(payload_dict, default=str)) / 1024, 1)
+        ip, user_agent, location = _request_meta(request)
+        log_event(
+            payload.get("sub"),
+            "config_import",
+            f"config={safe_name};size_kb={size_kb}",
+            ip,
+            user_agent,
+            location,
+        )
         return {"status": "imported", "filename": filename}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=_safe_error("Failed to import config", exc)) from exc

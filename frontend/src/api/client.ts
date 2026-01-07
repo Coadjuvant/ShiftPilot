@@ -97,7 +97,15 @@ export interface AuditEntry {
   detail: string;
   ip: string;
   user_agent: string;
+  location?: string;
   created_at: string;
+}
+
+export interface AuditFilters {
+  limit?: number;
+  event?: string;
+  user_id?: number;
+  search?: string;
 }
 
 export interface ScheduleRequest {
@@ -278,8 +286,14 @@ export const revokeInvite = async (req: InviteRequest): Promise<{ status: string
   return data;
 };
 
-export const listAudit = async (limit = 50): Promise<AuditEntry[]> => {
-  const { data } = await api.get<AuditEntry[]>(`auth/audit?limit=${limit}`);
+export const listAudit = async (filters: AuditFilters = {}): Promise<AuditEntry[]> => {
+  const params = new URLSearchParams();
+  if (filters.limit != null) params.set("limit", String(filters.limit));
+  if (filters.event) params.set("event", filters.event);
+  if (filters.user_id != null) params.set("user_id", String(filters.user_id));
+  if (filters.search) params.set("search", filters.search);
+  const qs = params.toString();
+  const { data } = await api.get<AuditEntry[]>(`auth/audit${qs ? `?${qs}` : ""}`);
   return data;
 };
 
