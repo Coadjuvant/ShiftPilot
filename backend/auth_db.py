@@ -137,11 +137,13 @@ class PostgresAuth:
                 detail TEXT,
                 ip TEXT,
                 user_agent TEXT,
+                location TEXT,
                 created_at TIMESTAMPTZ,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
             );
             """
         )
+        cur.execute("ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS location TEXT;")
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS configs (
@@ -454,29 +456,59 @@ class PostgresAuth:
         conn.commit()
         conn.close()
 
-    def log_event(self, user_id: Optional[int], event: str, detail: str, ip: str = "", user_agent: str = ""):
+    def log_event(
+        self,
+        user_id: Optional[int],
+        event: str,
+        detail: str,
+        ip: str = "",
+        user_agent: str = "",
+        location: str = "",
+    ):
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO audit_log (user_id, event, detail, ip, user_agent, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO audit_log (user_id, event, detail, ip, user_agent, location, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            (user_id, event, detail, ip, user_agent, datetime.utcnow()),
+            (user_id, event, detail, ip, user_agent, location, datetime.utcnow()),
         )
         conn.commit()
         conn.close()
 
-    def list_audit(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def list_audit(
+        self,
+        limit: int = 50,
+        event: Optional[str] = None,
+        user_id: Optional[int] = None,
+        search: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor()
-        cur.execute(
-            "SELECT id, user_id, event, detail, ip, user_agent, created_at FROM audit_log ORDER BY id DESC LIMIT %s",
-            (limit,),
-        )
+        query = "SELECT id, user_id, event, detail, ip, user_agent, location, created_at FROM audit_log"
+        clauses = []
+        params: list = []
+        if event:
+            clauses.append("event = %s")
+            params.append(event)
+        if user_id is not None:
+            clauses.append("user_id = %s")
+            params.append(user_id)
+        if search:
+            clauses.append(
+                "(event ILIKE %s OR detail ILIKE %s OR ip ILIKE %s OR user_agent ILIKE %s OR location ILIKE %s)"
+            )
+            term = f"%{search}%"
+            params.extend([term, term, term, term, term])
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY id DESC LIMIT %s"
+        params.append(limit)
+        cur.execute(query, tuple(params))
         rows = cur.fetchall()
         conn.close()
-        keys = ["id", "user_id", "event", "detail", "ip", "user_agent", "created_at"]
+        keys = ["id", "user_id", "event", "detail", "ip", "user_agent", "location", "created_at"]
         return [dict(zip(keys, r)) for r in rows]
 
     # --- configs ---
@@ -678,7 +710,15 @@ class JsonAuth:
         data["users"] = users
         _save_json(data)
 
-    def log_event(self, user_id: Optional[int], event: str, detail: str, ip: str = "", user_agent: str = ""):
+    def log_event(
+        self,
+        user_id: Optional[int],
+        event: str,
+        detail: str,
+        ip: str = "",
+        user_agent: str = "",
+        location: str = "",
+    ):
         data = _load_json()
         audit = data.get("audit", [])
         audit.append(
@@ -689,16 +729,39 @@ class JsonAuth:
                 "detail": detail,
                 "ip": ip,
                 "user_agent": user_agent,
+                "location": location,
                 "created_at": _now(),
             }
         )
         data["audit"] = audit
         _save_json(data)
 
-    def list_audit(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def list_audit(
+        self,
+        limit: int = 50,
+        event: Optional[str] = None,
+        user_id: Optional[int] = None,
+        search: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         data = _load_json()
         audit = data.get("audit", [])
-        return list(reversed(audit))[:limit]
+        entries = list(reversed(audit))
+        if event:
+            entries = [row for row in entries if row.get("event") == event]
+        if user_id is not None:
+            entries = [row for row in entries if row.get("user_id") == user_id]
+        if search:
+            term = search.lower()
+            entries = [
+                row
+                for row in entries
+                if term in (row.get("event") or "").lower()
+                or term in (row.get("detail") or "").lower()
+                or term in (row.get("ip") or "").lower()
+                or term in (row.get("user_agent") or "").lower()
+                or term in (row.get("location") or "").lower()
+            ]
+        return entries[:limit]
 
     # --- configs ---
     def list_configs(self, owner: str) -> List[str]:
@@ -851,8 +914,15 @@ def update_last_login(user_id: int):
     return _backend.update_last_login(user_id)
 
 
-def log_event(user_id: Optional[int], event: str, detail: str, ip: str = "", user_agent: str = ""):
-    return _backend.log_event(user_id, event, detail, ip, user_agent)
+def log_event(
+    user_id: Optional[int],
+    event: str,
+    detail: str,
+    ip: str = "",
+    user_agent: str = "",
+    location: str = "",
+):
+    return _backend.log_event(user_id, event, detail, ip, user_agent, location)
 
 
 def list_users() -> List[Dict[str, Any]]:
@@ -867,8 +937,13 @@ def revoke_invite(username: str):
     return _backend.revoke_invite(username)
 
 
-def list_audit(limit: int = 50) -> List[Dict[str, Any]]:
-    return _backend.list_audit(limit=limit)
+def list_audit(
+    limit: int = 50,
+    event: Optional[str] = None,
+    user_id: Optional[int] = None,
+    search: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    return _backend.list_audit(limit=limit, event=event, user_id=user_id, search=search)
 
 
 def update_role(user_id: int, role: str):

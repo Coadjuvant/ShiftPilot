@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api, {
   AuditEntry,
+  AuditFilters,
   ConfigPayload,
   SaveConfigRequest,
   SavedSchedule,
@@ -267,6 +268,10 @@ export default function StaffPlanner() {
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<string>("");
   const [auditFeed, setAuditFeed] = useState<AuditEntry[]>([]);
+  const [auditEvent, setAuditEvent] = useState<string>("");
+  const [auditUserId, setAuditUserId] = useState<string>("");
+  const [auditSearch, setAuditSearch] = useState<string>("");
+  const [auditLimit, setAuditLimit] = useState<number>(50);
   const [lastError, setLastError] = useState<string>("");
   const [scheduleStaffMap, setScheduleStaffMap] = useState<Record<string, string> | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -291,6 +296,21 @@ export default function StaffPlanner() {
     acc[u.id] = u.username;
     return acc;
   }, {});
+  const auditEventOptions = [
+    "login_success",
+    "login_fail",
+    "schedule_run",
+    "schedule_export",
+    "schedule_import",
+    "config_save",
+    "config_import",
+    "config_export",
+    "invite_created",
+    "invite_revoked",
+    "reset_invite",
+    "role_updated",
+    "user_deleted"
+  ];
   const scheduleEnd = (() => {
     const start = startDate ? new Date(startDate) : null;
     if (!start || Number.isNaN(start.getTime())) return "";
@@ -462,9 +482,16 @@ export default function StaffPlanner() {
       // ignore for now
     }
   };
-  const loadAudit = async () => {
+  const loadAudit = async (overrides: AuditFilters = {}) => {
     try {
-      const data = await listAudit(50);
+      const filters: AuditFilters = {
+        limit: auditLimit,
+        event: auditEvent || undefined,
+        user_id: auditUserId ? Number(auditUserId) : undefined,
+        search: auditSearch.trim() ? auditSearch.trim() : undefined,
+        ...overrides
+      };
+      const data = await listAudit(filters);
       setAuditFeed(data);
     } catch {
       /* ignore */
@@ -2008,17 +2035,85 @@ export default function StaffPlanner() {
           </div>
           <div>
             <h4>Recent activity</h4>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "0.75rem",
+                alignItems: "flex-end",
+                margin: "0.5rem 0 0.75rem"
+              }}
+            >
+              <label className="field" style={{ minWidth: "160px" }}>
+                <span className="muted small-note">Event</span>
+                <select value={auditEvent} onChange={(e) => setAuditEvent(e.target.value)}>
+                  <option value="">All events</option>
+                  {auditEventOptions.map((event) => (
+                    <option key={event} value={event}>
+                      {event}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field" style={{ minWidth: "160px" }}>
+                <span className="muted small-note">User</span>
+                <select value={auditUserId} onChange={(e) => setAuditUserId(e.target.value)}>
+                  <option value="">All users</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.username}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field" style={{ minWidth: "220px", flex: "1 1 220px" }}>
+                <span className="muted small-note">Search</span>
+                <input
+                  value={auditSearch}
+                  onChange={(e) => setAuditSearch(e.target.value)}
+                  placeholder="event, detail, IP, location"
+                />
+              </label>
+              <label className="field" style={{ width: "110px" }}>
+                <span className="muted small-note">Limit</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={auditLimit}
+                  onChange={(e) => setAuditLimit(Math.max(1, Number(e.target.value) || 1))}
+                />
+              </label>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button className="secondary-btn" onClick={() => loadAudit()}>
+                  Apply
+                </button>
+                <button
+                  className="secondary-btn"
+                  onClick={() => {
+                    setAuditEvent("");
+                    setAuditUserId("");
+                    setAuditSearch("");
+                    setAuditLimit(50);
+                    loadAudit({ limit: 50, event: undefined, user_id: undefined, search: undefined });
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
             {auditFeed.length === 0 ? (
               <p className="muted">No audit entries.</p>
             ) : (
               <div style={{ overflowX: "auto" }}>
-                <table cellPadding={6} style={{ minWidth: "720px", borderCollapse: "collapse", fontSize: "0.9rem" }}>
+                <table cellPadding={6} style={{ minWidth: "820px", borderCollapse: "collapse", fontSize: "0.9rem" }}>
                   <thead>
                     <tr>
                       <th>Time</th>
                       <th>Event</th>
                       <th>User ID</th>
                       <th>Detail</th>
+                      <th>Location</th>
                       <th>IP</th>
                     </tr>
                   </thead>
@@ -2029,6 +2124,7 @@ export default function StaffPlanner() {
                         <td>{a.event}</td>
                         <td>{a.user_id != null ? `${userNameMap[a.user_id] ?? a.user_id}` : "-"}</td>
                         <td>{a.detail || "-"}</td>
+                        <td>{a.location || "-"}</td>
                         <td>{a.ip || "-"}</td>
                       </tr>
                     ))}
