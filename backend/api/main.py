@@ -9,6 +9,8 @@ import os
 import csv
 import jwt
 from datetime import datetime, timedelta, timezone
+import time
+from collections import defaultdict, deque
 from fastapi import Request
 
 try:
@@ -19,12 +21,12 @@ except Exception:
     # dotenv is optional; ignore if not installed
     pass
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Response
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.scheduler import (
     ConstraintToggles,
     DailyRequirement,
-    PTOEntry,
     ScheduleConfig,
     StaffMember,
     StaffPreferences,
@@ -70,12 +72,87 @@ from .schemas import (
 
 
 JWT_SECRET = os.getenv("JWT_SECRET", os.getenv("API_KEY", "dev-secret"))
-JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "24"))
+JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "8"))
+APP_ENV = os.getenv("APP_ENV", "dev").lower()
+IS_PROD = APP_ENV == "prod"
+API_VERSION = os.getenv("API_VERSION", "1")
 ADMIN_USER = (os.getenv("ADMIN_USER", "admin") or "admin").strip()
 ADMIN_PASS = (os.getenv("ADMIN_PASS", "admin") or "admin").strip()
 
-app = FastAPI(title="Clinic Scheduler API", version="0.1.0")
+app = FastAPI(
+    title="Clinic Scheduler API",
+    version="0.1.0",
+    docs_url=None if IS_PROD else "/docs",
+    redoc_url=None if IS_PROD else "/redoc",
+    openapi_url=None if IS_PROD else "/openapi.json",
+)
 init_db()
+# Basic in-memory rate limiter (per IP, per endpoint).
+_rate_buckets: dict[str, deque] = defaultdict(deque)
+_login_failures: dict[str, deque] = defaultdict(deque)
+_login_lockouts: dict[str, float] = {}
+
+
+def _client_ip(request: Request) -> str:
+    header = request.headers.get("CF-Connecting-IP") or request.headers.get("X-Forwarded-For")
+    if header:
+        return header.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def rate_limit(key: str, *, limit: int, window_seconds: int):
+    async def _guard(request: Request):
+        now = time.time()
+        bucket_key = f"{key}:{_client_ip(request)}"
+        bucket = _rate_buckets[bucket_key]
+        while bucket and bucket[0] <= now - window_seconds:
+            bucket.popleft()
+        if len(bucket) >= limit:
+            raise HTTPException(status_code=429, detail="Too many requests")
+        bucket.append(now)
+    return _guard
+
+
+def _login_key(request: Request, username: str) -> str:
+    return f"{username.lower()}:{_client_ip(request)}"
+
+
+def _is_locked_out(key: str) -> bool:
+    until = _login_lockouts.get(key)
+    if not until:
+        return False
+    if until <= time.time():
+        _login_lockouts.pop(key, None)
+        return False
+    return True
+
+
+def _record_login_failure(key: str, *, limit: int = 5, window_seconds: int = 900, lockout_seconds: int = 900):
+    now = time.time()
+    bucket = _login_failures[key]
+    while bucket and bucket[0] <= now - window_seconds:
+        bucket.popleft()
+    bucket.append(now)
+    if len(bucket) >= limit:
+        _login_lockouts[key] = now + lockout_seconds
+
+
+def _clear_login_failures(key: str):
+    _login_failures.pop(key, None)
+    _login_lockouts.pop(key, None)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+    response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+    response.headers.setdefault("X-API-Version", API_VERSION)
+    response.headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'")
+    return response
 # seed default admin user if provided
 ensure_admin(
     os.getenv("ADMIN_USER", "admin"),
@@ -120,8 +197,12 @@ def require_auth(
     """
     expected_key = os.getenv("API_KEY")
     allow_public = not expected_key and not ADMIN_USER
+    token = None
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        token = request.cookies.get("auth_token")
+    if token:
         try:
             payload = _decode_jwt(token)
             return payload
@@ -173,12 +254,34 @@ def require_admin(payload: dict = Depends(require_auth)) -> dict:
     return payload
 
 
-@router.post("/auth/login", response_model=LoginResponse)
+def _token_response(token: str) -> JSONResponse:
+    response = JSONResponse(content={"token": token})
+    response.set_cookie(
+        "auth_token",
+        token,
+        httponly=True,
+        secure=IS_PROD,
+        samesite="strict",
+        max_age=JWT_EXPIRE_HOURS * 3600,
+    )
+    return response
+
+
+@router.post(
+    "/auth/login",
+    response_model=LoginResponse,
+    dependencies=[Depends(rate_limit("login", limit=10, window_seconds=60))],
+)
 def login(request: Request, creds: LoginRequest) -> LoginResponse:
+    lock_key = _login_key(request, creds.username)
+    if _is_locked_out(lock_key):
+        raise HTTPException(status_code=429, detail="Too many failed login attempts")
     user = validate_login(creds.username, creds.password)
     if not user:
         log_event(None, "login_fail", "invalid_credentials", request.client.host if request.client else "", request.headers.get("user-agent", ""))
+        _record_login_failure(lock_key)
         raise HTTPException(status_code=401, detail="Invalid credentials or license")
+    _clear_login_failures(lock_key)
     update_last_login(user["id"])
     payload = {
         "sub": str(user["id"]),
@@ -189,7 +292,7 @@ def login(request: Request, creds: LoginRequest) -> LoginResponse:
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
     log_event(user["id"], "login_success", "", request.client.host if request.client else "", request.headers.get("user-agent", ""))
-    return LoginResponse(token=token)
+    return _token_response(token)
 
 
 @router.post("/auth/invite", response_model=LoginResponse, dependencies=[Depends(require_admin)])
@@ -210,7 +313,11 @@ def invite_user(req: InviteRequest, payload: dict = Depends(require_admin)) -> d
     return {"token": token}
 
 
-@router.post("/auth/setup", response_model=LoginResponse)
+@router.post(
+    "/auth/setup",
+    response_model=LoginResponse,
+    dependencies=[Depends(rate_limit("setup", limit=5, window_seconds=60))],
+)
 def setup_user(request: Request, body: SetupRequest) -> LoginResponse:
     try:
         user = redeem_invite(body.invite_token, body.password, desired_username=body.username)
@@ -228,7 +335,7 @@ def setup_user(request: Request, body: SetupRequest) -> LoginResponse:
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
     log_event(user["id"], "login_success", "invite_setup", request.client.host if request.client else "", request.headers.get("user-agent", ""))
-    return LoginResponse(token=token)
+    return _token_response(token)
 
 
 @router.get("/auth/me", response_model=UserInfo, dependencies=[Depends(require_auth)])
@@ -292,7 +399,11 @@ def reset_user_invite(user_id: int, payload: dict = Depends(require_auth)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/schedule/run", response_model=ScheduleResponse, dependencies=[Depends(require_auth)])
+@router.post(
+    "/schedule/run",
+    response_model=ScheduleResponse,
+    dependencies=[Depends(require_auth), Depends(rate_limit("schedule_run", limit=8, window_seconds=60))],
+)
 def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)) -> ScheduleResponse:
     try:
         staff_members = [_to_staff_member(s) for s in request.staff]
@@ -428,7 +539,8 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
             excel=excel_b64,
         )
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        detail = str(exc) if not IS_PROD else "Invalid schedule request"
+        raise HTTPException(status_code=400, detail=detail) from exc
 
 
 def _slugify(name: str) -> str:
@@ -466,6 +578,10 @@ def _parse_generated_at(value: object) -> datetime:
         except Exception:
             return datetime.min
     return datetime.min
+
+
+def _safe_error(message: str, exc: Exception) -> str:
+    return message if IS_PROD else f"{message}: {exc}"
 
 
 def _latest_schedule_for(payload: dict) -> dict | None:
@@ -556,6 +672,16 @@ def _hydrate_pto_entries(data: dict) -> List[PTOEntry]:
     return entries
 
 
+def _schedule_date_range(data: dict) -> str:
+    start_raw = data.get("start_date")
+    weeks = data.get("weeks")
+    if not start_raw or not isinstance(weeks, int):
+        return ""
+    start = _parse_schedule_date(start_raw)
+    end = start + timedelta(days=weeks * 7 - 2)
+    return f"{start.isoformat()}_to_{end.isoformat()}"
+
+
 @router.get("/configs")
 def list_configs(payload: dict = Depends(require_auth)) -> List[str]:
     owner = _config_owner(payload)
@@ -572,7 +698,7 @@ def load_config(filename: str, payload: dict = Depends(require_auth)) -> ConfigP
     try:
         return ConfigPayload(**data)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to load config: {exc}") from exc
+        raise HTTPException(status_code=400, detail=_safe_error("Failed to load config", exc)) from exc
 
 
 @router.post("/configs/save")
@@ -587,7 +713,7 @@ def save_config(request: SaveConfigRequest, payload: dict = Depends(require_auth
         save_user_config(owner, Path(filename).name, request.payload.dict())
         return {"status": "saved", "filename": filename}
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to save config: {exc}") from exc
+        raise HTTPException(status_code=400, detail=_safe_error("Failed to save config", exc)) from exc
 
 
 @router.get("/schedule/latest")
@@ -634,11 +760,14 @@ def export_schedule_csv(payload: dict = Depends(require_auth)):
     buf.seek(0)
     from fastapi.responses import PlainTextResponse
 
-    return PlainTextResponse(
-        content=buf.getvalue(),
-        media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="schedule.csv"'},
-    )
+      clinic_name = data.get("clinic_name") or "schedule"
+      range_label = _schedule_date_range(data)
+      filename = f"{_slugify(clinic_name)}-{range_label}.csv" if range_label else f"{_slugify(clinic_name)}.csv"
+      return PlainTextResponse(
+          content=buf.getvalue(),
+          media_type="text/csv",
+          headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+      )
 
 
 @router.get("/schedule/export/excel")
@@ -655,7 +784,10 @@ def export_schedule_excel(payload: dict = Depends(require_auth)):
         pto_entries=pto_entries,
     )
     clinic_name = data.get("clinic_name") or "schedule"
-    filename = f"{_slugify(clinic_name)}-schedule.xlsx"
+    range_label = _schedule_date_range(data)
+    filename = (
+        f"{_slugify(clinic_name)}-{range_label}.xlsx" if range_label else f"{_slugify(clinic_name)}.xlsx"
+    )
     return Response(
         content=excel_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -670,7 +802,17 @@ async def import_schedule_csv(request: Request, payload: dict = Depends(require_
     file = form.get("file")
     if not file:
         raise HTTPException(status_code=400, detail="CSV file required")
-    content = (await file.read()).decode("utf-8", errors="ignore")
+    filename = getattr(file, "filename", "") or ""
+    if filename and not filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only .csv files are allowed")
+    content_type = getattr(file, "content_type", "") or ""
+    if content_type and content_type not in ("text/csv", "application/vnd.ms-excel"):
+        raise HTTPException(status_code=400, detail="Invalid CSV content type")
+    raw = await file.read()
+    max_bytes = int(os.getenv("MAX_CSV_BYTES", "2097152"))
+    if len(raw) > max_bytes:
+        raise HTTPException(status_code=413, detail="CSV file too large")
+    content = raw.decode("utf-8", errors="ignore")
     reader = csv.DictReader(content.splitlines())
     assignments = []
     staff_entries = {}
@@ -732,7 +874,7 @@ def import_config(request: SaveConfigRequest, payload: dict = Depends(require_au
         import_user_config(owner, Path(filename).name, request.payload.dict())
         return {"status": "imported", "filename": filename}
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to import config: {exc}") from exc
+        raise HTTPException(status_code=400, detail=_safe_error("Failed to import config", exc)) from exc
 
 
 app.include_router(router)

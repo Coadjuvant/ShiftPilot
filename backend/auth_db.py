@@ -9,6 +9,7 @@ Auth storage layer with two backends:
 import json
 import os
 import secrets
+import base64
 import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -29,12 +30,33 @@ def _now() -> str:
 
 
 def _hash_password(password: str) -> str:
-    salt = secrets.token_hex(8)
-    h = hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
-    return f"{salt}${h}"
+    salt = secrets.token_bytes(16)
+    n = 2**14
+    r = 8
+    p = 1
+    dk = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=n, r=r, p=p, dklen=32)
+    salt_b64 = base64.urlsafe_b64encode(salt).decode("ascii").rstrip("=")
+    dk_b64 = base64.urlsafe_b64encode(dk).decode("ascii").rstrip("=")
+    return f"scrypt${n}${r}${p}${salt_b64}${dk_b64}"
+
+
+def _is_legacy_hash(stored: str) -> bool:
+    return not stored.startswith("scrypt$")
 
 
 def _check_password(password: str, stored: str) -> bool:
+    if stored.startswith("scrypt$"):
+        try:
+            _, n_str, r_str, p_str, salt_b64, dk_b64 = stored.split("$", 5)
+            n = int(n_str)
+            r = int(r_str)
+            p = int(p_str)
+            salt = base64.urlsafe_b64decode(salt_b64 + "==")
+            expected = base64.urlsafe_b64decode(dk_b64 + "==")
+        except Exception:
+            return False
+        calc = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=n, r=r, p=p, dklen=len(expected))
+        return secrets.compare_digest(calc, expected)
     try:
         salt, h = stored.split("$", 1)
     except ValueError:
@@ -335,6 +357,9 @@ class PostgresAuth:
             conn.close()
         if not user.get("password_hash") or not _check_password(password, user["password_hash"]):
             return None
+        if _is_legacy_hash(user["password_hash"]):
+            user["password_hash"] = _hash_password(password)
+            self._update_user(user)
         return user
 
     def create_invite(self, username: str, license_key: str, role: str = "user", created_by: Optional[int] = None, ttl_hours: int = 24) -> str:
@@ -548,6 +573,14 @@ class JsonAuth:
             self._update_user(user)
         if not user.get("password_hash") or not _check_password(password, user["password_hash"]):
             return None
+        if _is_legacy_hash(user["password_hash"]):
+            pwd_hash = _hash_password(password)
+            conn = self._conn()
+            cur = conn.cursor()
+            cur.execute("UPDATE users SET password_hash=%s WHERE id=%s", (pwd_hash, user["id"]))
+            conn.commit()
+            conn.close()
+            user["password_hash"] = pwd_hash
         return user
 
     def _update_user(self, user: Dict[str, Any]) -> None:

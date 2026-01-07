@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Literal
 
 try:
-    from pydantic import BaseModel, Field  # type: ignore
+    from pydantic import BaseModel, Field, conint, constr  # type: ignore
 except Exception:
     # Minimal fallback when pydantic is not available (prevents editor/linter errors).
     # This does not replicate pydantic's validation; it's only to allow imports and defaults.
@@ -21,11 +21,26 @@ except Exception:
         if default_factory is not None:
             return default_factory()
         return default
+    def conint(*, **kwargs):  # type: ignore
+        return int
+    def constr(*, **kwargs):  # type: ignore
+        return str
 
 from backend.scheduler.model import DAYS
 
+DayName = Literal["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+RoleName = Literal["Tech", "RN", "Admin"]
+BleachFrequency = Literal["weekly", "quarterly", "custom"]
+UserRole = Literal["user", "admin"]
 
-class StaffPreferencesIn(BaseModel):
+
+class BaseSchema(BaseModel):
+    class Config:
+        extra = "forbid"
+        anystr_strip_whitespace = True
+
+
+class StaffPreferencesIn(BaseSchema):
     open_mwf: float = 1.0
     open_tts: float = 1.0
     mid_mwf: float = 1.0
@@ -34,30 +49,30 @@ class StaffPreferencesIn(BaseModel):
     close_tts: float = 1.0
 
 
-class StaffMemberIn(BaseModel):
-    id: str
-    name: str
-    role: str = "Tech"
+class StaffMemberIn(BaseSchema):
+    id: constr(min_length=1, max_length=64)
+    name: constr(min_length=1, max_length=80)
+    role: RoleName = "Tech"
     can_open: bool = False
     can_close: bool = False
     can_bleach: bool = False
-    availability: Dict[str, bool] = Field(
+    availability: Dict[DayName, bool] = Field(
         default_factory=lambda: {day: True for day in DAYS}
     )
     preferences: StaffPreferencesIn = Field(default_factory=StaffPreferencesIn)
 
 
-class RequirementIn(BaseModel):
-    day_name: str
-    patient_count: int = 0
-    tech_openers: int = 0
-    tech_mids: int = 0
-    tech_closers: int = 0
-    rn_count: int = 0
-    admin_count: int = 0
+class RequirementIn(BaseSchema):
+    day_name: DayName
+    patient_count: conint(ge=0) = 0
+    tech_openers: conint(ge=0) = 0
+    tech_mids: conint(ge=0) = 0
+    tech_closers: conint(ge=0) = 0
+    rn_count: conint(ge=0) = 0
+    admin_count: conint(ge=0) = 0
 
 
-class ConstraintTogglesIn(BaseModel):
+class ConstraintTogglesIn(BaseSchema):
     enforce_three_day_cap: bool = True
     enforce_post_bleach_rest: bool = True
     enforce_alt_saturdays: bool = True
@@ -65,49 +80,49 @@ class ConstraintTogglesIn(BaseModel):
     limit_rn_four_days: bool = True
 
 
-class ScheduleConfigIn(BaseModel):
-    clinic_name: str
-    timezone: str
+class ScheduleConfigIn(BaseSchema):
+    clinic_name: constr(min_length=1, max_length=80)
+    timezone: constr(min_length=1, max_length=48)
     start_date: date
-    weeks: int = 1
-    bleach_day: str = "Thu"
-    bleach_rotation: List[str] = Field(default_factory=list)
-    bleach_cursor: int = 0
-    bleach_frequency: str = "weekly"  # weekly | quarterly | custom?
-    patients_per_tech: int = 4
-    patients_per_rn: int = 12
-    techs_per_rn: int = 4
+    weeks: conint(ge=1) = 1
+    bleach_day: DayName = "Thu"
+    bleach_rotation: List[constr(min_length=1, max_length=64)] = Field(default_factory=list)
+    bleach_cursor: conint(ge=0) = 0
+    bleach_frequency: BleachFrequency = "weekly"
+    patients_per_tech: conint(ge=0) = 4
+    patients_per_rn: conint(ge=0) = 12
+    techs_per_rn: conint(ge=0) = 4
     toggles: ConstraintTogglesIn = Field(default_factory=ConstraintTogglesIn)
 
 
-class PTOEntryIn(BaseModel):
-    staff_id: str
+class PTOEntryIn(BaseSchema):
+    staff_id: constr(min_length=1, max_length=64)
     date: date
 
 
-class ScheduleRequest(BaseModel):
+class ScheduleRequest(BaseSchema):
     staff: List[StaffMemberIn]
     requirements: List[RequirementIn]
     config: ScheduleConfigIn
     pto: List[PTOEntryIn] = Field(default_factory=list)
-    tournament_trials: int = 20
-    base_seed: Optional[int] = None
-    export_roles: List[str] = Field(default_factory=list)
+    tournament_trials: conint(ge=1) = 20
+    base_seed: Optional[conint(ge=0)] = None
+    export_roles: List[RoleName] = Field(default_factory=list)
 
 
-class AssignmentOut(BaseModel):
+class AssignmentOut(BaseSchema):
     date: date
-    day_name: str
-    role: str
+    day_name: DayName
+    role: RoleName
     duty: str
     staff_id: Optional[str]
     notes: List[str] = Field(default_factory=list)
-    slot_index: int
+    slot_index: conint(ge=0)
     is_bleach: bool
 
 
-class ScheduleResponse(BaseModel):
-    bleach_cursor: int
+class ScheduleResponse(BaseSchema):
+    bleach_cursor: conint(ge=0)
     winning_seed: Optional[int]
     assignments: List[AssignmentOut]
     total_penalty: float
@@ -115,24 +130,24 @@ class ScheduleResponse(BaseModel):
     excel: Optional[str]
 
 
-class ConfigClinic(BaseModel):
-    name: str
-    timezone: str
+class ConfigClinic(BaseSchema):
+    name: constr(min_length=1, max_length=80)
+    timezone: constr(min_length=1, max_length=48)
 
 
-class ConfigSchedule(BaseModel):
+class ConfigSchedule(BaseSchema):
     start: date
-    weeks: int
-    bleach_frequency: str = "weekly"
+    weeks: conint(ge=1)
+    bleach_frequency: BleachFrequency = "weekly"
 
 
-class ConfigRatios(BaseModel):
-    patients_per_tech: int
-    patients_per_rn: int
-    techs_per_rn: int
+class ConfigRatios(BaseSchema):
+    patients_per_tech: conint(ge=0)
+    patients_per_rn: conint(ge=0)
+    techs_per_rn: conint(ge=0)
 
 
-class ConfigConstraints(BaseModel):
+class ConfigConstraints(BaseSchema):
     enforce_three_day_cap: bool
     enforce_post_bleach_rest: bool
     enforce_alt_saturdays: bool
@@ -140,57 +155,58 @@ class ConfigConstraints(BaseModel):
     limit_rn_four_days: bool
 
 
-class ConfigBleach(BaseModel):
-    day: str
-    rotation: List[str]
-    cursor: int = 0
+class ConfigBleach(BaseSchema):
+    day: DayName
+    rotation: List[constr(min_length=1, max_length=64)]
+    cursor: conint(ge=0) = 0
+    frequency: Optional[BleachFrequency] = None
 
 
-class ConfigTournament(BaseModel):
-    trials: int = 20
-    last_seed: int = 0
+class ConfigTournament(BaseSchema):
+    trials: conint(ge=1) = 20
+    last_seed: conint(ge=0) = 0
 
 
-class ConfigPayload(BaseModel):
+class ConfigPayload(BaseSchema):
     clinic: ConfigClinic
     schedule: ConfigSchedule
     ratios: ConfigRatios
     constraints: ConfigConstraints
     bleach: ConfigBleach
     tournament: ConfigTournament
-    export_roles: List[str] = Field(default_factory=list)
+    export_roles: List[RoleName] = Field(default_factory=list)
     staff: List[Dict[str, object]]
     demand: List[Dict[str, object]]
     pto: List[Dict[str, object]] = Field(default_factory=list)
 
 
-class SaveConfigRequest(BaseModel):
+class SaveConfigRequest(BaseSchema):
     payload: ConfigPayload
-    filename: Optional[str] = None
+    filename: Optional[constr(min_length=1, max_length=128)] = None
 
 
-class LoginRequest(BaseModel):
-    username: str
-    password: str
+class LoginRequest(BaseSchema):
+    username: constr(min_length=3, max_length=64)
+    password: constr(min_length=4, max_length=128)
 
 
-class LoginResponse(BaseModel):
+class LoginResponse(BaseSchema):
     token: str
 
 
-class InviteRequest(BaseModel):
-    username: str = ""  # optional; if blank, server will auto-generate
-    license_key: str
-    role: str = "user"
+class InviteRequest(BaseSchema):
+    username: constr(min_length=0, max_length=64) = ""  # optional; if blank, server will auto-generate
+    license_key: constr(min_length=1, max_length=64)
+    role: UserRole = "user"
 
 
-class SetupRequest(BaseModel):
-    invite_token: str
-    username: str
-    password: str
+class SetupRequest(BaseSchema):
+    invite_token: constr(min_length=8, max_length=128)
+    username: constr(min_length=3, max_length=64)
+    password: constr(min_length=4, max_length=128)
 
 
-class UserInfo(BaseModel):
+class UserInfo(BaseSchema):
     sub: str
     username: str
-    role: str = "user"
+    role: UserRole = "user"
