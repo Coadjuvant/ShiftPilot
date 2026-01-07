@@ -758,16 +758,16 @@ def export_schedule_csv(payload: dict = Depends(require_auth)):
     writer.writeheader()
     writer.writerows(output_rows)
     buf.seek(0)
-      from fastapi.responses import PlainTextResponse
+    from fastapi.responses import PlainTextResponse
 
-      clinic_name = data.get("clinic_name") or "schedule"
-      range_label = _schedule_date_range(data)
-      filename = f"{_slugify(clinic_name)}-{range_label}.csv" if range_label else f"{_slugify(clinic_name)}.csv"
-      return PlainTextResponse(
-          content=buf.getvalue(),
-          media_type="text/csv",
-          headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-      )
+    clinic_name = data.get("clinic_name") or "schedule"
+    range_label = _schedule_date_range(data)
+    filename = f"{_slugify(clinic_name)}-{range_label}.csv" if range_label else f"{_slugify(clinic_name)}.csv"
+    return PlainTextResponse(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/schedule/export/excel")
