@@ -3,6 +3,7 @@ import api, {
   AuditEntry,
   ConfigPayload,
   SaveConfigRequest,
+  SavedSchedule,
   UserSummary,
   createInvite,
   deleteUser,
@@ -82,14 +83,39 @@ export default function StaffPlanner() {
       second: "2-digit"
     });
   };
+  const formatDateYmd = (value: string) => {
+    const parts = value.split("-").map(Number);
+    if (parts.length >= 3 && parts.every((n) => Number.isFinite(n))) {
+      return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])).toISOString().slice(0, 10);
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toISOString().slice(0, 10);
+  };
+  const buildScheduleFilename = (meta: SavedSchedule | null, ext: "xlsx" | "csv") => {
+    const base = (meta?.clinic_name || configName || "schedule").trim().replace(/\s+/g, "-").toLowerCase();
+    if (!meta?.start_date || typeof meta.weeks !== "number") {
+      return `${base || "schedule"}.${ext}`;
+    }
+    const start = formatDateYmd(meta.start_date);
+    const startDate = new Date(`${start}T00:00:00Z`);
+    const endDate = new Date(startDate);
+    endDate.setUTCDate(endDate.getUTCDate() + meta.weeks * 7 - 2);
+    const end = endDate.toISOString().slice(0, 10);
+    return `${base || "schedule"}-${start}_to_${end}.${ext}`;
+  };
   const downloadSavedSchedule = async () => {
     try {
+      const meta = await fetchLatestSchedule();
+      if ((meta as any)?.status === "none" || !meta?.assignments?.length) {
+        setStatus("No saved schedule to download.");
+        return;
+      }
       const blob = await exportScheduleExcel();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const fileBase = (configName || "schedule").trim().replace(/\s+/g, "-").toLowerCase();
       link.href = url;
-      link.download = `${fileBase || "schedule"}.xlsx`;
+      link.download = buildScheduleFilename(meta, "xlsx");
       link.click();
       URL.revokeObjectURL(url);
       setStatus("Download started.");
@@ -100,12 +126,16 @@ export default function StaffPlanner() {
   };
   const downloadSavedScheduleCsv = async () => {
     try {
+      const meta = await fetchLatestSchedule();
+      if ((meta as any)?.status === "none" || !meta?.assignments?.length) {
+        setStatus("No saved schedule to download.");
+        return;
+      }
       const blob = await exportScheduleCsv();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const fileBase = (configName || "schedule").trim().replace(/\s+/g, "-").toLowerCase();
       link.href = url;
-      link.download = `${fileBase || "schedule"}.csv`;
+      link.download = buildScheduleFilename(meta, "csv");
       link.click();
       URL.revokeObjectURL(url);
       setStatus("CSV download started.");
