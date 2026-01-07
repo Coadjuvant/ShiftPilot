@@ -60,6 +60,8 @@ export default function DemandEditor({ rows, onChange }: Props) {
               <td>
                 <input
                   type="number"
+                  id={`demand-${row.Day}-patients`}
+                  name={`demand-${row.Day}-patients`}
                   value={row.Patients}
                   onChange={(e) => update(idx, "Patients", e.target.value)}
                   min={0}
@@ -68,6 +70,8 @@ export default function DemandEditor({ rows, onChange }: Props) {
               <td>
                 <input
                   type="number"
+                  id={`demand-${row.Day}-tech-open`}
+                  name={`demand-${row.Day}-tech-open`}
                   value={row.Tech_Open}
                   onChange={(e) => update(idx, "Tech_Open", e.target.value)}
                   min={0}
@@ -76,6 +80,8 @@ export default function DemandEditor({ rows, onChange }: Props) {
               <td>
                 <input
                   type="number"
+                  id={`demand-${row.Day}-tech-mid`}
+                  name={`demand-${row.Day}-tech-mid`}
                   value={row.Tech_Mid}
                   onChange={(e) => update(idx, "Tech_Mid", e.target.value)}
                   min={0}
@@ -84,6 +90,8 @@ export default function DemandEditor({ rows, onChange }: Props) {
               <td>
                 <input
                   type="number"
+                  id={`demand-${row.Day}-tech-close`}
+                  name={`demand-${row.Day}-tech-close`}
                   value={row.Tech_Close}
                   onChange={(e) => update(idx, "Tech_Close", e.target.value)}
                   min={0}
@@ -92,6 +100,8 @@ export default function DemandEditor({ rows, onChange }: Props) {
               <td>
                 <input
                   type="number"
+                  id={`demand-${row.Day}-rn-count`}
+                  name={`demand-${row.Day}-rn-count`}
                   value={row.RN_Count}
                   onChange={(e) => update(idx, "RN_Count", e.target.value)}
                   min={0}
@@ -100,6 +110,8 @@ export default function DemandEditor({ rows, onChange }: Props) {
               <td>
                 <input
                   type="number"
+                  id={`demand-${row.Day}-admin-count`}
+                  name={`demand-${row.Day}-admin-count`}
                   value={row.Admin_Count}
                   onChange={(e) => update(idx, "Admin_Count", e.target.value)}
                   min={0}
