@@ -92,11 +92,26 @@ export default function Login() {
           <form className="auth-form" onSubmit={handleLogin}>
             <label className="field">
               <span>Username</span>
-              <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
+              <input
+                id="login-username"
+                name="login-username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                required
+              />
             </label>
             <label className="field">
               <span>Password</span>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+              <input
+                id="login-password"
+                name="login-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
             </label>
             <button
               type={loginSuccess ? "button" : "submit"}

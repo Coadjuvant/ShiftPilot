@@ -62,6 +62,8 @@ export default function PTOEditor({ rows, onChange, staffOptions = [], scheduleS
                     <td>
                       <input
                         type="date"
+                        id={`pto-${row.__idx}-start`}
+                        name={`pto-${row.__idx}-start`}
                         min={scheduleStart}
                         max={scheduleEnd}
                         value={row.start_date}
@@ -71,6 +73,8 @@ export default function PTOEditor({ rows, onChange, staffOptions = [], scheduleS
                     <td>
                       <input
                         type="date"
+                        id={`pto-${row.__idx}-end`}
+                        name={`pto-${row.__idx}-end`}
                         min={scheduleStart}
                         max={scheduleEnd}
                         value={row.end_date}
@@ -108,6 +112,8 @@ export default function PTOEditor({ rows, onChange, staffOptions = [], scheduleS
                 <tr key={row.__idx}>
                   <td>
                     <select
+                      id={`pto-${row.__idx}-staff`}
+                      name={`pto-${row.__idx}-staff`}
                       value={row.staff_id}
                       onChange={(e) => updateRow(row.__idx!, "staff_id", e.target.value)}
                     >
@@ -122,6 +128,8 @@ export default function PTOEditor({ rows, onChange, staffOptions = [], scheduleS
                   <td>
                     <input
                       type="date"
+                      id={`pto-${row.__idx}-start`}
+                      name={`pto-${row.__idx}-start`}
                       min={scheduleStart}
                       max={scheduleEnd}
                       value={row.start_date}
@@ -131,6 +139,8 @@ export default function PTOEditor({ rows, onChange, staffOptions = [], scheduleS
                   <td>
                     <input
                       type="date"
+                      id={`pto-${row.__idx}-end`}
+                      name={`pto-${row.__idx}-end`}
                       min={scheduleStart}
                       max={scheduleEnd}
                       value={row.end_date}

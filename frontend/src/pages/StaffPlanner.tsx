@@ -790,14 +790,25 @@ export default function StaffPlanner() {
                     handleLogin();
                   }}
                 >
-                  <label className="field">
-                    <span>Username</span>
-                    <input value={loginUser} onChange={(e) => setLoginUser(e.target.value)} />
-                  </label>
-                  <label className="field">
-                    <span>Password</span>
-                    <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
-                  </label>
+                    <label className="field">
+                      <span>Username</span>
+                      <input
+                        id="planner-login-username"
+                        name="planner-login-username"
+                        value={loginUser}
+                        onChange={(e) => setLoginUser(e.target.value)}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Password</span>
+                      <input
+                        id="planner-login-password"
+                        name="planner-login-password"
+                        type="password"
+                        value={loginPass}
+                        onChange={(e) => setLoginPass(e.target.value)}
+                      />
+                    </label>
                   <button type="submit">Log in</button>
                 </form>
               ) : (
@@ -808,18 +819,34 @@ export default function StaffPlanner() {
                     handleSetup();
                   }}
                 >
-                  <label className="field">
-                    <span>Invite token</span>
-                    <input value={inviteToken} onChange={(e) => setInviteToken(e.target.value)} />
-                  </label>
-                  <label className="field">
-                    <span>Choose username</span>
-                    <input value={loginUser} onChange={(e) => setLoginUser(e.target.value)} />
-                  </label>
-                  <label className="field">
-                    <span>Set password</span>
-                    <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
-                  </label>
+                    <label className="field">
+                      <span>Invite token</span>
+                      <input
+                        id="planner-invite-token"
+                        name="planner-invite-token"
+                        value={inviteToken}
+                        onChange={(e) => setInviteToken(e.target.value)}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Choose username</span>
+                      <input
+                        id="planner-setup-username"
+                        name="planner-setup-username"
+                        value={loginUser}
+                        onChange={(e) => setLoginUser(e.target.value)}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Set password</span>
+                      <input
+                        id="planner-setup-password"
+                        name="planner-setup-password"
+                        type="password"
+                        value={loginPass}
+                        onChange={(e) => setLoginPass(e.target.value)}
+                      />
+                    </label>
                   <button type="submit">Activate account</button>
                 </form>
               )}
@@ -839,19 +866,23 @@ export default function StaffPlanner() {
           <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
             <strong>User tools</strong>
             <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem", alignItems: "center" }}>
-              <input
-                placeholder="License key"
-                value={inviteLicense}
-                onChange={(e) => setInviteLicense(e.target.value)}
-                style={{ maxWidth: "120px" }}
-                disabled={!isAuthed}
-              />
-              <select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value)}
-                style={{ maxWidth: "120px" }}
-                disabled={!isAuthed}
-              >
+                <input
+                  placeholder="License key"
+                  id="admin-invite-license"
+                  name="admin-invite-license"
+                  value={inviteLicense}
+                  onChange={(e) => setInviteLicense(e.target.value)}
+                  style={{ maxWidth: "120px" }}
+                  disabled={!isAuthed}
+                />
+                <select
+                  id="admin-invite-role"
+                  name="admin-invite-role"
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value)}
+                  style={{ maxWidth: "120px" }}
+                  disabled={!isAuthed}
+                >
                 <option value="user">User</option>
                 <option value="admin">Admin</option>
               </select>
@@ -895,13 +926,15 @@ export default function StaffPlanner() {
         }}
       >
         <div className="controls-row">
-          <label>
-            Load config:
-            <select
-              value={selectedConfig}
-              onChange={(e) => setSelectedConfig(e.target.value)}
-              style={{ marginLeft: "0.5rem" }}
-            >
+            <label>
+              Load config:
+              <select
+                id="config-load-select"
+                name="config-load-select"
+                value={selectedConfig}
+                onChange={(e) => setSelectedConfig(e.target.value)}
+                style={{ marginLeft: "0.5rem" }}
+              >
               <option value="">Select...</option>
               {configs.map((name) => (
                 <option key={name} value={name}>
@@ -913,12 +946,14 @@ export default function StaffPlanner() {
           <button onClick={() => handleLoadConfig(selectedConfig)} disabled={!selectedConfig}>
             Load
           </button>
-          <input
-            placeholder="Save as..."
-            value={configName}
-            onChange={(e) => setConfigName(e.target.value)}
-            style={{ maxWidth: "180px" }}
-          />
+            <input
+              placeholder="Save as..."
+              id="config-save-name"
+              name="config-save-name"
+              value={configName}
+              onChange={(e) => setConfigName(e.target.value)}
+              style={{ maxWidth: "180px" }}
+            />
           <button onClick={handleSaveConfig}>Save</button>
         </div>
         <div className="tabs">
@@ -958,22 +993,34 @@ export default function StaffPlanner() {
             <tbody>
               {staffRows.map((row, index) => (
                 <tr key={index}>
-                  <td>
-                    <input value={row.name} onChange={(e) => updateRow(index, "name", e.target.value)} />
-                  </td>
-                  <td>
-                    <select value={row.role} onChange={(e) => updateRow(index, "role", e.target.value)}>
-                      <option value="Tech">Tech</option>
-                      <option value="RN">RN</option>
-                      <option value="Admin">Admin</option>
-                    </select>
-                  </td>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={row.can_open ?? false}
-                      onChange={(e) =>
-                        setStaffRows((prev) => {
+                    <td>
+                      <input
+                        id={`staff-name-${index}`}
+                        name={`staff-name-${index}`}
+                        value={row.name}
+                        onChange={(e) => updateRow(index, "name", e.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <select
+                        id={`staff-role-${index}`}
+                        name={`staff-role-${index}`}
+                        value={row.role}
+                        onChange={(e) => updateRow(index, "role", e.target.value)}
+                      >
+                        <option value="Tech">Tech</option>
+                        <option value="RN">RN</option>
+                        <option value="Admin">Admin</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        id={`staff-can-open-${index}`}
+                        name={`staff-can-open-${index}`}
+                        checked={row.can_open ?? false}
+                        onChange={(e) =>
+                          setStaffRows((prev) => {
                           const next = [...prev];
                           next[index] = { ...next[index], can_open: e.target.checked };
                           return next;
@@ -981,12 +1028,14 @@ export default function StaffPlanner() {
                       }
                     />
                   </td>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={row.can_close ?? false}
-                      onChange={(e) =>
-                        setStaffRows((prev) => {
+                    <td>
+                      <input
+                        type="checkbox"
+                        id={`staff-can-close-${index}`}
+                        name={`staff-can-close-${index}`}
+                        checked={row.can_close ?? false}
+                        onChange={(e) =>
+                          setStaffRows((prev) => {
                           const next = [...prev];
                           next[index] = { ...next[index], can_close: e.target.checked };
                           return next;
@@ -994,12 +1043,14 @@ export default function StaffPlanner() {
                       }
                     />
                   </td>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={row.can_bleach ?? false}
-                      onChange={(e) =>
-                        setStaffRows((prev) => {
+                    <td>
+                      <input
+                        type="checkbox"
+                        id={`staff-can-bleach-${index}`}
+                        name={`staff-can-bleach-${index}`}
+                        checked={row.can_bleach ?? false}
+                        onChange={(e) =>
+                          setStaffRows((prev) => {
                           const next = [...prev];
                           next[index] = {
                             ...next[index],
@@ -1060,12 +1111,14 @@ export default function StaffPlanner() {
                   <label key={item.key} style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
                     <span style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", alignItems: "center" }}>
                       <span>{item.label}</span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={10}
-                        step={0.25}
-                        value={item.value}
+                        <input
+                          type="number"
+                          id={`pref-${item.key}-${idx}`}
+                          name={`pref-${item.key}-${idx}`}
+                          min={0}
+                          max={10}
+                          step={0.25}
+                          value={item.value}
                         onChange={(e) =>
                           setStaffRows((prev) => {
                             const next = [...prev];
@@ -1076,12 +1129,14 @@ export default function StaffPlanner() {
                         style={{ width: "70px", textAlign: "right" }}
                       />
                     </span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={10}
-                      step={0.25}
-                      value={item.value}
+                      <input
+                        type="range"
+                        id={`pref-${item.key}-${idx}-range`}
+                        name={`pref-${item.key}-${idx}-range`}
+                        min={0}
+                        max={10}
+                        step={0.25}
+                        value={item.value}
                       onChange={(e) =>
                         setStaffRows((prev) => {
                           const next = [...prev];
@@ -1119,11 +1174,13 @@ export default function StaffPlanner() {
                   </td>
                   {DAYS.map((day) => (
                     <td key={day} style={{ textAlign: "center" }}>
-                      <input
-                        type="checkbox"
-                        checked={row.availability?.[day] ?? true}
-                        onChange={(e) =>
-                          setStaffRows((prev) => {
+                        <input
+                          type="checkbox"
+                          id={`avail-${idx}-${day}`}
+                          name={`avail-${idx}-${day}`}
+                          checked={row.availability?.[day] ?? true}
+                          onChange={(e) =>
+                            setStaffRows((prev) => {
                             const next = [...prev];
                             const avail = { ...(next[idx].availability ?? defaultAvailability) };
                             avail[day] = e.target.checked;
@@ -1180,81 +1237,143 @@ export default function StaffPlanner() {
           <div className="stack">
             <label>
               Clinic
-              <input value={configName} onChange={(e) => setConfigName(e.target.value)} />
+                <input
+                  id="run-clinic-name"
+                  name="run-clinic-name"
+                  value={configName}
+                  onChange={(e) => setConfigName(e.target.value)}
+                />
             </label>
             <label>
               Timezone
-              <input value={timezone} onChange={(e) => setTimezone(e.target.value)} />
+                <input
+                  id="run-timezone"
+                  name="run-timezone"
+                  value={timezone}
+                  onChange={(e) => setTimezone(e.target.value)}
+                />
             </label>
           </div>
           <div className="stack">
             <label>
               Start date
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                <input
+                  id="run-start-date"
+                  name="run-start-date"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
             </label>
             <label>
               Weeks
-              <input
-                type="number"
-                min={1}
-                value={weeks}
-                onChange={(e) => setWeeks(Number(e.target.value))}
-              />
+                <input
+                  id="run-weeks"
+                  name="run-weeks"
+                  type="number"
+                  min={1}
+                  value={weeks}
+                  onChange={(e) => setWeeks(Number(e.target.value))}
+                />
             </label>
           </div>
           <div className="stack">
             <label>
               Enforce 2-day max
-              <input type="checkbox" checked={enforceThree} onChange={(e) => setEnforceThree(e.target.checked)} />
+                <input
+                  id="constraint-two-day"
+                  name="constraint-two-day"
+                  type="checkbox"
+                  checked={enforceThree}
+                  onChange={(e) => setEnforceThree(e.target.checked)}
+                />
             </label>
             <label>
               No consecutive Saturdays
-              <input type="checkbox" checked={enforceAltSat} onChange={(e) => setEnforceAltSat(e.target.checked)} />
+                <input
+                  id="constraint-alt-sat"
+                  name="constraint-alt-sat"
+                  type="checkbox"
+                  checked={enforceAltSat}
+                  onChange={(e) => setEnforceAltSat(e.target.checked)}
+                />
             </label>
             <label>
               Tech 4-day cap
-              <input type="checkbox" checked={limitTechFour} onChange={(e) => setLimitTechFour(e.target.checked)} />
+                <input
+                  id="constraint-tech-four"
+                  name="constraint-tech-four"
+                  type="checkbox"
+                  checked={limitTechFour}
+                  onChange={(e) => setLimitTechFour(e.target.checked)}
+                />
             </label>
             <label>
               RN 4-day cap
-              <input type="checkbox" checked={limitRnFour} onChange={(e) => setLimitRnFour(e.target.checked)} />
+                <input
+                  id="constraint-rn-four"
+                  name="constraint-rn-four"
+                  type="checkbox"
+                  checked={limitRnFour}
+                  onChange={(e) => setLimitRnFour(e.target.checked)}
+                />
             </label>
           </div>
           <div className="stack">
             <label>
               Patients/Tech
-              <input
-                type="number"
-                min={1}
-                value={patientsPerTech}
-                onChange={(e) => setPatientsPerTech(Number(e.target.value))}
-              />
+                <input
+                  id="ratio-patients-tech"
+                  name="ratio-patients-tech"
+                  type="number"
+                  min={1}
+                  value={patientsPerTech}
+                  onChange={(e) => setPatientsPerTech(Number(e.target.value))}
+                />
             </label>
             <label>
               Patients/RN
-              <input
-                type="number"
-                min={1}
-                value={patientsPerRn}
-                onChange={(e) => setPatientsPerRn(Number(e.target.value))}
-              />
+                <input
+                  id="ratio-patients-rn"
+                  name="ratio-patients-rn"
+                  type="number"
+                  min={1}
+                  value={patientsPerRn}
+                  onChange={(e) => setPatientsPerRn(Number(e.target.value))}
+                />
             </label>
             <label>
               Techs/RN
-              <input
-                type="number"
-                min={1}
-                value={techsPerRn}
-                onChange={(e) => setTechsPerRn(Number(e.target.value))}
-              />
+                <input
+                  id="ratio-techs-rn"
+                  name="ratio-techs-rn"
+                  type="number"
+                  min={1}
+                  value={techsPerRn}
+                  onChange={(e) => setTechsPerRn(Number(e.target.value))}
+                />
             </label>
             <label>
               Trials
-              <input type="number" min={1} value={trials} onChange={(e) => setTrials(Number(e.target.value))} />
+                <input
+                  id="run-trials"
+                  name="run-trials"
+                  type="number"
+                  min={1}
+                  value={trials}
+                  onChange={(e) => setTrials(Number(e.target.value))}
+                />
             </label>
             <label>
               Seed (0 = random)
-              <input type="number" min={0} value={baseSeed} onChange={(e) => setBaseSeed(Number(e.target.value))} />
+                <input
+                  id="run-seed"
+                  name="run-seed"
+                  type="number"
+                  min={0}
+                  value={baseSeed}
+                  onChange={(e) => setBaseSeed(Number(e.target.value))}
+                />
             </label>
             <label style={{ alignItems: "center" }}>
               <input
@@ -1262,19 +1381,23 @@ export default function StaffPlanner() {
                 checked={usePrevSeed}
                 onChange={(e) => setUsePrevSeed(e.target.checked)}
                 style={{ marginRight: "6px" }}
+                id="use-prev-seed"
+                name="use-prev-seed"
               />
               Use previous best seed
             </label>
             <div style={{ display: "flex", flexDirection: "column" }}>
               <span>Export roles</span>
               <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.25rem" }}>
-                {["Tech", "RN", "Admin"].map((role) => (
-                  <label key={role} style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                    <input
-                      type="checkbox"
-                      checked={exportRoles.includes(role)}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
+                  {["Tech", "RN", "Admin"].map((role) => (
+                    <label key={role} style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                      <input
+                        type="checkbox"
+                        id={`export-role-${role.toLowerCase()}`}
+                        name={`export-role-${role.toLowerCase()}`}
+                        checked={exportRoles.includes(role)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
                         setExportRoles((prev) => {
                           if (checked) return Array.from(new Set([...prev, role]));
                           return prev.filter((r) => r !== role);
@@ -1637,9 +1760,14 @@ export default function StaffPlanner() {
             Weekly runs use your chosen bleach day. Quarterly runs schedule bleach on the second week of Feb, May, Aug, and Nov.
           </p>
           <div className="stack">
-            <label>
-              Bleach day
-              <select value={bleachDay} onChange={(e) => setBleachDay(e.target.value)}>
+              <label>
+                Bleach day
+                <select
+                  id="bleach-day"
+                  name="bleach-day"
+                  value={bleachDay}
+                  onChange={(e) => setBleachDay(e.target.value)}
+                >
                 {DAYS.map((d) => (
                   <option key={d} value={d}>
                     {d}
@@ -1647,32 +1775,41 @@ export default function StaffPlanner() {
                 ))}
               </select>
             </label>
-            <label>
-              Bleach frequency
-              <select value={bleachFrequency} onChange={(e) => setBleachFrequency(e.target.value)}>
+              <label>
+                Bleach frequency
+                <select
+                  id="bleach-frequency"
+                  name="bleach-frequency"
+                  value={bleachFrequency}
+                  onChange={(e) => setBleachFrequency(e.target.value)}
+                >
                 <option value="weekly">Weekly</option>
                 <option value="quarterly">Quarterly</option>
               </select>
             </label>
-            <label>
-              Bleach rotation position
-              <input
-                type="number"
-                min={0}
-                value={bleachCursor}
-                onChange={(e) => setBleachCursor(Number(e.target.value))}
-              />
-            </label>
+              <label>
+                Bleach rotation position
+                <input
+                  type="number"
+                  id="bleach-rotation-position"
+                  name="bleach-rotation-position"
+                  min={0}
+                  value={bleachCursor}
+                  onChange={(e) => setBleachCursor(Number(e.target.value))}
+                />
+              </label>
           </div>
           <div className="stack" style={{ alignItems: "flex-start" }}>
             <div style={{ minWidth: "280px" }}>
               <p style={{ margin: "0 0 4px 0" }}>Bleach rotation (ordered)</p>
-              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
-                <select
-                  value=""
-                  onChange={(e) => {
-                    const sid = e.target.value;
-                    if (!sid) return;
+                <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                  <select
+                    id="bleach-rotation-add"
+                    name="bleach-rotation-add"
+                    value=""
+                    onChange={(e) => {
+                      const sid = e.target.value;
+                      if (!sid) return;
                     setBleachRotation((prev) => [...prev, sid]);
                   }}
                 >
@@ -1747,6 +1884,8 @@ export default function StaffPlanner() {
                 checked={enforcePostBleach}
                 onChange={(e) => setEnforcePostBleach(e.target.checked)}
                 style={{ marginRight: "4px" }}
+                id="bleach-rest-day"
+                name="bleach-rest-day"
               />
               Require day off after bleach
             </label>
@@ -1785,6 +1924,8 @@ export default function StaffPlanner() {
                   <td>{u.username}</td>
                   <td>
                     <select
+                      id={`admin-user-role-${u.id}`}
+                      name={`admin-user-role-${u.id}`}
                       disabled={u.username?.toLowerCase() === "admin" || u.id === 1}
                       title={
                         u.username?.toLowerCase() === "admin" || u.id === 1
