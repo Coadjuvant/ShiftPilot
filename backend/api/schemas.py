@@ -21,9 +21,9 @@ except Exception:
         if default_factory is not None:
             return default_factory()
         return default
-    def conint(*, **kwargs):  # type: ignore
+    def conint(**kwargs):  # type: ignore
         return int
-    def constr(*, **kwargs):  # type: ignore
+    def constr(**kwargs):  # type: ignore
         return str
 
 from backend.scheduler.model import DAYS
