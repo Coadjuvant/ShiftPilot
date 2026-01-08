@@ -9,6 +9,9 @@ import os
 import csv
 import jwt
 from datetime import datetime, timedelta, timezone
+import ipaddress
+import urllib.request
+import urllib.error
 import time
 from collections import defaultdict, deque
 from fastapi import Request
@@ -70,7 +73,6 @@ from .schemas import (
     StaffMemberIn,
 )
 
-
 JWT_SECRET = os.getenv("JWT_SECRET", os.getenv("API_KEY", "dev-secret"))
 JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "8"))
 APP_ENV = os.getenv("APP_ENV", "dev").lower()
@@ -78,6 +80,10 @@ IS_PROD = APP_ENV == "prod"
 API_VERSION = os.getenv("API_VERSION", "1")
 ADMIN_USER = (os.getenv("ADMIN_USER", "admin") or "admin").strip()
 ADMIN_PASS = (os.getenv("ADMIN_PASS", "admin") or "admin").strip()
+GEOIP_API_URL = (os.getenv("GEOIP_API_URL") or "").strip()
+GEOIP_API_TIMEOUT = float(os.getenv("GEOIP_API_TIMEOUT", "2.0"))
+GEOIP_CACHE_TTL = int(os.getenv("GEOIP_CACHE_TTL", "3600"))
+_geoip_cache: dict[str, tuple[float, tuple[str | None, str | None, str | None]]] = {}
 
 app = FastAPI(
     title="Clinic Scheduler API",
@@ -100,11 +106,85 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def _geoip_cache_get(ip: str) -> tuple[str | None, str | None, str | None] | None:
+    entry = _geoip_cache.get(ip)
+    if not entry:
+        return None
+    ts, value = entry
+    if (time.time() - ts) > GEOIP_CACHE_TTL:
+        _geoip_cache.pop(ip, None)
+        return None
+    return value
+
+
+def _geoip_cache_set(ip: str, value: tuple[str | None, str | None, str | None]) -> None:
+    _geoip_cache[ip] = (time.time(), value)
+
+
+def _geoip_api_lookup(ip: str) -> tuple[str | None, str | None, str | None]:
+    if not GEOIP_API_URL:
+        return None, None, None
+    cached = _geoip_cache_get(ip)
+    if cached is not None:
+        return cached
+    if "{ip}" in GEOIP_API_URL:
+        url = GEOIP_API_URL.replace("{ip}", ip)
+    elif GEOIP_API_URL.endswith("/"):
+        url = f"{GEOIP_API_URL}{ip}"
+    else:
+        url = f"{GEOIP_API_URL}/{ip}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "ShiftPilot/GeoIP"})
+        with urllib.request.urlopen(req, timeout=GEOIP_API_TIMEOUT) as resp:
+            payload = resp.read().decode("utf-8", errors="ignore")
+        data = json.loads(payload) if payload else {}
+    except Exception:
+        return None, None, None
+    city = data.get("city") or data.get("city_name")
+    region = (
+        data.get("region")
+        or data.get("region_name")
+        or data.get("state")
+        or data.get("subdivision")
+        or data.get("subdivision_name")
+    )
+    country = (
+        data.get("country_code")
+        or data.get("country")
+        or data.get("country_name")
+        or data.get("countryCode")
+    )
+    result = (city or None, region or None, country or None)
+    _geoip_cache_set(ip, result)
+    return result
+
+
+def _geoip_location(ip: str) -> tuple[str | None, str | None, str | None]:
+    if not ip:
+        return None, None, None
+    try:
+        addr = ipaddress.ip_address(ip)
+        if addr.is_private or addr.is_loopback or addr.is_reserved or addr.is_multicast:
+            return None, None, None
+    except ValueError:
+        return None, None, None
+    return _geoip_api_lookup(ip)
+
+
 def _client_location(request: Request) -> str:
     headers = request.headers
     city = headers.get("cf-ipcity") or headers.get("cf-city") or headers.get("x-geo-city")
     region = headers.get("cf-region") or headers.get("cf-region-code") or headers.get("x-geo-region")
     country = headers.get("cf-ipcountry") or headers.get("x-geo-country")
+    if not city or not region:
+        ip = _client_ip(request)
+        geo_city, geo_region, geo_country = _geoip_location(ip)
+        if geo_city:
+            city = geo_city
+        if geo_region:
+            region = geo_region
+        if not country and geo_country:
+            country = geo_country
     if city and region:
         return f"{city}, {region}"
     if city and country:
