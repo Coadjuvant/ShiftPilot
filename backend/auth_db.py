@@ -136,6 +136,7 @@ class PostgresAuth:
                 event TEXT,
                 detail TEXT,
                 ip TEXT,
+                ip_v4 TEXT,
                 user_agent TEXT,
                 location TEXT,
                 created_at TIMESTAMPTZ,
@@ -144,6 +145,7 @@ class PostgresAuth:
             """
         )
         cur.execute("ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS location TEXT;")
+        cur.execute("ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS ip_v4 TEXT;")
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS configs (
@@ -464,15 +466,16 @@ class PostgresAuth:
         ip: str = "",
         user_agent: str = "",
         location: str = "",
+        ip_v4: str = "",
     ):
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO audit_log (user_id, event, detail, ip, user_agent, location, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO audit_log (user_id, event, detail, ip, ip_v4, user_agent, location, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
-            (user_id, event, detail, ip, user_agent, location, datetime.utcnow()),
+            (user_id, event, detail, ip, ip_v4, user_agent, location, datetime.utcnow()),
         )
         conn.commit()
         conn.close()
@@ -486,7 +489,7 @@ class PostgresAuth:
     ) -> List[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor()
-        query = "SELECT id, user_id, event, detail, ip, user_agent, location, created_at FROM audit_log"
+        query = "SELECT id, user_id, event, detail, ip, ip_v4, user_agent, location, created_at FROM audit_log"
         clauses = []
         params: list = []
         if event:
@@ -497,10 +500,10 @@ class PostgresAuth:
             params.append(user_id)
         if search:
             clauses.append(
-                "(event ILIKE %s OR detail ILIKE %s OR ip ILIKE %s OR user_agent ILIKE %s OR location ILIKE %s)"
+                "(event ILIKE %s OR detail ILIKE %s OR ip ILIKE %s OR ip_v4 ILIKE %s OR user_agent ILIKE %s OR location ILIKE %s)"
             )
             term = f"%{search}%"
-            params.extend([term, term, term, term, term])
+            params.extend([term, term, term, term, term, term])
         if clauses:
             query += " WHERE " + " AND ".join(clauses)
         query += " ORDER BY id DESC LIMIT %s"
@@ -508,7 +511,7 @@ class PostgresAuth:
         cur.execute(query, tuple(params))
         rows = cur.fetchall()
         conn.close()
-        keys = ["id", "user_id", "event", "detail", "ip", "user_agent", "location", "created_at"]
+        keys = ["id", "user_id", "event", "detail", "ip", "ip_v4", "user_agent", "location", "created_at"]
         return [dict(zip(keys, r)) for r in rows]
 
     # --- configs ---
@@ -718,6 +721,7 @@ class JsonAuth:
         ip: str = "",
         user_agent: str = "",
         location: str = "",
+        ip_v4: str = "",
     ):
         data = _load_json()
         audit = data.get("audit", [])
@@ -728,6 +732,7 @@ class JsonAuth:
                 "event": event,
                 "detail": detail,
                 "ip": ip,
+                "ip_v4": ip_v4,
                 "user_agent": user_agent,
                 "location": location,
                 "created_at": _now(),
@@ -758,6 +763,7 @@ class JsonAuth:
                 if term in (row.get("event") or "").lower()
                 or term in (row.get("detail") or "").lower()
                 or term in (row.get("ip") or "").lower()
+                or term in (row.get("ip_v4") or "").lower()
                 or term in (row.get("user_agent") or "").lower()
                 or term in (row.get("location") or "").lower()
             ]
@@ -921,8 +927,9 @@ def log_event(
     ip: str = "",
     user_agent: str = "",
     location: str = "",
+    ip_v4: str = "",
 ):
-    return _backend.log_event(user_id, event, detail, ip, user_agent, location)
+    return _backend.log_event(user_id, event, detail, ip, user_agent, location, ip_v4)
 
 
 def list_users() -> List[Dict[str, Any]]:

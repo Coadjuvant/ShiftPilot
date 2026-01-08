@@ -106,6 +106,28 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def _client_ipv4(request: Request) -> str:
+    candidates = [
+        request.headers.get("cf-pseudo-ipv4"),
+        request.headers.get("true-client-ip"),
+        request.headers.get("x-real-ip"),
+        request.headers.get("cf-connecting-ip"),
+        request.headers.get("x-forwarded-for"),
+    ]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        for part in candidate.split(","):
+            ip = part.strip()
+            try:
+                addr = ipaddress.ip_address(ip)
+            except ValueError:
+                continue
+            if addr.version == 4:
+                return ip
+    return ""
+
+
 def _geoip_cache_get(ip: str) -> tuple[str | None, str | None, str | None] | None:
     entry = _geoip_cache.get(ip)
     if not entry:
@@ -196,9 +218,10 @@ def _client_location(request: Request) -> str:
     return ""
 
 
-def _request_meta(request: Request) -> tuple[str, str, str]:
+def _request_meta(request: Request) -> tuple[str, str, str, str]:
     return (
         _client_ip(request),
+        _client_ipv4(request),
         request.headers.get("user-agent", ""),
         _client_location(request),
     )
@@ -382,9 +405,9 @@ def login(request: Request, creds: LoginRequest) -> LoginResponse:
         raise HTTPException(status_code=429, detail="Too many failed login attempts")
     user = validate_login(creds.username, creds.password)
     if not user:
-        ip, user_agent, location = _request_meta(request)
+        ip, ip_v4, user_agent, location = _request_meta(request)
         detail = f"username={creds.username};result=fail;reason=invalid_credentials"
-        log_event(None, "login_fail", detail, ip, user_agent, location)
+        log_event(None, "login_fail", detail, ip, user_agent, location, ip_v4)
         _record_login_failure(lock_key)
         raise HTTPException(status_code=401, detail="Invalid credentials or license")
     _clear_login_failures(lock_key)
@@ -397,9 +420,9 @@ def login(request: Request, creds: LoginRequest) -> LoginResponse:
         "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS),
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
-    ip, user_agent, location = _request_meta(request)
+    ip, ip_v4, user_agent, location = _request_meta(request)
     detail = f"username={user['username']};method=password"
-    log_event(user["id"], "login_success", detail, ip, user_agent, location)
+    log_event(user["id"], "login_success", detail, ip, user_agent, location, ip_v4)
     return _token_response(token)
 
 
@@ -411,7 +434,7 @@ def invite_user(request: Request, req: InviteRequest, payload: dict = Depends(re
     except Exception:
         creator_id = None
     token = create_invite(req.username, req.license_key, role=req.role or "user", created_by=creator_id)
-    ip, user_agent, location = _request_meta(request)
+    ip, ip_v4, user_agent, location = _request_meta(request)
     log_event(
         creator_id,
         "invite_created",
@@ -419,6 +442,7 @@ def invite_user(request: Request, req: InviteRequest, payload: dict = Depends(re
         ip,
         user_agent,
         location,
+        ip_v4,
     )
     return {"token": token}
 
@@ -444,8 +468,8 @@ def setup_user(request: Request, body: SetupRequest) -> LoginResponse:
         "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS),
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm="HS256")
-    ip, user_agent, location = _request_meta(request)
-    log_event(user["id"], "login_success", "invite_setup", ip, user_agent, location)
+    ip, ip_v4, user_agent, location = _request_meta(request)
+    log_event(user["id"], "login_success", "invite_setup", ip, user_agent, location, ip_v4)
     return _token_response(token)
 
 
@@ -464,8 +488,8 @@ def delete_user_admin(request: Request, user_id: int):
     try:
         delete_user(user_id)
         # log after deletion without FK reference
-        ip, user_agent, location = _request_meta(request)
-        log_event(None, "user_deleted", f"user_id={user_id}", ip, user_agent, location)
+        ip, ip_v4, user_agent, location = _request_meta(request)
+        log_event(None, "user_deleted", f"user_id={user_id}", ip, user_agent, location, ip_v4)
         return {"status": "deleted", "id": user_id}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -474,8 +498,8 @@ def delete_user_admin(request: Request, user_id: int):
 @router.post("/auth/invite/revoke", dependencies=[Depends(require_admin)])
 def revoke_invite_admin(request: Request, req: InviteRequest):
     revoke_invite(req.username)
-    ip, user_agent, location = _request_meta(request)
-    log_event(None, "invite_revoked", f"username={req.username}", ip, user_agent, location)
+    ip, ip_v4, user_agent, location = _request_meta(request)
+    log_event(None, "invite_revoked", f"username={req.username}", ip, user_agent, location, ip_v4)
     return {"status": "revoked", "username": req.username}
 
 
@@ -501,8 +525,8 @@ def update_user_role(
         raise HTTPException(status_code=400, detail="Role required")
     try:
         update_role(user_id, role)
-        ip, user_agent, location = _request_meta(request)
-        log_event(payload.get("sub"), "role_updated", f"user_id={user_id}, role={role}", ip, user_agent, location)
+        ip, ip_v4, user_agent, location = _request_meta(request)
+        log_event(payload.get("sub"), "role_updated", f"user_id={user_id}, role={role}", ip, user_agent, location, ip_v4)
         return {"status": "ok", "id": user_id, "role": role}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -517,8 +541,8 @@ def reset_user_invite(request: Request, user_id: int, payload: dict = Depends(re
         creator_id = None
     try:
         token = reset_invite(user_id, created_by=creator_id)
-        ip, user_agent, location = _request_meta(request)
-        log_event(creator_id, "reset_invite", f"user_id={user_id}", ip, user_agent, location)
+        ip, ip_v4, user_agent, location = _request_meta(request)
+        log_event(creator_id, "reset_invite", f"user_id={user_id}", ip, user_agent, location, ip_v4)
         return {"token": token}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -669,8 +693,8 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
             f"clinic={request.config.clinic_name};start={start_label};weeks={request.config.weeks};"
             f"bleach={request.config.bleach_frequency or 'weekly'};seed={winning_seed};open_slots={open_slots}"
         )
-        ip, user_agent, location = _request_meta(request)
-        log_event(payload.get("sub"), "schedule_run", detail, ip, user_agent, location)
+        ip, ip_v4, user_agent, location = _request_meta(request)
+        log_event(payload.get("sub"), "schedule_run", detail, ip, user_agent, location, ip_v4)
         return ScheduleResponse(
             bleach_cursor=result.bleach_cursor,
             winning_seed=winning_seed,
@@ -855,7 +879,7 @@ def save_config(request: Request, body: SaveConfigRequest, payload: dict = Depen
         safe_name = Path(filename).name
         save_user_config(owner, safe_name, payload_dict)
         size_kb = round(len(json.dumps(payload_dict, default=str)) / 1024, 1)
-        ip, user_agent, location = _request_meta(request)
+        ip, ip_v4, user_agent, location = _request_meta(request)
         log_event(
             payload.get("sub"),
             "config_save",
@@ -863,6 +887,7 @@ def save_config(request: Request, body: SaveConfigRequest, payload: dict = Depen
             ip,
             user_agent,
             location,
+            ip_v4,
         )
         return {"status": "saved", "filename": filename}
     except Exception as exc:
@@ -916,7 +941,7 @@ def export_schedule_csv(request: Request, payload: dict = Depends(require_auth))
     clinic_name = data.get("clinic_name") or "schedule"
     range_label = _schedule_date_range(data)
     filename = f"{_slugify(clinic_name)}-{range_label}.csv" if range_label else f"{_slugify(clinic_name)}.csv"
-    ip, user_agent, location = _request_meta(request)
+    ip, ip_v4, user_agent, location = _request_meta(request)
     log_event(
         payload.get("sub"),
         "schedule_export",
@@ -924,6 +949,7 @@ def export_schedule_csv(request: Request, payload: dict = Depends(require_auth))
         ip,
         user_agent,
         location,
+        ip_v4,
     )
     return PlainTextResponse(
         content=buf.getvalue(),
@@ -950,7 +976,7 @@ def export_schedule_excel(request: Request, payload: dict = Depends(require_auth
     filename = (
         f"{_slugify(clinic_name)}-{range_label}.xlsx" if range_label else f"{_slugify(clinic_name)}.xlsx"
     )
-    ip, user_agent, location = _request_meta(request)
+    ip, ip_v4, user_agent, location = _request_meta(request)
     log_event(
         payload.get("sub"),
         "schedule_export",
@@ -958,6 +984,7 @@ def export_schedule_excel(request: Request, payload: dict = Depends(require_auth
         ip,
         user_agent,
         location,
+        ip_v4,
     )
     return Response(
         content=excel_bytes,
@@ -1021,7 +1048,7 @@ async def import_schedule_csv(request: Request, payload: dict = Depends(require_
         "generated_at": datetime.utcnow().isoformat(),
     }
     persist_schedule(owner, snapshot)
-    ip, user_agent, location = _request_meta(request)
+    ip, ip_v4, user_agent, location = _request_meta(request)
     log_event(
         payload.get("sub"),
         "schedule_import",
@@ -1029,6 +1056,7 @@ async def import_schedule_csv(request: Request, payload: dict = Depends(require_
         ip,
         user_agent,
         location,
+        ip_v4,
     )
     return {"status": "imported", "assignments": len(assignments)}
 
@@ -1041,8 +1069,8 @@ def export_config(request: Request, filename: str, payload: dict = Depends(requi
     if data is None:
         raise HTTPException(status_code=404, detail="Config not found")
     encoded = base64.b64encode(json.dumps(data, default=str).encode("utf-8")).decode("utf-8")
-    ip, user_agent, location = _request_meta(request)
-    log_event(payload.get("sub"), "config_export", f"config={safe_name}", ip, user_agent, location)
+    ip, ip_v4, user_agent, location = _request_meta(request)
+    log_event(payload.get("sub"), "config_export", f"config={safe_name}", ip, user_agent, location, ip_v4)
     return {"filename": safe_name, "payload": data, "encoded": encoded}
 
 
@@ -1057,7 +1085,7 @@ def import_config(request: Request, body: SaveConfigRequest, payload: dict = Dep
         payload_dict = body.payload.dict()
         import_user_config(owner, safe_name, payload_dict)
         size_kb = round(len(json.dumps(payload_dict, default=str)) / 1024, 1)
-        ip, user_agent, location = _request_meta(request)
+        ip, ip_v4, user_agent, location = _request_meta(request)
         log_event(
             payload.get("sub"),
             "config_import",
@@ -1065,6 +1093,7 @@ def import_config(request: Request, body: SaveConfigRequest, payload: dict = Dep
             ip,
             user_agent,
             location,
+            ip_v4,
         )
         return {"status": "imported", "filename": filename}
     except Exception as exc:

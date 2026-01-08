@@ -2125,7 +2125,7 @@ export default function StaffPlanner() {
                         <td>{a.user_id != null ? `${userNameMap[a.user_id] ?? a.user_id}` : "-"}</td>
                         <td>{a.detail || "-"}</td>
                         <td>{a.location || "-"}</td>
-                        <td>{a.ip || "-"}</td>
+                        <td>{a.ip_v4 || a.ip || "-"}</td>
                       </tr>
                     ))}
                   </tbody>
