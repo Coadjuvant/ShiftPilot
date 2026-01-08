@@ -96,6 +96,7 @@ export interface AuditEntry {
   event: string;
   detail: string;
   ip: string;
+  ip_v4?: string;
   user_agent: string;
   location?: string;
   created_at: string;
