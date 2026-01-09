@@ -195,8 +195,11 @@ h4 {
   gap: 0.5rem;
 }
 .week-nav .secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0.35rem 0.65rem;
-  min-height: 32px;
+  min-height: 36px;
   border-radius: 10px;
   box-shadow: none;
   border: 1px solid rgba(15, 28, 61, 0.18);
@@ -255,9 +258,9 @@ h4 {
 
 .week-nav-arrow {
   display: inline-block;
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   line-height: 1;
-  font-weight: 600;
+  font-weight: 700;
   color: inherit;
 }
 
