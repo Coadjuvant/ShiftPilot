@@ -33,17 +33,6 @@ const IconExport = () => (
   </svg>
 );
 
-const IconChevronLeft = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <path d="M15 19 8 12l7-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const IconChevronRight = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <path d="m9 5 7 7-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
 
 const steps = [
   {
@@ -428,7 +417,9 @@ export default function Landing() {
                     onClick={() => setWeekIndex((w) => Math.max(0, w - 1))}
                     aria-label="Previous week"
                   >
-                    <IconChevronLeft />
+                    <span className="week-nav-arrow" aria-hidden="true">
+                      ‹
+                    </span>
                   </button>
                   <button
                     className="secondary-btn"
@@ -436,7 +427,9 @@ export default function Landing() {
                     onClick={() => setWeekIndex((w) => Math.min(weeksData.length - 1, w + 1))}
                     aria-label="Next week"
                   >
-                    <IconChevronRight />
+                    <span className="week-nav-arrow" aria-hidden="true">
+                      ›
+                    </span>
                   </button>
                 </div>
               </div>
