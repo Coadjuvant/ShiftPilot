@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
-import { fetchLatestSchedule, SavedSchedule } from "../api/client";
+import { fetchLatestSchedule, getStoredToken, SavedSchedule } from "../api/client";
 
 const IconCalendar = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -63,7 +63,7 @@ const steps = [
 export default function Landing() {
   const [isAuthed, setIsAuthed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
-    return Boolean(localStorage.getItem("auth_token"));
+    return Boolean(getStoredToken());
   });
   const [latestSchedule, setLatestSchedule] = useState<SavedSchedule | null>(null);
   const [weekIndex, setWeekIndex] = useState(0);
@@ -98,12 +98,16 @@ export default function Landing() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handler = () => {
-      setIsAuthed(Boolean(localStorage.getItem("auth_token")));
+      setIsAuthed(Boolean(getStoredToken()));
       setScheduleTick((tick) => tick + 1);
     };
     window.addEventListener("storage", handler);
     handler();
-    return () => window.removeEventListener("storage", handler);
+    const interval = window.setInterval(handler, 60_000);
+    return () => {
+      window.removeEventListener("storage", handler);
+      window.clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {

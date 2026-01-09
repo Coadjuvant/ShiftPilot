@@ -12,6 +12,7 @@ import api, {
   exportScheduleExcel,
   fetchLatestSchedule,
   fetchHealth,
+  getStoredToken,
   listAudit,
   listConfigs,
   listUsers,
@@ -235,7 +236,7 @@ export default function StaffPlanner() {
   const [winningSeed, setWinningSeed] = useState<number | null>(null);
   const [winningScore, setWinningScore] = useState<number | null>(null);
   const [authToken, setAuthTokenState] = useState<string | null>(() => {
-    return localStorage.getItem("auth_token");
+    return getStoredToken();
   });
   const [loginMode, setLoginMode] = useState<"login" | "setup">("login");
   const [loginUser, setLoginUser] = useState<string>("");
@@ -2099,6 +2100,9 @@ export default function StaffPlanner() {
                   }}
                 >
                   Clear
+                </button>
+                <button className="secondary-btn" onClick={() => loadAudit()}>
+                  Refresh
                 </button>
               </div>
             </div>

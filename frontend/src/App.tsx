@@ -1,23 +1,30 @@
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import StaffPlanner from "./pages/StaffPlanner";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import PlaceholderPage from "./pages/Placeholder";
 import Features from "./pages/Features";
+import { clearStoredAuth, getStoredToken } from "./api/client";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isAuthed, setIsAuthed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
-    return Boolean(localStorage.getItem("auth_token"));
+    return Boolean(getStoredToken());
   });
   const [authUser, setAuthUser] = useState<string>(() => {
     if (typeof window === "undefined") return "";
     return localStorage.getItem("auth_user") || "";
   });
   const location = useLocation();
+  const syncAuthState = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const token = getStoredToken();
+    setIsAuthed(Boolean(token));
+    setAuthUser(localStorage.getItem("auth_user") || "");
+  }, []);
 
   useEffect(() => {
     document.body.dataset.theme = theme;
@@ -35,18 +42,24 @@ export default function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handler = () => {
-      setIsAuthed(Boolean(localStorage.getItem("auth_token")));
-      setAuthUser(localStorage.getItem("auth_user") || "");
+      syncAuthState();
     };
     window.addEventListener("storage", handler);
     handler();
-    return () => window.removeEventListener("storage", handler);
-  }, []);
+    const interval = window.setInterval(syncAuthState, 60_000);
+    return () => {
+      window.removeEventListener("storage", handler);
+      window.clearInterval(interval);
+    };
+  }, [syncAuthState]);
+
+  useEffect(() => {
+    syncAuthState();
+  }, [location, syncAuthState]);
 
   const handleLogout = () => {
     if (typeof window === "undefined") return;
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("auth_user");
+    clearStoredAuth();
     setIsAuthed(false);
     setAuthUser("");
     window.location.href = "/";
