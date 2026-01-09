@@ -644,6 +644,7 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
             "start_date": request.config.start_date.isoformat() if hasattr(request.config.start_date, "isoformat") else request.config.start_date,
             "weeks": request.config.weeks,
             "bleach_frequency": request.config.bleach_frequency,
+            "toggles": request.config.toggles.dict(),
             "requirements": [
                 {
                     "day_name": req.day_name,

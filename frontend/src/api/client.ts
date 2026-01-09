@@ -227,6 +227,7 @@ export interface SavedSchedule {
   start_date: string;
   weeks: number;
   bleach_frequency?: string;
+  toggles?: Record<string, boolean>;
   requirements: SavedRequirement[];
   assignments: SavedAssignment[];
   staff?: Array<{ id: string; name: string; role: string }>;
