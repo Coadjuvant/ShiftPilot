@@ -253,6 +253,14 @@ h4 {
   background: rgba(0, 51, 160, 0.18);
 }
 
+.schedule-card .week-nav svg {
+  color: var(--warm-1);
+}
+
+.page-shell.light .schedule-card .week-nav svg {
+  color: var(--deep-blue);
+}
+
 .day-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
