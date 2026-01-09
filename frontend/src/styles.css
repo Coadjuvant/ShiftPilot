@@ -236,7 +236,7 @@ h4 {
 .schedule-card .week-nav .secondary-btn {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.18);
-  color: var(--warm-2);
+  color: var(--warm-1);
 }
 
 .page-shell.light .schedule-card .week-nav .secondary-btn {
