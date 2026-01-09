@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
-import { fetchLatestSchedule, getStoredToken, SavedSchedule } from "../api/client";
+import { fetchLatestSchedule, getStoredToken, SavedAssignment, SavedSchedule } from "../api/client";
 
 const IconCalendar = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -248,6 +248,121 @@ export default function Landing() {
     return hasDeficit ? "Needs attention" : "Fully staffed";
   }, [currentWeek]);
 
+  const constraintSummary = useMemo(() => {
+    if (!latestSchedule) {
+      return { label: "Constraints honored", title: "" };
+    }
+    const toggles = latestSchedule.toggles;
+    const reqs = latestSchedule.requirements || [];
+    if (!toggles || !reqs.length) {
+      return { label: "Constraints unavailable", title: "Constraint data unavailable for this run." };
+    }
+    const dayKey = (value: string) => value.slice(0, 3).toLowerCase();
+    const dayOrder = reqs.map((r) => r.day_name);
+    const dayOrderKeys = dayOrder.map(dayKey);
+    const dayCount = dayOrderKeys.length;
+    const satPos = dayOrderKeys.indexOf("sat");
+    const start = parseISODate(latestSchedule.start_date);
+    const startUtc = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+    const staffRoleMap = new Map((latestSchedule.staff || []).map((s) => [s.id, s.role]));
+    const perStaff = new Map<
+      string,
+      { role: string; indices: Set<number>; bleachIndices: Set<number> }
+    >();
+
+    const toDayIndex = (assignment: SavedAssignment) => {
+      if (!assignment.date) return null;
+      const key = dayKey(assignment.day_name || "");
+      const dayPos = dayOrderKeys.indexOf(key);
+      if (dayPos < 0) return null;
+      const date = parseISODate(assignment.date);
+      const dateUtc = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+      const deltaDays = Math.floor((dateUtc - startUtc) / 86400000);
+      const weekIdx = Math.max(0, Math.floor(deltaDays / 7));
+      return weekIdx * dayCount + dayPos;
+    };
+
+    for (const assignment of latestSchedule.assignments || []) {
+      if (!assignment.staff_id || assignment.staff_id.toString().toUpperCase() === "OPEN") continue;
+      const idx = toDayIndex(assignment);
+      if (idx == null) continue;
+      const staffId = assignment.staff_id.toString();
+      const role = (staffRoleMap.get(staffId) || assignment.role || "Tech").toString();
+      if (!perStaff.has(staffId)) {
+        perStaff.set(staffId, { role, indices: new Set(), bleachIndices: new Set() });
+      }
+      const record = perStaff.get(staffId)!;
+      record.indices.add(idx);
+      if (assignment.is_bleach || assignment.duty === "bleach") {
+        record.bleachIndices.add(idx);
+      }
+    }
+
+    const hasThreeDay = () => {
+      for (const { indices } of perStaff.values()) {
+        const list = Array.from(indices).sort((a, b) => a - b);
+        for (const idx of list) {
+          if (indices.has(idx - 1) && indices.has(idx - 2)) return true;
+        }
+      }
+      return false;
+    };
+    const hasWeekCap = (role: string) => {
+      for (const { indices, role: staffRole } of perStaff.values()) {
+        if (staffRole.toLowerCase() !== role.toLowerCase()) continue;
+        const weeks = new Map<number, number>();
+        indices.forEach((idx) => {
+          const weekIdx = Math.floor(idx / dayCount);
+          weeks.set(weekIdx, (weeks.get(weekIdx) || 0) + 1);
+        });
+        for (const count of weeks.values()) {
+          if (count > 4) return true;
+        }
+      }
+      return false;
+    };
+    const hasAltSaturdays = () => {
+      if (satPos < 0) return false;
+      for (const { indices } of perStaff.values()) {
+        const weeks = new Set<number>();
+        indices.forEach((idx) => {
+          if (idx % dayCount === satPos) weeks.add(Math.floor(idx / dayCount));
+        });
+        for (const weekIdx of weeks) {
+          if (weeks.has(weekIdx - 1)) return true;
+        }
+      }
+      return false;
+    };
+    const hasPostBleach = () => {
+      for (const { indices, bleachIndices } of perStaff.values()) {
+        for (const bleachIdx of bleachIndices) {
+          if (indices.has(bleachIdx + 1)) return true;
+        }
+      }
+      return false;
+    };
+
+    const constraints = [
+      { key: "enforce_three_day_cap", label: "No 3-day streaks", violated: hasThreeDay },
+      { key: "limit_tech_four_days", label: "Tech 4-day cap", violated: () => hasWeekCap("Tech") },
+      { key: "limit_rn_four_days", label: "RN 4-day cap", violated: () => hasWeekCap("RN") },
+      { key: "enforce_alt_saturdays", label: "Alternate Saturdays", violated: hasAltSaturdays },
+      { key: "enforce_post_bleach_rest", label: "Post-bleach rest", violated: hasPostBleach },
+    ];
+    const enabled = constraints.filter((c) => Boolean((toggles as any)[c.key]));
+    if (!enabled.length) {
+      return { label: "Constraints not enabled", title: "No constraints were enabled for this run." };
+    }
+    const violated = enabled.filter((c) => c.violated());
+    const honored = enabled.filter((c) => !violated.includes(c));
+    const label = violated.length ? "Constraints broken" : "Constraints honored";
+    const parts: string[] = [];
+    if (honored.length) parts.push(`Honored: ${honored.map((c) => c.label).join(", ")}`);
+    if (violated.length) parts.push(`Broken: ${violated.map((c) => c.label).join(", ")}`);
+    return { label, title: parts.join("\n") };
+  }, [latestSchedule]);
+
   const scheduleAuditLine = useMemo(() => {
     if (!latestSchedule) return "";
     const parts: string[] = [];
@@ -401,8 +516,10 @@ export default function Landing() {
                 </div>
               ) : null}
               <div className="schedule-foot">
-                <div className="pill muted-pill">Soft constraints honored</div>
-                <div className="pill muted-pill">Exports: Excel / PDF</div>
+                <div className="pill muted-pill" title={constraintSummary.title}>
+                  {constraintSummary.label}
+                </div>
+                <div className="pill muted-pill">Exports: Excel / CSV</div>
               </div>
             </div>
           ) : (
@@ -412,7 +529,7 @@ export default function Landing() {
                   <span className="pill small-pill">Week of Jun 10</span>
                   <h4 style={{ margin: 0 }}>Dialysis coverage</h4>
                 </div>
-                <div className="pill success-pill">Conflicts resolved</div>
+                <div className="pill muted-pill">Conflicts resolved</div>
               </div>
               <div className="schedule-list">
                 <div className="schedule-row">
@@ -449,8 +566,8 @@ export default function Landing() {
                 </div>
               </div>
               <div className="schedule-foot">
-                <div className="pill muted-pill">Soft constraints honored</div>
-                <div className="pill muted-pill">Exports: Excel / PDF</div>
+                <div className="pill muted-pill">Constraints honored</div>
+                <div className="pill muted-pill">Exports: Excel / CSV</div>
               </div>
             </div>
           )}
@@ -483,7 +600,7 @@ export default function Landing() {
             </span>
             <div>
               <h3>Export-ready</h3>
-              <p>Share clean Excel/PDF outputs for floor teams and leadership in seconds - no manual cleanup required.</p>
+              <p>Share clean Excel/CSV outputs for floor teams and leadership in seconds - no manual cleanup required.</p>
             </div>
           </article>
         </section>

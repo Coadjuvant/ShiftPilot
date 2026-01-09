@@ -69,7 +69,7 @@ const featureCards = [
   },
   {
     title: "Export-ready handoffs",
-    body: "Share clean CSV/PDF outputs and snapshots so floor teams never have to rewrite your schedule.",
+    body: "Share clean Excel/CSV outputs and snapshots so floor teams never have to rewrite your schedule.",
     icon: <IconExport />,
   },
   {
@@ -154,7 +154,7 @@ export default function Features() {
           <div className="features-metric">
             <div>
               <div className="metric-label">Exports</div>
-              <div className="metric-value">CSV + PDF</div>
+              <div className="metric-value">Excel + CSV</div>
             </div>
             <span className="pill muted-pill small-pill">Instant</span>
           </div>
@@ -203,7 +203,7 @@ export default function Features() {
             Export a schedule to CSV, keep a saved snapshot, and hand off the same story to everyone from charge to leadership.
           </p>
           <ul className="feature-list">
-            <li>One click CSV or PDF export.</li>
+            <li>One click Excel or CSV export.</li>
             <li>Config import/export for new clinics.</li>
             <li>Latest schedule ready at login.</li>
           </ul>

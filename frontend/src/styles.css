@@ -233,6 +233,26 @@ h4 {
   background: rgba(255, 255, 255, 0.12);
 }
 
+.schedule-card .week-nav .secondary-btn {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--warm-2);
+}
+
+.page-shell.light .schedule-card .week-nav .secondary-btn {
+  background: rgba(0, 51, 160, 0.12);
+  border-color: rgba(0, 51, 160, 0.18);
+  color: var(--deep-blue);
+}
+
+.schedule-card .week-nav .secondary-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.page-shell.light .schedule-card .week-nav .secondary-btn:hover {
+  background: rgba(0, 51, 160, 0.18);
+}
+
 .day-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

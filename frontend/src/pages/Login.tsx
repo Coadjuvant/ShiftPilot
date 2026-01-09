@@ -78,7 +78,7 @@ export default function Login() {
           <ul className="hero-checklist">
             <li>Guardrails for Tech / RN / Admin</li>
             <li>Keep fixed assignments locked</li>
-            <li>Exports ready for Excel/PDF</li>
+            <li>Exports ready for Excel/CSV</li>
           </ul>
           <div className="auth-badges">
             <span className="pill subtle">Single login</span>
