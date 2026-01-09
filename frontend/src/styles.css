@@ -253,12 +253,12 @@ h4 {
   background: rgba(0, 51, 160, 0.18);
 }
 
-.schedule-card .week-nav svg {
-  color: var(--warm-1);
-}
-
-.page-shell.light .schedule-card .week-nav svg {
-  color: var(--deep-blue);
+.week-nav-arrow {
+  display: inline-block;
+  font-size: 1.1rem;
+  line-height: 1;
+  font-weight: 600;
+  color: inherit;
 }
 
 .day-grid {
