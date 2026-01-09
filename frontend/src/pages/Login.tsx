@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { login, setAuthToken, fetchHealth } from "../api/client";
+import { consumeAuthExpiredFlag, fetchHealth, login, setAuthToken } from "../api/client";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -16,6 +16,13 @@ export default function Login() {
     fetchHealth()
       .then(() => setOnline("ok"))
       .catch(() => setOnline("down"));
+  }, []);
+
+  useEffect(() => {
+    if (consumeAuthExpiredFlag()) {
+      setStatus("Session expired. Please log in again.");
+      setStatusTone("error");
+    }
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {

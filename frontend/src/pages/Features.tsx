@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { getStoredToken } from "../api/client";
 
 const IconRules = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -91,16 +92,20 @@ const featureCards = [
 export default function Features() {
   const [isAuthed, setIsAuthed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
-    return Boolean(localStorage.getItem("auth_token"));
+    return Boolean(getStoredToken());
   });
   const plannerRoute = isAuthed ? "/planner" : "/login";
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const handler = () => setIsAuthed(Boolean(localStorage.getItem("auth_token")));
+    const handler = () => setIsAuthed(Boolean(getStoredToken()));
     window.addEventListener("storage", handler);
     handler();
-    return () => window.removeEventListener("storage", handler);
+    const interval = window.setInterval(handler, 60_000);
+    return () => {
+      window.removeEventListener("storage", handler);
+      window.clearInterval(interval);
+    };
   }, []);
 
   return (

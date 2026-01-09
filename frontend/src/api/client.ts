@@ -26,9 +26,59 @@ export const setAuthToken = (token: string | null) => {
   }
 };
 
+const AUTH_EXPIRED_KEY = "auth_expired";
+
+const decodeJwtPayload = (token: string): Record<string, any> | null => {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+    const json = atob(padded);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+};
+
+export const isTokenExpired = (token: string | null): boolean => {
+  if (!token) return true;
+  const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload.exp !== "number") return false;
+  return Date.now() >= payload.exp * 1000;
+};
+
+export const clearStoredAuth = (markExpired = false) => {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem("auth_token");
+  window.localStorage.removeItem("auth_user");
+  if (markExpired) {
+    window.localStorage.setItem(AUTH_EXPIRED_KEY, String(Date.now()));
+  }
+};
+
+export const getStoredToken = (): string | null => {
+  if (typeof window === "undefined") return null;
+  const stored = window.localStorage.getItem("auth_token");
+  if (!stored) return null;
+  if (isTokenExpired(stored)) {
+    clearStoredAuth(true);
+    return null;
+  }
+  return stored;
+};
+
+export const consumeAuthExpiredFlag = (): boolean => {
+  if (typeof window === "undefined") return false;
+  const value = window.localStorage.getItem(AUTH_EXPIRED_KEY);
+  if (!value) return false;
+  window.localStorage.removeItem(AUTH_EXPIRED_KEY);
+  return true;
+};
+
 // Apply token from localStorage on load (browser only)
 if (typeof window !== "undefined") {
-  const stored = window.localStorage.getItem("auth_token");
+  const stored = getStoredToken();
   if (stored) {
     setAuthToken(stored);
   }
@@ -38,7 +88,7 @@ if (typeof window !== "undefined") {
 // don't rely solely on the default header state.
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
-    const stored = window.localStorage.getItem("auth_token");
+    const stored = getStoredToken();
     if (stored) {
       config.headers = config.headers ?? {};
       config.headers["Authorization"] = `Bearer ${stored}`;
