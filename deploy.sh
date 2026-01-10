@@ -7,6 +7,8 @@ cd "$SCRIPT_DIR"
 echo "[shiftpilot] pulling latest..."
 git pull --rebase --autostash
 
+export VITE_APP_BUILD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+
 echo "[shiftpilot] selecting compose..."
 if docker compose version >/dev/null 2>&1; then
   COMPOSE_CMD="docker compose"
