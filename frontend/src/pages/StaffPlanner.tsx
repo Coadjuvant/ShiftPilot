@@ -275,6 +275,7 @@ export default function StaffPlanner() {
   const [auditLimit, setAuditLimit] = useState<number>(50);
   const [lastError, setLastError] = useState<string>("");
   const [scheduleStaffMap, setScheduleStaffMap] = useState<Record<string, string> | null>(null);
+  const [latestScheduleMeta, setLatestScheduleMeta] = useState<SavedSchedule | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [progress, setProgress] = useState<number>(0);
   const [autoLoadedConfig, setAutoLoadedConfig] = useState<boolean>(false);
@@ -319,6 +320,27 @@ export default function StaffPlanner() {
     end.setDate(end.getDate() + weeks * 7 - 1);
     return end.toISOString().slice(0, 10);
   })();
+
+  const formatGeneratedAt = (value?: string) => {
+    if (!value) return "";
+    const hasTimeZone = /([zZ]|[+-]\d{2}:\d{2})$/.test(value);
+    const date = new Date(hasTimeZone ? value : `${value}Z`);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString();
+  };
+
+  const refreshLatestMeta = async () => {
+    try {
+      const meta = await fetchLatestSchedule();
+      if ((meta as any)?.status === "none") {
+        setLatestScheduleMeta(null);
+        return;
+      }
+      setLatestScheduleMeta(meta);
+    } catch {
+      setLatestScheduleMeta(null);
+    }
+  };
 
   const resetWorkspaceState = (message?: string) => {
     setStaffRows([
@@ -433,6 +455,13 @@ export default function StaffPlanner() {
       loadAudit();
     }
   }, [isAuthed, isAdmin, activeTab]);
+  useEffect(() => {
+    if (!isAuthed) {
+      setLatestScheduleMeta(null);
+      return;
+    }
+    refreshLatestMeta();
+  }, [isAuthed]);
   // Autoload config: if only one available or a last used exists
   useEffect(() => {
     if (!isAuthed || autoLoadedConfig) return;
@@ -888,6 +917,13 @@ export default function StaffPlanner() {
   return (
     <section className="card planner-shell">
       <h2>Staff Planner (React prototype)</h2>
+      <div className="planner-meta-row">
+        <span className="pill subtle">
+          {latestScheduleMeta?.generated_at
+            ? `Last run: ${formatGeneratedAt(latestScheduleMeta.generated_at)}`
+            : "No saved schedule"}
+        </span>
+      </div>
       {isAdmin || !status.toLowerCase().startsWith("api status") ? <p>{status}</p> : null}
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
         {isAdmin && (
@@ -1561,6 +1597,7 @@ export default function StaffPlanner() {
                   } | Next bleach in rotation: ${res.bleach_cursor} | Assignments: ${res.assignments.length}`
                 );
                 setStatus("Schedule generated.");
+                refreshLatestMeta();
                 try {
                   localStorage.setItem("latest_schedule_ts", new Date().toISOString());
                   window.dispatchEvent(new Event("storage"));

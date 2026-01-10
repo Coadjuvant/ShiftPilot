@@ -3,8 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import StaffPlanner from "./pages/StaffPlanner";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
-import PlaceholderPage from "./pages/Placeholder";
 import Features from "./pages/Features";
+import Contact from "./pages/Contact";
 import { clearStoredAuth, getStoredToken } from "./api/client";
 
 export default function App() {
@@ -56,6 +56,10 @@ export default function App() {
   useEffect(() => {
     syncAuthState();
   }, [location, syncAuthState]);
+
+  const appVersion = (import.meta as any).env?.VITE_APP_VERSION || "dev";
+  const appBuild = (import.meta as any).env?.VITE_APP_BUILD || "";
+  const versionLabel = appBuild ? `${appVersion} (${appBuild})` : appVersion;
 
   const handleLogout = () => {
     if (typeof window === "undefined") return;
@@ -136,9 +140,20 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/planner" element={isAuthed ? <StaffPlanner /> : <Navigate to="/login" replace />} />
           <Route path="/features" element={<Features />} />
-          <Route path="/contact" element={<PlaceholderPage title="Contact" />} />
+          <Route path="/contact" element={<Contact />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <footer className="site-footer">
+          <div className="site-footer__inner">
+            <div className="site-footer__links">
+              <a href="mailto:support@shiftpilot.me">Support: support@shiftpilot.me</a>
+              <a href="mailto:support@shiftpilot.me?subject=ShiftPilot%20Feedback">Feedback</a>
+            </div>
+            <div className="site-footer__meta">
+              <span className="pill subtle">Build {versionLabel}</span>
+            </div>
+          </div>
+        </footer>
       </div>
     </div>
   );
