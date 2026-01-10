@@ -1,84 +1,67 @@
-# ShiftPilot (Clinic Scheduler)
+# ShiftPilot User Guide
 
-ShiftPilot is a scheduling assistant for dialysis clinics. It helps clinic managers
-build multi-week rosters, enforce rules (coverage, bleach rotation, max days, etc),
-and export schedules for downstream tools.
+ShiftPilot helps clinic managers build multi-week staff schedules, enforce clinic rules, and export rosters for downstream tools.
 
-## Stack
+## Quick start
 
-- Frontend: React + Vite
-- Backend: FastAPI + Python scheduler engine
-- Database: Postgres (auth, configs, schedules, audit log)
-- Local/dev: Docker Compose
+1) Open the site and select `Login`.
+2) After login, go to `Planner`.
+3) Load a config, update inputs, then run the schedule.
 
-## Repo layout
+## Planner workflow
 
-- `frontend/` - React app (landing, planner, login).
-- `backend/api/` - FastAPI app + API routes.
-- `backend/scheduler/` - scheduling logic.
-- `configs/` - sample config files.
-- `docs/` - notes and docs.
-- `DEPLOY.md` - deployment notes.
+### 1) Load or create a config
+- Use the config dropdown to load an existing clinic config.
+- Update clinic name, staffing, and rules as needed.
+- Use `Save` to persist changes.
 
-## Quick start (Docker)
+### 2) Staff
+Define your roster (names + roles). This is the pool the scheduler can use.
 
-1) Create a `.env` file at the repo root:
+### 3) Availability
+Mark which days each staff member can work.
 
-```
-ADMIN_USER=admin
-ADMIN_PASS=admin
-ADMIN_LICENSE=DEMO
-JWT_SECRET=change-me
-AUTH_BACKEND=postgres
-DATABASE_URL=postgresql://admin:changeme@db:5432/shiftpilot_db
-VITE_API_URL=http://localhost:8000/api
-GEOIP_API_URL=https://www.iplocate.io/api/lookup/{ip}
-GEOIP_API_TIMEOUT=2
-GEOIP_CACHE_TTL=3600
-```
+### 4) Prefs
+Set preference weights (what each person prefers to open/close).
 
-2) Build and run:
+### 5) Demand
+Define daily demand (how many Tech/RN/Admin slots are needed per day).
 
-```
-docker compose up -d --build
-```
+### 6) PTO
+Add time off for each staff member (single day or ranges).
 
-- Frontend: `http://localhost:8080`
-- API: `http://localhost:8000`
+### 7) Bleach
+Set bleach day frequency and the rotation order.
+- The rotation advances when the assigned person bleaches.
+- If someone is unavailable, they are skipped and placed first in line next time.
 
-## Local dev (no Docker)
+### 8) Run
+Set the schedule window and constraints, then click `Run Schedule`.
+- You can toggle constraints like max days/week, alternate Saturdays, and post-bleach rest.
+- If a slot cannot be filled, it will be marked as needing coverage.
 
-Backend:
-```
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r backend/requirements.txt
-uvicorn backend.api.main:app --reload
-```
+## Schedule results
 
-Frontend:
-```
-cd frontend
-npm install
-npm run dev
-```
+- A schedule matrix appears in the planner after a successful run.
+- The latest run is also saved and shown on the home page schedule card (only when logged in).
+- Use the week arrows on the home page card to move through the schedule weeks.
 
-Set `VITE_API_URL` for dev in `frontend/.env.local`, for example:
-```
-VITE_API_URL=http://localhost:8000/api
-```
+## Exports
 
-## Build tag (optional)
+In the planner:
+- `Download Latest Schedule` exports the most recent saved schedule (Excel).
+- `Download CSV` exports the most recent saved schedule (CSV).
+- `Export roles` controls which roles appear in exports.
 
-The footer can show a build label when you set these at build time:
-- `VITE_APP_BUILD` (usually a short git hash)
-- `VITE_APP_VERSION` (optional version string)
+## Login behavior
 
-## Deployment
+- The top-right button toggles between `Login` and `Logout`.
+- Sessions expire; if the session ends, you will be prompted to log in again.
 
-See `DEPLOY.md` for environment variables and hosting notes.
+## Admin (optional)
 
-## Notes
+Admins can manage invites, user roles, and review recent activity.
 
-- Do not commit secrets; keep `.env` local or set platform secrets.
-- If you change backend env vars, rebuild/restart the backend container.
+## Support
+
+If you need help, contact: `support@shiftpilot.me`
