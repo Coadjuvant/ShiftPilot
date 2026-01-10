@@ -50,6 +50,8 @@ services:
       args:
         # Pass through the API URL (include /api) from your .env
         VITE_API_URL: ${VITE_API_URL}
+        VITE_APP_BUILD: ${VITE_APP_BUILD}
+        VITE_APP_VERSION: ${VITE_APP_VERSION}
     depends_on:
       - backend
     networks:

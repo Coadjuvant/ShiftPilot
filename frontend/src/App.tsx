@@ -57,9 +57,9 @@ export default function App() {
     syncAuthState();
   }, [location, syncAuthState]);
 
-  const appVersion = (import.meta as any).env?.VITE_APP_VERSION || "dev";
+  const appVersion = (import.meta as any).env?.VITE_APP_VERSION || "";
   const appBuild = (import.meta as any).env?.VITE_APP_BUILD || "";
-  const versionLabel = appBuild ? `${appVersion} (${appBuild})` : appVersion;
+  const versionLabel = appVersion ? (appBuild ? `${appVersion} (${appBuild})` : appVersion) : appBuild || "dev";
 
   const handleLogout = () => {
     if (typeof window === "undefined") return;
