@@ -59,7 +59,14 @@ export default function App() {
 
   const appVersion = (import.meta as any).env?.VITE_APP_VERSION || "";
   const appBuild = (import.meta as any).env?.VITE_APP_BUILD || "";
-  const versionLabel = appVersion ? (appBuild ? `${appVersion} (${appBuild})` : appVersion) : appBuild || "dev";
+  let versionLabel = "dev";
+  if (appVersion && appBuild) {
+    versionLabel = appVersion === appBuild ? appBuild : `${appVersion} (${appBuild})`;
+  } else if (appVersion) {
+    versionLabel = appVersion;
+  } else if (appBuild) {
+    versionLabel = appBuild;
+  }
 
   const handleLogout = () => {
     if (typeof window === "undefined") return;
