@@ -395,7 +395,12 @@ button {
   border-top-color: rgba(15, 28, 61, 0.12);
 }
 
-.page-shell.light .site-footer__links a {
+.site-footer__links span {
+  color: var(--warm-1);
+}
+
+.page-shell.light .site-footer__links a,
+.page-shell.light .site-footer__links span {
   color: var(--deep-blue);
 }
 
@@ -453,6 +458,21 @@ button {
 }
 
 .page-shell.light .contact-row a {
+  color: var(--deep-blue);
+}
+
+.contact-email {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}
+
+.contact-email span {
+  color: var(--warm-1);
+}
+
+.page-shell.light .contact-email span {
   color: var(--deep-blue);
 }
 
@@ -1154,6 +1174,19 @@ table th {
   color: var(--warm-1);
   text-decoration: none;
   font-weight: 600;
+}
+
+button.secondary-link {
+  background: none;
+  border: none;
+  padding: 0;
+  min-height: auto;
+  box-shadow: none;
+}
+
+button.secondary-link:hover {
+  background: none;
+  box-shadow: none;
 }
 
 .page-shell.light .secondary-link {

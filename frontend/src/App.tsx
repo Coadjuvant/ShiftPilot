@@ -8,6 +8,7 @@ import Contact from "./pages/Contact";
 import { clearStoredAuth, getStoredToken } from "./api/client";
 
 export default function App() {
+  const supportEmail = "support@shiftpilot.me";
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isAuthed, setIsAuthed] = useState<boolean>(() => {
@@ -18,6 +19,7 @@ export default function App() {
     if (typeof window === "undefined") return "";
     return localStorage.getItem("auth_user") || "";
   });
+  const [supportCopyLabel, setSupportCopyLabel] = useState("Copy email");
   const location = useLocation();
   const syncAuthState = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -74,6 +76,19 @@ export default function App() {
     setIsAuthed(false);
     setAuthUser("");
     window.location.href = "/";
+  };
+
+  const handleCopySupportEmail = async () => {
+    if (typeof window === "undefined") return;
+    const fallbackLabel = "Copy email";
+    try {
+      await navigator.clipboard.writeText(supportEmail);
+      setSupportCopyLabel("Copied");
+    } catch (err) {
+      console.warn("Failed to copy support email", err);
+      setSupportCopyLabel("Copy failed");
+    }
+    window.setTimeout(() => setSupportCopyLabel(fallbackLabel), 2000);
   };
 
   return (
@@ -153,8 +168,10 @@ export default function App() {
         <footer className="site-footer">
           <div className="site-footer__inner">
             <div className="site-footer__links">
-              <a href="mailto:support@shiftpilot.me">Support: support@shiftpilot.me</a>
-              <a href="mailto:support@shiftpilot.me?subject=ShiftPilot%20Feedback">Feedback</a>
+              <span>Support: {supportEmail}</span>
+              <button type="button" className="secondary-link" onClick={handleCopySupportEmail}>
+                {supportCopyLabel}
+              </button>
             </div>
             <div className="site-footer__meta">
               <span className="pill subtle">Build {versionLabel}</span>
