@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { consumeAuthExpiredFlag, fetchHealth, login, setAuthToken } from "../api/client";
+import { consumeAuthExpiredFlag, fetchHealth, login, setAuthToken, setupUser } from "../api/client";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -10,6 +10,12 @@ export default function Login() {
   const [online, setOnline] = useState<"checking" | "ok" | "down">("checking");
   const [loginSuccess, setLoginSuccess] = useState(false);
   const [statusTone, setStatusTone] = useState<"default" | "success" | "error">("default");
+  const [inviteToken, setInviteToken] = useState("");
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [signupStatus, setSignupStatus] = useState("");
+  const [signupTone, setSignupTone] = useState<"default" | "success" | "error">("default");
+  const [isCreating, setIsCreating] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -59,6 +65,29 @@ export default function Login() {
     // Notify other listeners and return home
     window.dispatchEvent(new Event("storage"));
     navigate("/");
+  };
+
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsCreating(true);
+    setSignupStatus("");
+    setSignupTone("default");
+    try {
+      const res = await setupUser(inviteToken, newUsername, newPassword);
+      setAuthToken(res.token);
+      localStorage.setItem("auth_token", res.token);
+      localStorage.setItem("auth_user", newUsername || "user");
+      setSignupStatus("Account created. Redirecting to home...");
+      setSignupTone("success");
+      window.dispatchEvent(new Event("storage"));
+      setTimeout(() => navigate("/"), 2500);
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || "Account creation failed. Check the key and try again.";
+      setSignupStatus(String(msg));
+      setSignupTone("error");
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const onlineLabel =
@@ -128,6 +157,49 @@ export default function Login() {
               {loginSuccess ? "Logout" : isSubmitting ? "Signing in..." : "Log in"}
             </button>
             {status && <p className={`status ${statusTone !== "default" ? statusTone : ""}`}>{status}</p>}
+          </form>
+          <div className="auth-divider" role="presentation" />
+          <form className="auth-form" onSubmit={handleSignup}>
+            <div className="auth-subhead">Make an account</div>
+            <p className="muted small-note">Redeem your invite key to create a clinic login.</p>
+            <label className="field">
+              <span>Invite key</span>
+              <input
+                id="signup-invite"
+                name="signup-invite"
+                value={inviteToken}
+                onChange={(e) => setInviteToken(e.target.value)}
+                autoComplete="one-time-code"
+                required
+              />
+            </label>
+            <label className="field">
+              <span>Username</span>
+              <input
+                id="signup-username"
+                name="signup-username"
+                value={newUsername}
+                onChange={(e) => setNewUsername(e.target.value)}
+                autoComplete="username"
+                required
+              />
+            </label>
+            <label className="field">
+              <span>Password</span>
+              <input
+                id="signup-password"
+                name="signup-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                autoComplete="new-password"
+                required
+              />
+            </label>
+            <button type="submit" disabled={isCreating}>
+              {isCreating ? "Creating account..." : "Create account"}
+            </button>
+            {signupStatus && <p className={`status ${signupTone !== "default" ? signupTone : ""}`}>{signupStatus}</p>}
           </form>
           <p className="muted small-note">Need access? Ask your admin to share the clinic credentials.</p>
         </div>

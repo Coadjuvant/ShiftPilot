@@ -89,6 +89,44 @@ const featureCards = [
   },
 ];
 
+const tutorialSteps = [
+  {
+    title: "Staff tab",
+    body:
+      "Add every Tech, RN, and admin assistant who can appear in the roster. Set open, close, and bleach capabilities so coverage rules apply correctly. Keep names consistent with how the clinic labels them.",
+  },
+  {
+    title: "Availability tab",
+    body:
+      "Toggle which days each person can work. Availability is enforced before preferences or constraints. Use it for fixed days off, rotating weekends, or limited schedules.",
+  },
+  {
+    title: "Prefs tab",
+    body:
+      "Use the sliders to nudge who prefers open, mid, or close on MWF vs TTS. Lower values are more preferred. Keep weights light if coverage is tight.",
+  },
+  {
+    title: "Demand tab",
+    body:
+      "Enter patient load and required Tech, RN, and admin counts per day. This snapshot defines what fully staffed means for the run. Update it for each schedule window.",
+  },
+  {
+    title: "PTO tab",
+    body:
+      "Add PTO ranges for each staff member. The scheduler skips those dates and flags coverage gaps if needed. Use it for vacations, training, and planned absences.",
+  },
+  {
+    title: "Bleach tab",
+    body:
+      "Choose the bleach day and frequency, then order the rotation list. The cursor shows who is next in line and advances after each bleach assignment. If someone is unavailable, they are skipped and queued first for the next run.",
+  },
+  {
+    title: "Run tab",
+    body:
+      "Set the schedule window, trials, and constraint weights (0 to ignore, 10 to never break). Run the schedule and review the matrix and latest snapshot. Export Excel or CSV when you are ready.",
+  },
+];
+
 export default function Features() {
   const [isAuthed, setIsAuthed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -177,6 +215,34 @@ export default function Features() {
               <div>
                 <h3>{feature.title}</h3>
                 <p>{feature.body}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="tutorial-section">
+        <div className="section-head">
+          <div>
+            <div className="eyebrow-pill muted-pill">Planner walkthrough</div>
+            <h2>From setup to schedule in seven steps.</h2>
+            <p className="muted">Each tab in the planner has a single job. Follow these in order to run a clean schedule.</p>
+          </div>
+        </div>
+        <div className="tutorial-steps">
+          {tutorialSteps.map((step, index) => (
+            <article className="tutorial-step" key={step.title}>
+              <div className="tutorial-copy">
+                <div className="tutorial-label">
+                  <span className="step-number">{index + 1}</span>
+                  <h3>{step.title}</h3>
+                </div>
+                <p className="muted">{step.body}</p>
+              </div>
+              <div className="tutorial-media">
+                <div className="tutorial-media-frame">
+                  <span>Drop GIF/video here</span>
+                </div>
               </div>
             </article>
           ))}

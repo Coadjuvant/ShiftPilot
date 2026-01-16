@@ -1482,6 +1482,26 @@ button.secondary-link:hover {
   margin-top: 0.35rem;
 }
 
+.auth-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 1.1rem 0;
+}
+
+.page-shell.light .auth-divider {
+  background: rgba(0, 51, 160, 0.12);
+}
+
+.auth-subhead {
+  font-weight: 700;
+  margin: 0 0 0.35rem;
+  color: var(--warm-1);
+}
+
+.page-shell.light .auth-subhead {
+  color: var(--deep-blue);
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -1637,6 +1657,77 @@ button.secondary-link:hover {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+}
+
+.tutorial-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.tutorial-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.tutorial-step {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.1fr) minmax(260px, 0.9fr);
+  gap: 1.5rem;
+  align-items: start;
+  padding: 1.5rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 32px rgba(7, 27, 69, 0.2);
+}
+
+.page-shell.light .tutorial-step {
+  background: #ffffff;
+  border-color: rgba(0, 51, 160, 0.12);
+  box-shadow: 0 14px 28px rgba(7, 27, 69, 0.08);
+}
+
+.tutorial-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.tutorial-copy h3 {
+  margin: 0;
+}
+
+.tutorial-copy p {
+  margin: 0.65rem 0 0;
+}
+
+.tutorial-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tutorial-media-frame {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.25);
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 600;
+  text-align: center;
+  padding: 1rem;
+}
+
+.page-shell.light .tutorial-media-frame {
+  background: rgba(0, 51, 160, 0.06);
+  border-color: rgba(0, 51, 160, 0.2);
+  color: rgba(15, 28, 61, 0.7);
 }
 
 .features-split {
@@ -2033,6 +2124,9 @@ button.secondary-link:hover {
   }
   .hero-content h1 {
     font-size: clamp(2rem, 5vw, 2.6rem);
+  }
+  .tutorial-step {
+    grid-template-columns: 1fr;
   }
 }
 
