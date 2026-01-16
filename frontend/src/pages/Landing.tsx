@@ -345,7 +345,7 @@ export default function Landing() {
       { key: "limit_rn_four_days", label: "RN 4-day cap", violated: () => hasWeekCap("RN") },
       { key: "enforce_alt_saturdays", label: "Alternate Saturdays", violated: hasAltSaturdays },
       { key: "enforce_post_bleach_rest", label: "Post-bleach rest", violated: hasPostBleach },
-    ];
+    ].map((item) => ({ ...item, weight: weightFor(item.key) }));
     const enabled = constraints.filter((c) => weightFor(c.key) > 0);
     if (!enabled.length) {
       return { label: "Constraints not enabled", title: "No constraints were enabled for this run." };
@@ -353,9 +353,10 @@ export default function Landing() {
     const violated = enabled.filter((c) => c.violated());
     const honored = enabled.filter((c) => !violated.includes(c));
     const label = violated.length ? "Constraints broken" : "Constraints honored";
+    const withWeight = (item: { label: string; weight: number }) => `${item.label} (w${item.weight})`;
     const parts: string[] = [];
-    if (honored.length) parts.push(`Honored: ${honored.map((c) => c.label).join(", ")}`);
-    if (violated.length) parts.push(`Broken: ${violated.map((c) => c.label).join(", ")}`);
+    if (honored.length) parts.push(`Honored: ${honored.map(withWeight).join(", ")}`);
+    if (violated.length) parts.push(`Broken: ${violated.map(withWeight).join(", ")}`);
     return { label, title: parts.join("\n") };
   }, [latestSchedule]);
 
