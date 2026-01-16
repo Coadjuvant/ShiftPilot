@@ -10,6 +10,7 @@ export default function Login() {
   const [online, setOnline] = useState<"checking" | "ok" | "down">("checking");
   const [loginSuccess, setLoginSuccess] = useState(false);
   const [statusTone, setStatusTone] = useState<"default" | "success" | "error">("default");
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [inviteToken, setInviteToken] = useState("");
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -54,6 +55,15 @@ export default function Login() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const switchMode = (mode: "login" | "signup") => {
+    setAuthMode(mode);
+    setStatus("");
+    setStatusTone("default");
+    setSignupStatus("");
+    setSignupTone("default");
+    setLoginSuccess(false);
   };
 
   const handleLogout = () => {
@@ -118,90 +128,109 @@ export default function Login() {
 
         <div className="auth-card">
           <div className="auth-card-head">
-            <p className="muted">Clinic manager sign-in</p>
+            <p className="muted">{authMode === "login" ? "Clinic manager sign-in" : "Create your clinic login"}</p>
             <div style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "wrap" }}>
               <span className={`pill ${online === "ok" ? "success" : "subtle"}`} title={onlineTitle}>
                 {onlineLabel}
               </span>
             </div>
           </div>
-          <form className="auth-form" onSubmit={handleLogin}>
-            <label className="field">
-              <span>Username</span>
-              <input
-                id="login-username"
-                name="login-username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
-                required
-              />
-            </label>
-            <label className="field">
-              <span>Password</span>
-              <input
-                id="login-password"
-                name="login-password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                required
-              />
-            </label>
-            <button
-              type={loginSuccess ? "button" : "submit"}
-              onClick={loginSuccess ? handleLogout : undefined}
-              disabled={isSubmitting}
-            >
-              {loginSuccess ? "Logout" : isSubmitting ? "Signing in..." : "Log in"}
-            </button>
-            {status && <p className={`status ${statusTone !== "default" ? statusTone : ""}`}>{status}</p>}
-          </form>
-          <div className="auth-divider" role="presentation" />
-          <form className="auth-form" onSubmit={handleSignup}>
-            <div className="auth-subhead">Make an account</div>
-            <p className="muted small-note">Redeem your invite key to create a clinic login.</p>
-            <label className="field">
-              <span>Invite key</span>
-              <input
-                id="signup-invite"
-                name="signup-invite"
-                value={inviteToken}
-                onChange={(e) => setInviteToken(e.target.value)}
-                autoComplete="one-time-code"
-                required
-              />
-            </label>
-            <label className="field">
-              <span>Username</span>
-              <input
-                id="signup-username"
-                name="signup-username"
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
-                autoComplete="username"
-                required
-              />
-            </label>
-            <label className="field">
-              <span>Password</span>
-              <input
-                id="signup-password"
-                name="signup-password"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                autoComplete="new-password"
-                required
-              />
-            </label>
-            <button type="submit" disabled={isCreating}>
-              {isCreating ? "Creating account..." : "Create account"}
-            </button>
-            {signupStatus && <p className={`status ${signupTone !== "default" ? signupTone : ""}`}>{signupStatus}</p>}
-          </form>
-          <p className="muted small-note">Need access? Ask your admin to share the clinic credentials.</p>
+          {authMode === "login" ? (
+            <>
+              <form className="auth-form" onSubmit={handleLogin}>
+                <label className="field">
+                  <span>Username</span>
+                  <input
+                    id="login-username"
+                    name="login-username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    autoComplete="username"
+                    required
+                  />
+                </label>
+                <label className="field">
+                  <span>Password</span>
+                  <input
+                    id="login-password"
+                    name="login-password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
+                </label>
+                <button
+                  type={loginSuccess ? "button" : "submit"}
+                  onClick={loginSuccess ? handleLogout : undefined}
+                  disabled={isSubmitting}
+                >
+                  {loginSuccess ? "Logout" : isSubmitting ? "Signing in..." : "Log in"}
+                </button>
+                {status && <p className={`status ${statusTone !== "default" ? statusTone : ""}`}>{status}</p>}
+              </form>
+              <div className="auth-switch-row">
+                <span className="muted small-note">Need access? Redeem an invite key.</span>
+                <button type="button" className="secondary-link" onClick={() => switchMode("signup")}>
+                  Register
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <form className="auth-form" onSubmit={handleSignup}>
+                <div className="auth-subhead">Make an account</div>
+                <p className="muted small-note">Redeem your invite key to create a clinic login.</p>
+                <label className="field">
+                  <span>Invite key</span>
+                  <input
+                    id="signup-invite"
+                    name="signup-invite"
+                    value={inviteToken}
+                    onChange={(e) => setInviteToken(e.target.value)}
+                    autoComplete="one-time-code"
+                    required
+                  />
+                </label>
+                <label className="field">
+                  <span>Username</span>
+                  <input
+                    id="signup-username"
+                    name="signup-username"
+                    value={newUsername}
+                    onChange={(e) => setNewUsername(e.target.value)}
+                    autoComplete="username"
+                    required
+                  />
+                </label>
+                <label className="field">
+                  <span>Password</span>
+                  <input
+                    id="signup-password"
+                    name="signup-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    autoComplete="new-password"
+                    required
+                  />
+                </label>
+                <button type="submit" disabled={isCreating}>
+                  {isCreating ? "Creating account..." : "Create account"}
+                </button>
+                {signupStatus && (
+                  <p className={`status ${signupTone !== "default" ? signupTone : ""}`}>{signupStatus}</p>
+                )}
+              </form>
+              <div className="auth-switch-row">
+                <span className="muted small-note">Already have a login?</span>
+                <button type="button" className="secondary-link" onClick={() => switchMode("login")}>
+                  Back to login
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </section>
     </main>
