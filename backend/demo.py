@@ -61,9 +61,11 @@ def main():
         bleach_rotation=["ben", "cory", "dana"],
         bleach_cursor=0,
         toggles=ConstraintToggles(
-            enforce_three_day_cap=True,
-            enforce_post_bleach_rest=True,
-            enforce_alt_saturdays=True,
+            enforce_three_day_cap=10,
+            enforce_post_bleach_rest=10,
+            enforce_alt_saturdays=10,
+            limit_tech_four_days=10,
+            limit_rn_four_days=10,
         ),
     )
     pto = [PTOEntry(staff_id="ava", date=date(2025, 11, 6))]

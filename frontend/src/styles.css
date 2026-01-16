@@ -610,6 +610,35 @@ table th {
   align-items: flex-end;
 }
 
+.constraint-stack {
+  align-items: flex-start;
+}
+
+.constraint-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  min-width: 240px;
+}
+
+.constraint-control {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.constraint-control input[type="range"] {
+  flex: 1;
+  min-width: 160px;
+}
+
+.constraint-value {
+  min-width: 2ch;
+  font-weight: 700;
+}
+
 .controls-row label:not(.secondary-btn) {
   display: flex;
   flex-direction: column;

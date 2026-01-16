@@ -94,6 +94,12 @@ export default function StaffPlanner() {
     if (Number.isNaN(parsed.getTime())) return value;
     return parsed.toISOString().slice(0, 10);
   };
+  const coerceConstraintWeight = (value: unknown, fallback = 10) => {
+    if (typeof value === "boolean") return value ? 10 : 0;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(10, Math.max(0, parsed));
+  };
   const buildScheduleFilename = (meta: SavedSchedule | null, ext: "xlsx" | "csv") => {
     const base = (meta?.clinic_name || configName || "schedule").trim().replace(/\s+/g, "-").toLowerCase();
     if (!meta?.start_date || typeof meta.weeks !== "number") {
@@ -256,11 +262,11 @@ export default function StaffPlanner() {
   const [bleachFrequency, setBleachFrequency] = useState<string>("weekly");
   const [trials, setTrials] = useState<number>(20);
   const [exportRoles, setExportRoles] = useState<string[]>(["Tech", "RN", "Admin"]);
-  const [enforceThree, setEnforceThree] = useState<boolean>(true);
-  const [enforcePostBleach, setEnforcePostBleach] = useState<boolean>(true);
-  const [enforceAltSat, setEnforceAltSat] = useState<boolean>(true);
-  const [limitTechFour, setLimitTechFour] = useState<boolean>(true);
-  const [limitRnFour, setLimitRnFour] = useState<boolean>(true);
+  const [threeDayWeight, setThreeDayWeight] = useState<number>(10);
+  const [postBleachWeight, setPostBleachWeight] = useState<number>(10);
+  const [altSatWeight, setAltSatWeight] = useState<number>(10);
+  const [techFourWeight, setTechFourWeight] = useState<number>(10);
+  const [rnFourWeight, setRnFourWeight] = useState<number>(10);
   const [inviteUsername, setInviteUsername] = useState<string>("");
   const [inviteLicense, setInviteLicense] = useState<string>("DEMO");
   const [inviteRole, setInviteRole] = useState<string>("user");
@@ -386,11 +392,11 @@ export default function StaffPlanner() {
     setScheduleStaffMap(null);
     setTrials(20);
     setExportRoles(["Tech", "RN", "Admin"]);
-    setEnforceThree(true);
-    setEnforcePostBleach(true);
-    setEnforceAltSat(true);
-    setLimitTechFour(true);
-    setLimitRnFour(true);
+    setThreeDayWeight(10);
+    setPostBleachWeight(10);
+    setAltSatWeight(10);
+    setTechFourWeight(10);
+    setRnFourWeight(10);
     setBaseSeed(0);
     setUsePrevSeed(false);
     setAssignments([]);
@@ -617,11 +623,21 @@ export default function StaffPlanner() {
       setBleachRotation(Array.isArray(cfg.bleach?.rotation) ? cfg.bleach.rotation.map(String) : []);
       setBleachFrequency(cfg.schedule?.bleach_frequency || (cfg as any)?.bleach?.frequency || "weekly");
       setTrials(Number(cfg.tournament?.trials ?? trials));
-      setEnforceThree(Boolean(cfg.constraints?.enforce_three_day_cap ?? enforceThree));
-      setEnforcePostBleach(Boolean(cfg.constraints?.enforce_post_bleach_rest ?? enforcePostBleach));
-      setEnforceAltSat(Boolean(cfg.constraints?.enforce_alt_saturdays ?? enforceAltSat));
-      setLimitTechFour(Boolean(cfg.constraints?.limit_tech_four_days ?? limitTechFour));
-      setLimitRnFour(Boolean(cfg.constraints?.limit_rn_four_days ?? limitRnFour));
+      setThreeDayWeight(
+        coerceConstraintWeight(cfg.constraints?.enforce_three_day_cap, threeDayWeight)
+      );
+      setPostBleachWeight(
+        coerceConstraintWeight(cfg.constraints?.enforce_post_bleach_rest, postBleachWeight)
+      );
+      setAltSatWeight(
+        coerceConstraintWeight(cfg.constraints?.enforce_alt_saturdays, altSatWeight)
+      );
+      setTechFourWeight(
+        coerceConstraintWeight(cfg.constraints?.limit_tech_four_days, techFourWeight)
+      );
+      setRnFourWeight(
+        coerceConstraintWeight(cfg.constraints?.limit_rn_four_days, rnFourWeight)
+      );
       if (Array.isArray(cfg.export_roles)) {
         setExportRoles(cfg.export_roles as string[]);
       }
@@ -696,11 +712,11 @@ export default function StaffPlanner() {
         techs_per_rn: techsPerRn
       },
       constraints: {
-        enforce_three_day_cap: enforceThree,
-        enforce_post_bleach_rest: enforcePostBleach,
-        enforce_alt_saturdays: enforceAltSat,
-        limit_tech_four_days: limitTechFour,
-        limit_rn_four_days: limitRnFour
+        enforce_three_day_cap: threeDayWeight,
+        enforce_post_bleach_rest: postBleachWeight,
+        enforce_alt_saturdays: altSatWeight,
+        limit_tech_four_days: techFourWeight,
+        limit_rn_four_days: rnFourWeight
       },
       bleach: { day: bleachDay, rotation: bleachRotation, cursor: bleachCursor, frequency: bleachFrequency },
       tournament: { trials, last_seed: 0 },
@@ -1341,46 +1357,71 @@ export default function StaffPlanner() {
                 />
             </label>
           </div>
-          <div className="stack">
-            <label>
-              Enforce 2-day max
+          <div className="stack constraint-stack">
+            <span className="muted small-note">0 = ignore, 10 = hard stop</span>
+            <label className="constraint-field">
+              3-day streak cap
+              <div className="constraint-control">
                 <input
-                  id="constraint-two-day"
-                  name="constraint-two-day"
-                  type="checkbox"
-                  checked={enforceThree}
-                  onChange={(e) => setEnforceThree(e.target.checked)}
+                  id="constraint-three-day"
+                  name="constraint-three-day"
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={1}
+                  value={threeDayWeight}
+                  onChange={(e) => setThreeDayWeight(Number(e.target.value))}
                 />
+                <span className="constraint-value">{threeDayWeight}</span>
+              </div>
             </label>
-            <label>
+            <label className="constraint-field">
               No consecutive Saturdays
+              <div className="constraint-control">
                 <input
                   id="constraint-alt-sat"
                   name="constraint-alt-sat"
-                  type="checkbox"
-                  checked={enforceAltSat}
-                  onChange={(e) => setEnforceAltSat(e.target.checked)}
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={1}
+                  value={altSatWeight}
+                  onChange={(e) => setAltSatWeight(Number(e.target.value))}
                 />
+                <span className="constraint-value">{altSatWeight}</span>
+              </div>
             </label>
-            <label>
+            <label className="constraint-field">
               Tech 4-day cap
+              <div className="constraint-control">
                 <input
                   id="constraint-tech-four"
                   name="constraint-tech-four"
-                  type="checkbox"
-                  checked={limitTechFour}
-                  onChange={(e) => setLimitTechFour(e.target.checked)}
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={1}
+                  value={techFourWeight}
+                  onChange={(e) => setTechFourWeight(Number(e.target.value))}
                 />
+                <span className="constraint-value">{techFourWeight}</span>
+              </div>
             </label>
-            <label>
+            <label className="constraint-field">
               RN 4-day cap
+              <div className="constraint-control">
                 <input
                   id="constraint-rn-four"
                   name="constraint-rn-four"
-                  type="checkbox"
-                  checked={limitRnFour}
-                  onChange={(e) => setLimitRnFour(e.target.checked)}
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={1}
+                  value={rnFourWeight}
+                  onChange={(e) => setRnFourWeight(Number(e.target.value))}
                 />
+                <span className="constraint-value">{rnFourWeight}</span>
+              </div>
             </label>
           </div>
           <div className="stack">
@@ -1559,11 +1600,11 @@ export default function StaffPlanner() {
                     patients_per_rn: patientsPerRn,
                     techs_per_rn: techsPerRn,
                     toggles: {
-                      enforce_three_day_cap: enforceThree,
-                      enforce_post_bleach_rest: enforcePostBleach,
-                      enforce_alt_saturdays: enforceAltSat,
-                      limit_tech_four_days: limitTechFour,
-                    limit_rn_four_days: limitRnFour
+                      enforce_three_day_cap: threeDayWeight,
+                      enforce_post_bleach_rest: postBleachWeight,
+                      enforce_alt_saturdays: altSatWeight,
+                      limit_tech_four_days: techFourWeight,
+                      limit_rn_four_days: rnFourWeight
                   }
                   },
                   pto: expandPTO(),
@@ -1943,16 +1984,21 @@ export default function StaffPlanner() {
             </div>
           </div>
           <div className="stack">
-            <label style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-              <input
-                type="checkbox"
-                checked={enforcePostBleach}
-                onChange={(e) => setEnforcePostBleach(e.target.checked)}
-                style={{ marginRight: "4px" }}
-                id="bleach-rest-day"
-                name="bleach-rest-day"
-              />
-              Require day off after bleach
+            <label className="constraint-field">
+              Post-bleach rest day
+              <div className="constraint-control">
+                <input
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={1}
+                  value={postBleachWeight}
+                  onChange={(e) => setPostBleachWeight(Number(e.target.value))}
+                  id="bleach-rest-day"
+                  name="bleach-rest-day"
+                />
+                <span className="constraint-value">{postBleachWeight}</span>
+              </div>
             </label>
             <p className="muted">Cursor advances after a bleach assignment; PTO will skip to the next person.</p>
           </div>

@@ -68,11 +68,11 @@ class DailyRequirement:
 
 @dataclass
 class ConstraintToggles:
-    enforce_three_day_cap: bool = True
-    enforce_post_bleach_rest: bool = True
-    enforce_alt_saturdays: bool = True
-    limit_tech_four_days: bool = False
-    limit_rn_four_days: bool = False
+    enforce_three_day_cap: int = 10
+    enforce_post_bleach_rest: int = 10
+    enforce_alt_saturdays: int = 10
+    limit_tech_four_days: int = 10
+    limit_rn_four_days: int = 10
 
 
 @dataclass

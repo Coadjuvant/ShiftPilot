@@ -241,7 +241,7 @@ export default function Landing() {
     if (!latestSchedule) {
       return { label: "Constraints honored", title: "" };
     }
-    const toggles = latestSchedule.toggles;
+    const toggles = (latestSchedule as any).toggles || (latestSchedule as any).constraints;
     const reqs = latestSchedule.requirements || [];
     if (!toggles || !reqs.length) {
       return { label: "Constraints unavailable", title: "Constraint data unavailable for this run." };
@@ -332,6 +332,13 @@ export default function Landing() {
       return false;
     };
 
+    const weightFor = (key: string) => {
+      const raw = (toggles as any)[key];
+      if (typeof raw === "boolean") return raw ? 10 : 0;
+      const num = Number(raw);
+      if (!Number.isFinite(num)) return 0;
+      return Math.min(10, Math.max(0, num));
+    };
     const constraints = [
       { key: "enforce_three_day_cap", label: "No 3-day streaks", violated: hasThreeDay },
       { key: "limit_tech_four_days", label: "Tech 4-day cap", violated: () => hasWeekCap("Tech") },
@@ -339,7 +346,7 @@ export default function Landing() {
       { key: "enforce_alt_saturdays", label: "Alternate Saturdays", violated: hasAltSaturdays },
       { key: "enforce_post_bleach_rest", label: "Post-bleach rest", violated: hasPostBleach },
     ];
-    const enabled = constraints.filter((c) => Boolean((toggles as any)[c.key]));
+    const enabled = constraints.filter((c) => weightFor(c.key) > 0);
     if (!enabled.length) {
       return { label: "Constraints not enabled", title: "No constraints were enabled for this run." };
     }
