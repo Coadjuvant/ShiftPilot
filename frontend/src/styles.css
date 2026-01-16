@@ -1482,16 +1482,6 @@ button.secondary-link:hover {
   margin-top: 0.35rem;
 }
 
-.auth-divider {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.12);
-  margin: 1.1rem 0;
-}
-
-.page-shell.light .auth-divider {
-  background: rgba(0, 51, 160, 0.12);
-}
-
 .auth-subhead {
   font-weight: 700;
   margin: 0 0 0.35rem;
@@ -1500,6 +1490,15 @@ button.secondary-link:hover {
 
 .page-shell.light .auth-subhead {
   color: var(--deep-blue);
+}
+
+.auth-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+  flex-wrap: wrap;
 }
 
 .field {
