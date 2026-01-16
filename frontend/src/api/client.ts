@@ -105,7 +105,7 @@ export interface ConfigPayload {
   clinic: { name: string; timezone: string };
   schedule: { start: string; weeks: number; bleach_frequency?: string };
   ratios: { patients_per_tech: number; patients_per_rn: number; techs_per_rn: number };
-  constraints: Record<string, boolean>;
+  constraints: Record<string, number | boolean>;
   bleach: { day: string; rotation: string[]; cursor: number; frequency?: string };
   tournament: { trials: number; last_seed: number };
   export_roles?: string[];
@@ -174,7 +174,7 @@ export interface ScheduleRequest {
     patients_per_tech: number;
     patients_per_rn: number;
     techs_per_rn: number;
-    toggles: Record<string, boolean>;
+    toggles: Record<string, number | boolean>;
   };
   pto: Array<Record<string, unknown>>;
   tournament_trials: number;
@@ -227,7 +227,7 @@ export interface SavedSchedule {
   start_date: string;
   weeks: number;
   bleach_frequency?: string;
-  toggles?: Record<string, boolean>;
+  toggles?: Record<string, number | boolean>;
   requirements: SavedRequirement[];
   assignments: SavedAssignment[];
   staff?: Array<{ id: string; name: string; role: string }>;

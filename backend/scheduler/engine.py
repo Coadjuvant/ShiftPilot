@@ -21,6 +21,8 @@ from .model import (
 # Scheduler tuning knobs
 FAIRNESS_WEIGHT = 0.5
 BLEACH_PENALTY = 5.0  # discourage assigning bleach-capable techs outside rotation if avoidable
+BLEACH_ROTATION_OFFSET_PENALTY = 1.0
+CONSTRAINT_HARD_THRESHOLD = 10.0
 JITTER_SCALE = 1e-3
 OPEN_LABEL = "OPEN"
 
@@ -166,41 +168,63 @@ def _is_available(
     return True
 
 
-def _violates_toggles(
+def _clamp_weight(value: object) -> float:
+    try:
+        weight = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(CONSTRAINT_HARD_THRESHOLD, weight))
+
+
+def _constraint_penalty(
     member_state: _StaffState,
     slot: ScheduleSlot,
     cfg: ScheduleConfig,
-    *,
-    ignore_post_bleach: bool = False,
-    ignore_week_cap: bool = False,
-    ignore_three_day: bool = False,
-    ignore_alt_sat: bool = False,
-) -> bool:
-    toggles = cfg.toggles
+) -> Tuple[float, bool]:
+    weights = cfg.toggles
     week_idx, _ = _week_and_day_index(slot.day_index)
-    # No three consecutive days
-    if toggles.enforce_three_day_cap and not ignore_three_day:
-        recent = sorted(member_state.worked_day_indices)
-        if len(recent) >= 2:
-            if slot.day_index - 1 in recent and slot.day_index - 2 in recent:
-                return True
-    # Rest after bleach (no day after)
-    if toggles.enforce_post_bleach_rest and not ignore_post_bleach and member_state.last_bleach_day is not None:
-        if slot.day_index == member_state.last_bleach_day + 1:
-            return True
-    # No consecutive Saturdays
-    if toggles.enforce_alt_saturdays and not ignore_alt_sat and slot.day_name == "Sat":
-        if member_state.last_saturday_week == week_idx - 1:
-            return True
-    if toggles.limit_tech_four_days and not ignore_week_cap and slot.role == "Tech":
-        worked = member_state.week_assignments.get(week_idx, set())
-        if slot.day_index not in worked and len(worked) >= 4:
-            return True
-    if toggles.limit_rn_four_days and not ignore_week_cap and slot.role == "RN":
-        worked = member_state.week_assignments.get(week_idx, set())
-        if slot.day_index not in worked and len(worked) >= 4:
-            return True
-    return False
+    penalty = 0.0
+    hard_violation = False
+
+    def apply(weight: object, violated: bool) -> None:
+        nonlocal penalty, hard_violation
+        if not violated:
+            return
+        w = _clamp_weight(weight)
+        if w <= 0:
+            return
+        if w >= CONSTRAINT_HARD_THRESHOLD:
+            hard_violation = True
+            return
+        penalty += w
+
+    recent = sorted(member_state.worked_day_indices)
+    apply(
+        weights.enforce_three_day_cap,
+        len(recent) >= 2 and slot.day_index - 1 in recent and slot.day_index - 2 in recent,
+    )
+
+    apply(
+        weights.enforce_post_bleach_rest,
+        member_state.last_bleach_day is not None and slot.day_index == member_state.last_bleach_day + 1,
+    )
+
+    apply(
+        weights.enforce_alt_saturdays,
+        slot.day_name == "Sat" and member_state.last_saturday_week == week_idx - 1,
+    )
+
+    worked = member_state.week_assignments.get(week_idx, set())
+    apply(
+        weights.limit_tech_four_days,
+        slot.role == "Tech" and slot.day_index not in worked and len(worked) >= 4,
+    )
+    apply(
+        weights.limit_rn_four_days,
+        slot.role == "RN" and slot.day_index not in worked and len(worked) >= 4,
+    )
+
+    return penalty, hard_violation
 
 
 def _preference_penalty(member: StaffMember, slot: ScheduleSlot) -> float:
@@ -275,47 +299,22 @@ def generate_schedule(
             role_candidates = role_candidates.copy()
             rng.shuffle(role_candidates)
 
-        def gather_candidates(
-            *,
-            ignore_post_bleach: bool = False,
-            ignore_week_cap: bool = False,
-            ignore_three_day: bool = False,
-            ignore_alt_sat: bool = False,
-        ) -> List[Tuple[StaffMember, _StaffState]]:
-            found: List[Tuple[StaffMember, _StaffState]] = []
+        def gather_candidates() -> List[Tuple[StaffMember, _StaffState, float]]:
+            found: List[Tuple[StaffMember, _StaffState, float]] = []
             for member in role_candidates:
                 state = states[member.id]
                 if slot.day_index in state.worked_day_indices:
                     continue
                 if not _is_available(member, slot, pto_lookup):
                     continue
-                if _violates_toggles(
-                    state,
-                    slot,
-                    cfg,
-                    ignore_post_bleach=ignore_post_bleach,
-                    ignore_week_cap=ignore_week_cap,
-                    ignore_three_day=ignore_three_day,
-                    ignore_alt_sat=ignore_alt_sat,
-                ):
+                penalty, hard_violation = _constraint_penalty(state, slot, cfg)
+                if hard_violation:
                     continue
-                found.append((member, state))
+                found.append((member, state, penalty))
             return found
 
-        # priority: fill slots -> honor bleach rotation -> post-bleach rest -> week caps -> 3-day cap -> alt Saturdays
-        # For non-bleach slots we relax in reverse priority if needed.
-        candidates: List[Tuple[StaffMember, _StaffState]] = gather_candidates()
-        relaxed_note = None
-        if not candidates:
-            # Allow violating alt Saturdays (keep 3-day cap, 4-day/week cap, and post-bleach rest hard)
-            candidates = gather_candidates(
-                ignore_post_bleach=False,
-                ignore_week_cap=False,
-                ignore_three_day=False,
-                ignore_alt_sat=True,
-            )
-            if candidates:
-                relaxed_note = "Relax: alt Saturdays"
+        # Hard constraints are enforced as filters; soft constraints add penalty weight.
+        candidates: List[Tuple[StaffMember, _StaffState, float]] = gather_candidates()
 
         chosen: Optional[StaffMember] = None
         chosen_state: Optional[_StaffState] = None
@@ -325,52 +324,36 @@ def generate_schedule(
         base_penalty = None
 
         if slot.is_bleach and cfg.bleach_rotation:
-            week_idx, _ = _week_and_day_index(slot.day_index)
-            # Do not relax post-bleach rest: it is treated as hard for bleach slots.
-            relax_options = [
-                (False, False, False, False, None),
-                (False, False, False, True, "Relax: alt Saturdays"),
-            ]
-            for ignore_post, ignore_week, ignore_three, ignore_alt, relax_note in relax_options:
-                for offset in range(len(cfg.bleach_rotation)):
-                    idx = (bleach_cursor + offset) % len(cfg.bleach_rotation)
-                    rid = cfg.bleach_rotation[idx]
-                    member = staff_map.get(rid)
-                    if member is None:
-                        continue
-                    state = states.get(rid)
-                    if state is None:
-                        continue
-                    if slot.day_index in state.worked_day_indices:
-                        continue
-                    if not _is_available(member, slot, pto_lookup):
-                        continue
-                    if _violates_toggles(
-                        state,
-                        slot,
-                        cfg,
-                        ignore_post_bleach=ignore_post,
-                        ignore_week_cap=ignore_week,
-                        ignore_three_day=ignore_three,
-                        ignore_alt_sat=ignore_alt,
-                    ):
-                        continue
-                    chosen = member
-                    chosen_state = state
-                    rotation_index_used = idx
-                    base_penalty = _preference_penalty(member, slot)
-                    if relax_note:
-                        note = relax_note
-                    break
-                if chosen:
-                    break
-            if chosen is None:
+            best_score: Optional[Tuple[float, int, StaffMember, _StaffState, float]] = None
+            for offset in range(len(cfg.bleach_rotation)):
+                idx = (bleach_cursor + offset) % len(cfg.bleach_rotation)
+                rid = cfg.bleach_rotation[idx]
+                member = staff_map.get(rid)
+                if member is None:
+                    continue
+                state = states.get(rid)
+                if state is None:
+                    continue
+                if slot.day_index in state.worked_day_indices:
+                    continue
+                if not _is_available(member, slot, pto_lookup):
+                    continue
+                constraint_penalty, hard_violation = _constraint_penalty(state, slot, cfg)
+                if hard_violation:
+                    continue
+                base = _preference_penalty(member, slot) + constraint_penalty + offset * BLEACH_ROTATION_OFFSET_PENALTY
+                score = _score_candidate(state, base_penalty=base, fairness_weight=FAIRNESS_WEIGHT)
+                if best_score is None or score < best_score[0]:
+                    best_score = (score, idx, member, state, base)
+            if best_score is not None:
+                _, rotation_index_used, chosen, chosen_state, base_penalty = best_score
+            else:
                 note = "Bleach rotation unavailable"
 
         if chosen is None and candidates and not slot.is_bleach:
             scored: List[Tuple[float, float, StaffMember, _StaffState]] = []
-            for member, state in candidates:
-                base = _preference_penalty(member, slot)
+            for member, state, constraint_penalty in candidates:
+                base = _preference_penalty(member, slot) + constraint_penalty
                 if slot.is_bleach and cfg.bleach_rotation:
                     # apply extra penalty if we are off rotation
                     try:
@@ -388,8 +371,6 @@ def generate_schedule(
 
         if chosen is None:
             notes = [note] if note else []
-            if relaxed_note:
-                notes.append(relaxed_note)
             notes.append("Needs coverage")
             if slot.role == "Tech" and slot.duty in ("open", "close"):
                 assignments.append(Assignment(slot=slot, staff_id=None, notes=notes))

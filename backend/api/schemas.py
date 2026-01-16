@@ -4,7 +4,7 @@ from datetime import date
 from typing import Dict, List, Optional, Literal
 
 try:
-    from pydantic import BaseModel, Field, conint, constr  # type: ignore
+    from pydantic import BaseModel, Field, conint, constr, validator  # type: ignore
 except Exception:
     # Minimal fallback when pydantic is not available (prevents editor/linter errors).
     # This does not replicate pydantic's validation; it's only to allow imports and defaults.
@@ -25,6 +25,10 @@ except Exception:
         return int
     def constr(**kwargs):  # type: ignore
         return str
+    def validator(*args, **kwargs):  # type: ignore
+        def decorator(fn):
+            return fn
+        return decorator
 
 from backend.scheduler.model import DAYS
 
@@ -73,11 +77,22 @@ class RequirementIn(BaseSchema):
 
 
 class ConstraintTogglesIn(BaseSchema):
-    enforce_three_day_cap: bool = True
-    enforce_post_bleach_rest: bool = True
-    enforce_alt_saturdays: bool = True
-    limit_tech_four_days: bool = True
-    limit_rn_four_days: bool = True
+    enforce_three_day_cap: conint(ge=0, le=10) = 10
+    enforce_post_bleach_rest: conint(ge=0, le=10) = 10
+    enforce_alt_saturdays: conint(ge=0, le=10) = 10
+    limit_tech_four_days: conint(ge=0, le=10) = 10
+    limit_rn_four_days: conint(ge=0, le=10) = 10
+
+    @validator("*", pre=True)
+    def _coerce_legacy_bools(cls, value):
+        if isinstance(value, bool):
+            return 10 if value else 0
+        if value is None:
+            return 0
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
 
 
 class ScheduleConfigIn(BaseSchema):
@@ -147,12 +162,8 @@ class ConfigRatios(BaseSchema):
     techs_per_rn: conint(ge=0)
 
 
-class ConfigConstraints(BaseSchema):
-    enforce_three_day_cap: bool
-    enforce_post_bleach_rest: bool
-    enforce_alt_saturdays: bool
-    limit_tech_four_days: bool
-    limit_rn_four_days: bool
+class ConfigConstraints(ConstraintTogglesIn):
+    pass
 
 
 class ConfigBleach(BaseSchema):
