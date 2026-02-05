@@ -554,9 +554,13 @@ def reset_user_invite(request: Request, user_id: int, payload: dict = Depends(re
     response_model=ScheduleResponse,
     dependencies=[Depends(require_auth), Depends(rate_limit("schedule_run", limit=8, window_seconds=60))],
 )
-def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)) -> ScheduleResponse:
+def run_schedule(
+    http_request: Request,
+    body: ScheduleRequest,
+    payload: dict = Depends(require_auth),
+) -> ScheduleResponse:
     try:
-        staff_members = [_to_staff_member(s) for s in request.staff]
+        staff_members = [_to_staff_member(s) for s in body.staff]
         if not staff_members:
             raise ValueError("At least one staff member is required.")
         requirements: List[DailyRequirement] = [
@@ -569,35 +573,33 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
                 rn_count=req.rn_count,
                 admin_count=req.admin_count,
             )
-            for req in request.requirements
+            for req in body.requirements
         ]
         if len(requirements) != len(DAYS):
             raise ValueError("Requirements must include all clinic days (Mon-Sat).")
-        toggles = ConstraintToggles(**request.config.toggles.dict())
+        toggles = ConstraintToggles(**body.config.toggles.dict())
         config = ScheduleConfig(
-            clinic_name=request.config.clinic_name,
-            timezone=request.config.timezone,
-            start_date=request.config.start_date,
-            weeks=request.config.weeks,
-            bleach_day=request.config.bleach_day,
-            bleach_rotation=request.config.bleach_rotation,
-            bleach_cursor=request.config.bleach_cursor,
-            bleach_frequency=request.config.bleach_frequency,
-            patients_per_tech=request.config.patients_per_tech,
-            patients_per_rn=request.config.patients_per_rn,
-            techs_per_rn=request.config.techs_per_rn,
+            clinic_name=body.config.clinic_name,
+            timezone=body.config.timezone,
+            start_date=body.config.start_date,
+            weeks=body.config.weeks,
+            bleach_day=body.config.bleach_day,
+            bleach_rotation=body.config.bleach_rotation,
+            bleach_cursor=body.config.bleach_cursor,
+            bleach_frequency=body.config.bleach_frequency,
+            patients_per_tech=body.config.patients_per_tech,
+            patients_per_rn=body.config.patients_per_rn,
+            techs_per_rn=body.config.techs_per_rn,
             toggles=toggles,
         )
-        pto_entries = [
-            PTOEntry(staff_id=item.staff_id, date=item.date) for item in request.pto
-        ]
+        pto_entries = [PTOEntry(staff_id=item.staff_id, date=item.date) for item in body.pto]
         result, winning_seed = run_tournament(
             staff_members,
             requirements,
             config,
             pto_entries=pto_entries,
-            trials=request.tournament_trials,
-            base_seed=request.base_seed,
+            trials=body.tournament_trials,
+            base_seed=body.base_seed,
         )
         assignments = [
             AssignmentOut(
@@ -612,7 +614,7 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
             )
             for assignment in result.assignments
         ]
-        roles_filter = request.export_roles or None
+        roles_filter = body.export_roles or None
         excel_bytes = export_schedule_to_excel(
             result,
             {s.id: s for s in staff_members},
@@ -640,12 +642,12 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
             return out
 
         schedule_payload = {
-            "clinic_name": request.config.clinic_name,
-            "timezone": request.config.timezone,
-            "start_date": request.config.start_date.isoformat() if hasattr(request.config.start_date, "isoformat") else request.config.start_date,
-            "weeks": request.config.weeks,
-            "bleach_frequency": request.config.bleach_frequency,
-            "toggles": request.config.toggles.dict(),
+            "clinic_name": body.config.clinic_name,
+            "timezone": body.config.timezone,
+            "start_date": body.config.start_date.isoformat() if hasattr(body.config.start_date, "isoformat") else body.config.start_date,
+            "weeks": body.config.weeks,
+            "bleach_frequency": body.config.bleach_frequency,
+            "toggles": body.config.toggles.dict(),
             "requirements": [
                 {
                     "day_name": req.day_name,
@@ -656,7 +658,7 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
                     "rn_count": req.rn_count,
                     "admin_count": req.admin_count,
                 }
-                for req in request.requirements
+                for req in body.requirements
             ],
             "assignments": _serialize_assignments(),
             "staff": [{"id": s.id, "name": s.name, "role": s.role} for s in staff_members],
@@ -664,14 +666,14 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
             "total_penalty": result.total_penalty,
             "winning_seed": winning_seed,
             "bleach_cursor": result.bleach_cursor,
-            "export_roles": request.export_roles,
-            "tournament_trials": request.tournament_trials,
+            "export_roles": body.export_roles,
+            "tournament_trials": body.tournament_trials,
             "pto": [
                 {
                     "staff_id": item.staff_id,
                     "date": item.date.isoformat() if hasattr(item.date, "isoformat") else item.date,
                 }
-                for item in request.pto
+                for item in body.pto
             ],
             "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
@@ -687,15 +689,15 @@ def run_schedule(request: ScheduleRequest, payload: dict = Depends(require_auth)
             if assignment.staff_id is None or str(assignment.staff_id).upper() == "OPEN"
         )
         start_label = (
-            request.config.start_date.isoformat()
-            if hasattr(request.config.start_date, "isoformat")
-            else str(request.config.start_date)
+            body.config.start_date.isoformat()
+            if hasattr(body.config.start_date, "isoformat")
+            else str(body.config.start_date)
         )
         detail = (
-            f"clinic={request.config.clinic_name};start={start_label};weeks={request.config.weeks};"
-            f"bleach={request.config.bleach_frequency or 'weekly'};seed={winning_seed};open_slots={open_slots}"
+            f"clinic={body.config.clinic_name};start={start_label};weeks={body.config.weeks};"
+            f"bleach={body.config.bleach_frequency or 'weekly'};seed={winning_seed};open_slots={open_slots}"
         )
-        ip, ip_v4, user_agent, location = _request_meta(request)
+        ip, ip_v4, user_agent, location = _request_meta(http_request)
         log_event(payload.get("sub"), "schedule_run", detail, ip, user_agent, location, ip_v4)
         return ScheduleResponse(
             bleach_cursor=result.bleach_cursor,
