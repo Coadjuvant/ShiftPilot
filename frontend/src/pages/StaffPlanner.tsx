@@ -1,33 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 import api, {
-  AuditEntry,
-  AuditFilters,
   ConfigPayload,
   SaveConfigRequest,
   SavedSchedule,
-  UserSummary,
-  createInvite,
-  deleteUser,
   exportScheduleCsv,
   exportScheduleExcel,
-  fetchLatestSchedule,
   fetchHealth,
+  fetchLatestSchedule,
   getStoredToken,
-  listAudit,
   listConfigs,
-  listUsers,
   loadConfig,
   login,
-  resetUserInvite,
-  revokeInvite,
   runSchedule,
   saveConfig,
   setAuthToken,
-  setupUser,
-  updateUserRole
+  setupUser
 } from "../api/client";
+import StaffEditor from "../components/StaffEditor";
+import AvailabilityEditor from "../components/AvailabilityEditor";
+import PrefsEditor from "../components/PrefsEditor";
 import DemandEditor from "../components/DemandEditor";
 import PTOEditor from "../components/PTOEditor";
+import BleachEditor, { BleachState } from "../components/BleachEditor";
+import RunPanel, { RunConfig } from "../components/RunPanel";
+import AdminPanel from "../components/AdminPanel";
 import { DemandRow, PTORow, StaffRow } from "../types";
 import { DAYS } from "../constants";
 
@@ -41,27 +37,6 @@ export default function StaffPlanner() {
   const genId = () => {
     if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
     return Math.random().toString(36).slice(2, 10);
-  };
-
-  const [copyNotice, setCopyNotice] = useState<string>("");
-
-  const copyText = async (text: string) => {
-    try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        setCopyNotice("Copied to clipboard");
-        return;
-      }
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
-      setCopyNotice("Copied to clipboard");
-    } catch {
-      setCopyNotice("Copy failed");
-    }
   };
 
   const friendlyError = (err: any, fallback: string) => {
@@ -106,10 +81,10 @@ export default function StaffPlanner() {
       return `${base || "schedule"}.${ext}`;
     }
     const start = formatDateYmd(meta.start_date);
-    const startDate = new Date(`${start}T00:00:00Z`);
-    const endDate = new Date(startDate);
-    endDate.setUTCDate(endDate.getUTCDate() + meta.weeks * 7 - 2);
-    const end = endDate.toISOString().slice(0, 10);
+    const startDt = new Date(`${start}T00:00:00Z`);
+    const endDt = new Date(startDt);
+    endDt.setUTCDate(endDt.getUTCDate() + meta.weeks * 7 - 2);
+    const end = endDt.toISOString().slice(0, 10);
     return `${base || "schedule"}-${start}_to_${end}.${ext}`;
   };
   const downloadSavedSchedule = async () => {
@@ -128,8 +103,8 @@ export default function StaffPlanner() {
       URL.revokeObjectURL(url);
       setStatus("Download started.");
     } catch (err: any) {
-      const status = err?.response?.status;
-      setStatus(status === 404 ? "No saved schedule to download." : friendlyError(err, "Download failed."));
+      const st = err?.response?.status;
+      setStatus(st === 404 ? "No saved schedule to download." : friendlyError(err, "Download failed."));
     }
   };
   const downloadSavedScheduleCsv = async () => {
@@ -148,8 +123,8 @@ export default function StaffPlanner() {
       URL.revokeObjectURL(url);
       setStatus("CSV download started.");
     } catch (err: any) {
-      const status = err?.response?.status;
-      setStatus(status === 404 ? "No saved schedule to download." : friendlyError(err, "Download failed."));
+      const st = err?.response?.status;
+      setStatus(st === 404 ? "No saved schedule to download." : friendlyError(err, "Download failed."));
     }
   };
   const loadLatestSavedSchedule = async () => {
@@ -267,30 +242,16 @@ export default function StaffPlanner() {
   const [altSatWeight, setAltSatWeight] = useState<number>(10);
   const [techFourWeight, setTechFourWeight] = useState<number>(10);
   const [rnFourWeight, setRnFourWeight] = useState<number>(10);
-  const [inviteUsername, setInviteUsername] = useState<string>("");
-  const [inviteLicense, setInviteLicense] = useState<string>("DEMO");
-  const [inviteRole, setInviteRole] = useState<string>("user");
-  const [inviteResult, setInviteResult] = useState<string>("");
-  const [users, setUsers] = useState<UserSummary[]>([]);
-  const [isAdmin, setIsAdmin] = useState<boolean>(false);
-  const [currentUser, setCurrentUser] = useState<string>("");
-  const [auditFeed, setAuditFeed] = useState<AuditEntry[]>([]);
-  const [auditEvent, setAuditEvent] = useState<string>("");
-  const [auditUserId, setAuditUserId] = useState<string>("");
-  const [auditSearch, setAuditSearch] = useState<string>("");
-  const [auditLimit, setAuditLimit] = useState<number>(50);
   const [lastError, setLastError] = useState<string>("");
   const [scheduleStaffMap, setScheduleStaffMap] = useState<Record<string, string> | null>(null);
   const [latestScheduleMeta, setLatestScheduleMeta] = useState<SavedSchedule | null>(null);
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [progress, setProgress] = useState<number>(0);
   const [autoLoadedConfig, setAutoLoadedConfig] = useState<boolean>(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const isAuthed = Boolean(authToken && authToken.length > 0);
-  const latestScheduleOwner =
-    (typeof window !== "undefined" && localStorage.getItem("auth_user")) || loginUser || "user";
-  const uniqueStaffIds = Array.from(
-    new Set(staffRows.filter((s) => s.can_bleach).map((s) => s.id).filter((v) => v && v.trim().length > 0))
-  );
+
+  // --- Computed values ---
   const staffNameMap = staffRows.reduce<Record<string, string>>((acc, row) => {
     if (row.id) acc[row.id] = row.name?.trim() ? row.name : "(no name set)";
     return acc;
@@ -299,26 +260,10 @@ export default function StaffPlanner() {
     ...staffNameMap,
     ...(scheduleStaffMap || {})
   };
+  const uniqueStaffIds = Array.from(
+    new Set(staffRows.filter((s) => s.can_bleach).map((s) => s.id).filter((v) => v && v.trim().length > 0))
+  );
   const availableBleachIds = uniqueStaffIds.filter((sid) => !bleachRotation.includes(sid));
-  const userNameMap = users.reduce<Record<number, string>>((acc, u) => {
-    acc[u.id] = u.username;
-    return acc;
-  }, {});
-  const auditEventOptions = [
-    "login_success",
-    "login_fail",
-    "schedule_run",
-    "schedule_export",
-    "schedule_import",
-    "config_save",
-    "config_import",
-    "config_export",
-    "invite_created",
-    "invite_revoked",
-    "reset_invite",
-    "role_updated",
-    "user_deleted"
-  ];
   const scheduleEnd = (() => {
     const start = startDate ? new Date(startDate) : null;
     if (!start || Number.isNaN(start.getTime())) return "";
@@ -410,10 +355,6 @@ export default function StaffPlanner() {
     setConfigs([]);
     setAutoLoadedConfig(false);
     setLastError("");
-    setInviteUsername("");
-    setInviteLicense("DEMO");
-    setInviteRole("user");
-    setInviteResult("");
     setLoginUser("");
     setLoginPass("");
     setInviteToken("");
@@ -421,149 +362,7 @@ export default function StaffPlanner() {
     localStorage.removeItem("last_config");
   };
 
-  useEffect(() => {
-    fetchHealth()
-      .then((res) => setStatus(`API status: ${res.status}`))
-      .catch((err) => setStatus(`API unreachable: ${err.message}`));
-  }, []);
-  // Prune stale staff references in bleach rotation and PTO when staff list changes
-  useEffect(() => {
-    const idSet = new Set(staffRows.map((s) => s.id).filter((v) => v && v.trim().length > 0));
-    setBleachRotation((prev) => prev.filter((id) => idSet.has(id)));
-    setPtoRows((prev) => prev.filter((row) => !row.staff_id || idSet.has(row.staff_id)));
-  }, [staffRows]);
-  // Fetch current user info to set admin flag
-  useEffect(() => {
-    if (!isAuthed) {
-      setIsAdmin(false);
-      setCurrentUser("");
-      return;
-    }
-    api
-      .get<UserInfo>("auth/me")
-      .then((r) => {
-        const data = r.data;
-        setIsAdmin((data?.role || "").toLowerCase() === "admin");
-        setCurrentUser(data?.username || "");
-        if (data?.username) {
-          localStorage.setItem("auth_user", data.username);
-          window.dispatchEvent(new Event("storage"));
-        }
-      })
-      .catch(() => {
-        setIsAdmin(false);
-        setCurrentUser("");
-      });
-  }, [isAuthed, authToken]);
-  useEffect(() => {
-    if (isAuthed && isAdmin && activeTab === "admin") {
-      loadUsers();
-      loadAudit();
-    }
-  }, [isAuthed, isAdmin, activeTab]);
-  useEffect(() => {
-    if (!isAuthed) {
-      setLatestScheduleMeta(null);
-      return;
-    }
-    refreshLatestMeta();
-  }, [isAuthed]);
-  // Autoload config: if only one available or a last used exists
-  useEffect(() => {
-    if (!isAuthed || autoLoadedConfig) return;
-    const last = localStorage.getItem("last_config") || "";
-    if (configs.length === 1) {
-      const target = configs[0];
-      setSelectedConfig(target);
-      setAutoLoadedConfig(true);
-      handleLoadConfig(target);
-    } else if (last && configs.includes(last)) {
-      setSelectedConfig(last);
-      setAutoLoadedConfig(true);
-      handleLoadConfig(last);
-    }
-  }, [configs, isAuthed, autoLoadedConfig]);
-  useEffect(() => {
-    if (authToken) {
-      setAuthToken(authToken);
-      localStorage.setItem("auth_token", authToken);
-    } else {
-      localStorage.removeItem("auth_token");
-    }
-  }, [authToken]);
-  useEffect(() => {
-    if (!isAuthed) return;
-    listConfigs()
-      .then((names) => setConfigs(names))
-      .catch((err) => {
-        if (err?.response?.status === 401) {
-          setAuthTokenState(null);
-          setAuthToken(null);
-          setConfigs([]);
-          setStatus("Session expired. Please log in again.");
-          return;
-        }
-        setConfigs([]);
-        const msg = friendlyError(err, "Failed to load configs");
-        setStatus(msg);
-        setLastError(msg);
-      });
-  }, [isAuthed]);
-
-  const loadUsers = async () => {
-    try {
-      const data = await listUsers();
-      setUsers(data);
-    } catch (err: any) {
-      // ignore for now
-    }
-  };
-  const loadAudit = async (overrides: AuditFilters = {}) => {
-    try {
-      const filters: AuditFilters = {
-        limit: auditLimit,
-        event: auditEvent || undefined,
-        user_id: auditUserId ? Number(auditUserId) : undefined,
-        search: auditSearch.trim() ? auditSearch.trim() : undefined,
-        ...overrides
-      };
-      const data = await listAudit(filters);
-      setAuditFeed(data);
-    } catch {
-      /* ignore */
-    }
-  };
-  const updateRow = (index: number, key: "id" | "name" | "role", value: string) => {
-    setStaffRows((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], [key]: value };
-      return next;
-    });
-  };
-
-  const addRow = () =>
-    setStaffRows((prev) => [
-      ...prev,
-      {
-        id: genId(),
-        name: "",
-        role: "Tech",
-        can_bleach: false,
-        can_open: false,
-        can_close: false,
-        availability: { ...defaultAvailability },
-        pref_open_mwf: 5,
-        pref_open_tts: 5,
-        pref_mid_mwf: 5,
-        pref_mid_tts: 5,
-        pref_close_mwf: 5,
-        pref_close_tts: 5
-      }
-    ]);
-
-  const removeRow = (index: number) =>
-    setStaffRows((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
-
+  // --- Validation ---
   const staffWarnings: string[] = [];
   staffRows.forEach((row, idx) => {
     if (!row.id?.trim()) {
@@ -605,6 +404,85 @@ export default function StaffPlanner() {
     .filter(Boolean);
   const hasErrors = staffWarnings.length > 0 || demandWarnings.length > 0 || ptoWarnings.length > 0;
 
+  // --- useEffects ---
+  useEffect(() => {
+    fetchHealth()
+      .then((res) => setStatus(`API status: ${res.status}`))
+      .catch((err) => setStatus(`API unreachable: ${err.message}`));
+  }, []);
+  useEffect(() => {
+    const idSet = new Set(staffRows.map((s) => s.id).filter((v) => v && v.trim().length > 0));
+    setBleachRotation((prev) => prev.filter((id) => idSet.has(id)));
+    setPtoRows((prev) => prev.filter((row) => !row.staff_id || idSet.has(row.staff_id)));
+  }, [staffRows]);
+  useEffect(() => {
+    if (!isAuthed) {
+      setIsAdmin(false);
+      return;
+    }
+    api
+      .get<UserInfo>("auth/me")
+      .then((r) => {
+        const data = r.data;
+        setIsAdmin((data?.role || "").toLowerCase() === "admin");
+        if (data?.username) {
+          localStorage.setItem("auth_user", data.username);
+          window.dispatchEvent(new Event("storage"));
+        }
+      })
+      .catch(() => {
+        setIsAdmin(false);
+      });
+  }, [isAuthed, authToken]);
+  useEffect(() => {
+    if (!isAuthed) {
+      setLatestScheduleMeta(null);
+      return;
+    }
+    refreshLatestMeta();
+  }, [isAuthed]);
+  useEffect(() => {
+    if (!isAuthed || autoLoadedConfig) return;
+    const last = localStorage.getItem("last_config") || "";
+    if (configs.length === 1) {
+      const target = configs[0];
+      setSelectedConfig(target);
+      setAutoLoadedConfig(true);
+      handleLoadConfig(target);
+    } else if (last && configs.includes(last)) {
+      setSelectedConfig(last);
+      setAutoLoadedConfig(true);
+      handleLoadConfig(last);
+    }
+  }, [configs, isAuthed, autoLoadedConfig]);
+  useEffect(() => {
+    if (authToken) {
+      setAuthToken(authToken);
+      localStorage.setItem("auth_token", authToken);
+    } else {
+      localStorage.removeItem("auth_token");
+    }
+  }, [authToken]);
+  useEffect(() => {
+    if (!isAuthed) return;
+    listConfigs()
+      .then((names) => setConfigs(names))
+      .catch((err) => {
+        if (err?.response?.status === 401) {
+          setAuthTokenState(null);
+          setAuthToken(null);
+          setConfigs([]);
+          setStatus("Session expired. Please log in again.");
+          return;
+        }
+        setConfigs([]);
+        const msg = friendlyError(err, "Failed to load configs");
+        setStatus(msg);
+        setLastError(msg);
+      });
+  }, [isAuthed]);
+
+  // --- Config handlers ---
   const handleLoadConfig = async (name?: string) => {
     const cfgName = name ?? selectedConfig;
     if (!cfgName) return;
@@ -700,7 +578,6 @@ export default function StaffPlanner() {
       setStatus("Fix validation errors before saving.");
       return;
     }
-    // Keep ISO-like yyyy-mm-dd for backend validation
     const scheduleStart = startDate || "";
 
     const payload: ConfigPayload = {
@@ -750,11 +627,10 @@ export default function StaffPlanner() {
     }
   };
 
-
+  // --- Auth handlers ---
   const handleLogin = async () => {
     try {
       const res = await login(loginUser, loginPass);
-      // Persist and apply token immediately
       localStorage.setItem("auth_token", res.token);
       setAuthTokenState(res.token);
       setAuthToken(res.token);
@@ -807,12 +683,195 @@ export default function StaffPlanner() {
   const handleLogout = () => {
     setAuthTokenState(null);
     setAuthToken(null);
-    setCurrentUser("");
-    setUsers([]);
     setIsAdmin(false);
     resetWorkspaceState("Logged out.");
   };
 
+  // --- Run handler (stays in parent — touches shared state) ---
+  const handleRun = async () => {
+    if (hasErrors) {
+      setStatus("Fix validation errors before running.");
+      setLastError(
+        [
+          staffWarnings[0] ? `Staff: ${staffWarnings[0]}` : "",
+          demandWarnings[0] ? `Demand: ${demandWarnings[0]}` : "",
+          ptoWarnings[0] ? `PTO: ${ptoWarnings[0]}` : ""
+        ]
+          .filter(Boolean)
+          .join(" | ")
+      );
+      return;
+    }
+    try {
+      setIsRunning(true);
+      setProgress(0);
+      if (progressRef.current) clearInterval(progressRef.current);
+      progressRef.current = setInterval(() => {
+        setProgress((p) => (p < 90 ? p + 5 : p));
+      }, 200);
+      setStatus("Running schedule...");
+      const staffPayload = staffRows.map((s) => ({
+        id: s.id,
+        name: s.name,
+        role: s.role,
+        can_open: s.can_open ?? false,
+        can_close: s.can_close ?? false,
+        can_bleach: s.can_bleach ?? false,
+        availability: DAYS.reduce<Record<string, boolean>>((acc, day) => {
+          acc[day] = s.availability?.[day] ?? true;
+          return acc;
+        }, {}),
+        preferences: {
+          open_mwf: 5 - (s.pref_open_mwf ?? 5),
+          open_tts: 5 - (s.pref_open_tts ?? 5),
+          mid_mwf: 5 - (s.pref_mid_mwf ?? 5),
+          mid_tts: 5 - (s.pref_mid_tts ?? 5),
+          close_mwf: 5 - (s.pref_close_mwf ?? 5),
+          close_tts: 5 - (s.pref_close_tts ?? 5)
+        }
+      }));
+      const requirements = demandRows.map((row) => ({
+        day_name: row.Day,
+        patient_count: row.Patients,
+        tech_openers: row.Tech_Open,
+        tech_mids: row.Tech_Mid,
+        tech_closers: row.Tech_Close,
+        rn_count: row.RN_Count,
+        admin_count: row.Admin_Count
+      }));
+      const expandPTO = (): Array<{ staff_id: string; date: string }> => {
+        const entries: Array<{ staff_id: string; date: string }> = [];
+        for (const row of ptoRows) {
+          if (!row.staff_id || !row.start_date) continue;
+          const start = new Date(row.start_date);
+          const end = new Date(row.end_date || row.start_date);
+          if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue;
+          const [a, b] = start <= end ? [start, end] : [end, start];
+          for (let dt = new Date(a); dt <= b; dt.setDate(dt.getDate() + 1)) {
+            entries.push({ staff_id: row.staff_id, date: dt.toISOString().slice(0, 10) });
+          }
+        }
+        return entries;
+      };
+      const selectedSeed =
+        usePrevSeed && winningSeed !== null ? winningSeed : baseSeed > 0 ? baseSeed : null;
+      const payload = {
+        staff: staffPayload,
+        requirements,
+        config: {
+          clinic_name: configName || "Demo Clinic",
+          timezone,
+          start_date: startDate,
+          weeks,
+          bleach_day: bleachDay,
+          bleach_rotation: bleachRotation,
+          bleach_cursor: bleachCursor,
+          bleach_frequency: bleachFrequency,
+          patients_per_tech: patientsPerTech,
+          patients_per_rn: patientsPerRn,
+          techs_per_rn: techsPerRn,
+          toggles: {
+            enforce_three_day_cap: threeDayWeight,
+            enforce_post_bleach_rest: postBleachWeight,
+            enforce_alt_saturdays: altSatWeight,
+            limit_tech_four_days: techFourWeight,
+            limit_rn_four_days: rnFourWeight
+          }
+        },
+        pto: expandPTO(),
+        tournament_trials: trials,
+        base_seed: selectedSeed,
+        export_roles: exportRoles
+      };
+      const res = await runSchedule(payload);
+        setAssignments(res.assignments);
+        setStats(res.stats);
+        setWinningSeed(res.winning_seed ?? null);
+        setWinningScore(typeof res.total_penalty === "number" ? res.total_penalty : null);
+        setScheduleStaffMap(null);
+        if (typeof res.bleach_cursor === "number") {
+          setBleachCursor(res.bleach_cursor);
+        }
+        setProgress(100);
+      if (res.excel) {
+        const blob = Uint8Array.from(window.atob(res.excel), (c) => c.charCodeAt(0));
+        const file = new Blob([blob], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        });
+        const url = URL.createObjectURL(file);
+        setExcelUrl(url);
+      } else {
+        setExcelUrl(null);
+      }
+      setRunResult(
+        `Winning seed: ${res.winning_seed ?? "n/a"} | Score: ${
+          res.total_penalty?.toFixed ? res.total_penalty.toFixed(2) : res.total_penalty ?? "n/a"
+        } | Next bleach in rotation: ${res.bleach_cursor} | Assignments: ${res.assignments.length}`
+      );
+      setStatus("Schedule generated.");
+      refreshLatestMeta();
+      try {
+        localStorage.setItem("latest_schedule_ts", new Date().toISOString());
+        window.dispatchEvent(new Event("storage"));
+      } catch {
+        /* ignore localStorage errors */
+      }
+    } catch (err: any) {
+      const msg = friendlyError(err, "Failed to generate schedule");
+      setStatus(msg);
+      setRunResult("");
+      setLastError(msg);
+      setProgress(0);
+    } finally {
+      setIsRunning(false);
+      if (progressRef.current) {
+        clearInterval(progressRef.current);
+        progressRef.current = null;
+      }
+    }
+  };
+
+  // --- Grouped state for child components ---
+  const bleachState: BleachState = {
+    day: bleachDay,
+    frequency: bleachFrequency,
+    cursor: bleachCursor,
+    rotation: bleachRotation,
+    postBleachWeight
+  };
+  const handleBleachChange = (next: BleachState) => {
+    setBleachDay(next.day);
+    setBleachFrequency(next.frequency);
+    setBleachCursor(next.cursor);
+    setBleachRotation(next.rotation);
+    setPostBleachWeight(next.postBleachWeight);
+  };
+
+  const runConfig: RunConfig = {
+    configName, timezone, startDate, weeks,
+    threeDayWeight, altSatWeight, techFourWeight, rnFourWeight,
+    patientsPerTech, patientsPerRn, techsPerRn,
+    trials, baseSeed, usePrevSeed, exportRoles
+  };
+  const handleRunConfigChange = (next: RunConfig) => {
+    setConfigName(next.configName);
+    setTimezone(next.timezone);
+    setStartDate(next.startDate);
+    setWeeks(next.weeks);
+    setThreeDayWeight(next.threeDayWeight);
+    setAltSatWeight(next.altSatWeight);
+    setTechFourWeight(next.techFourWeight);
+    setRnFourWeight(next.rnFourWeight);
+    setPatientsPerTech(next.patientsPerTech);
+    setPatientsPerRn(next.patientsPerRn);
+    setTechsPerRn(next.techsPerRn);
+    setTrials(next.trials);
+    setBaseSeed(next.baseSeed);
+    setUsePrevSeed(next.usePrevSeed);
+    setExportRoles(next.exportRoles);
+  };
+
+  // --- Login wall ---
   if (!isAuthed) {
       return (
         <section className="card planner-shell">
@@ -930,6 +989,7 @@ export default function StaffPlanner() {
     );
   }
 
+  // --- Authenticated planner shell ---
   return (
     <section className="card planner-shell">
       <h2>Staff Planner (React prototype)</h2>
@@ -941,63 +1001,6 @@ export default function StaffPlanner() {
         </span>
       </div>
       {isAdmin || !status.toLowerCase().startsWith("api status") ? <p>{status}</p> : null}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
-        {isAdmin && (
-          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-            <strong>User tools</strong>
-            <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem", alignItems: "center" }}>
-                <input
-                  placeholder="License key"
-                  id="admin-invite-license"
-                  name="admin-invite-license"
-                  value={inviteLicense}
-                  onChange={(e) => setInviteLicense(e.target.value)}
-                  style={{ maxWidth: "120px" }}
-                  disabled={!isAuthed}
-                />
-                <select
-                  id="admin-invite-role"
-                  name="admin-invite-role"
-                  value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value)}
-                  style={{ maxWidth: "120px" }}
-                  disabled={!isAuthed}
-                >
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
-              </select>
-              <button
-                className="secondary-btn"
-                onClick={async () => {
-                  try {
-                    const res = await createInvite({
-                      username: "",
-                      license_key: inviteLicense,
-                      role: inviteRole
-                    });
-                    setInviteResult(res.token);
-                  } catch (err: any) {
-                    setInviteResult(friendlyError(err, "Failed to create invite"));
-                  }
-                }}
-                disabled={!isAuthed}
-              >
-                Create invite
-              </button>
-            </div>
-            {inviteResult && (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <span className="muted">Invite token:</span>
-                <code>{inviteResult}</code>
-                <button className="secondary-btn" onClick={() => copyText(inviteResult)}>
-                  Copy
-                </button>
-                {copyNotice && <span className="muted">{copyNotice}</span>}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
       {lastError && <p style={{ color: "#b45309", marginTop: "0.35rem" }}>{lastError}</p>}
       <div
         style={{
@@ -1057,1171 +1060,80 @@ export default function StaffPlanner() {
           ))}
         </div>
 
-      {activeTab === "staff" && (
-        <>
-          <table cellPadding={8} style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th align="left">Name</th>
-                <th align="left">Role</th>
-                <th align="left">Can Open</th>
-                <th align="left">Can Close</th>
-                <th align="left">Can Bleach</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {staffRows.map((row, index) => (
-                <tr key={index}>
-                    <td>
-                      <input
-                        id={`staff-name-${index}`}
-                        name={`staff-name-${index}`}
-                        value={row.name}
-                        onChange={(e) => updateRow(index, "name", e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <select
-                        id={`staff-role-${index}`}
-                        name={`staff-role-${index}`}
-                        value={row.role}
-                        onChange={(e) => updateRow(index, "role", e.target.value)}
-                      >
-                        <option value="Tech">Tech</option>
-                        <option value="RN">RN</option>
-                        <option value="Admin">Admin</option>
-                      </select>
-                    </td>
-                    <td>
-                      <input
-                        type="checkbox"
-                        id={`staff-can-open-${index}`}
-                        name={`staff-can-open-${index}`}
-                        checked={row.can_open ?? false}
-                        onChange={(e) =>
-                          setStaffRows((prev) => {
-                          const next = [...prev];
-                          next[index] = { ...next[index], can_open: e.target.checked };
-                          return next;
-                        })
-                      }
-                    />
-                  </td>
-                    <td>
-                      <input
-                        type="checkbox"
-                        id={`staff-can-close-${index}`}
-                        name={`staff-can-close-${index}`}
-                        checked={row.can_close ?? false}
-                        onChange={(e) =>
-                          setStaffRows((prev) => {
-                          const next = [...prev];
-                          next[index] = { ...next[index], can_close: e.target.checked };
-                          return next;
-                        })
-                      }
-                    />
-                  </td>
-                    <td>
-                      <input
-                        type="checkbox"
-                        id={`staff-can-bleach-${index}`}
-                        name={`staff-can-bleach-${index}`}
-                        checked={row.can_bleach ?? false}
-                        onChange={(e) =>
-                          setStaffRows((prev) => {
-                          const next = [...prev];
-                          next[index] = {
-                            ...next[index],
-                            can_bleach: e.target.checked,
-                            can_close: e.target.checked ? true : next[index].can_close
-                          };
-                          return next;
-                        })
-                      }
-                    />
-                  </td>
-                  <td>
-                    <button className="secondary-btn" onClick={() => removeRow(index)}>
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <button style={{ marginTop: "1rem" }} onClick={addRow}>
-            Add Row
-          </button>
-        </>
-      )}
+        {activeTab === "staff" && (
+          <StaffEditor rows={staffRows} onChange={setStaffRows} />
+        )}
 
-      {activeTab === "prefs" && (
-        <div className="card" style={{ marginTop: "1rem" }}>
-          <h3>Preference Weights</h3>
-          <p className="muted">0 = "Avoid", 10 = "Prefer". Separate values for MWF vs TTS. Range 0 to 10 (5 is neutral), step 0.25.</p>
-          {staffRows.map((row, idx) => (
-            <div
-              key={idx}
-              style={{
-                border: "1px solid #e2e8f0",
-                borderRadius: "10px",
-                padding: "0.75rem",
-                marginBottom: "1.25rem",
-                background: "rgba(255,255,255,0.02)"
-              }}
-            >
-              <strong>{row.name?.trim() ? row.name : "(no name set)"}</strong> ({row.role || "Tech"})
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                  gap: "0.75rem",
-                  alignItems: "center",
-                  marginTop: "0.5rem"
-                }}
-              >
-                {[
-                  { key: "pref_open_mwf" as const, label: "Open MWF", value: row.pref_open_mwf ?? 5 },
-                  { key: "pref_open_tts" as const, label: "Open TTS", value: row.pref_open_tts ?? 5 },
-                  { key: "pref_close_mwf" as const, label: "Close MWF", value: row.pref_close_mwf ?? 5 },
-                  { key: "pref_close_tts" as const, label: "Close TTS", value: row.pref_close_tts ?? 5 }
-                ].map((item) => (
-                  <label key={item.key} style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                    <span style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", alignItems: "center" }}>
-                      <span>{item.label}</span>
-                        <input
-                          type="number"
-                          id={`pref-${item.key}-${idx}`}
-                          name={`pref-${item.key}-${idx}`}
-                          min={0}
-                          max={10}
-                          step={0.25}
-                          value={item.value}
-                        onChange={(e) =>
-                          setStaffRows((prev) => {
-                            const next = [...prev];
-                            next[idx] = { ...next[idx], [item.key]: Number(e.target.value) || 5 } as any;
-                            return next;
-                          })
-                        }
-                        style={{ width: "70px", textAlign: "right" }}
-                      />
-                    </span>
-                      <input
-                        type="range"
-                        id={`pref-${item.key}-${idx}-range`}
-                        name={`pref-${item.key}-${idx}-range`}
-                        min={0}
-                        max={10}
-                        step={0.25}
-                        value={item.value}
-                      onChange={(e) =>
-                        setStaffRows((prev) => {
-                          const next = [...prev];
-                          next[idx] = { ...next[idx], [item.key]: Number(e.target.value) || 5 } as any;
-                          return next;
-                        })
-                      }
-                      style={{ width: "100%" }}
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      {activeTab === "avail" && (
-        <div className="card" style={{ marginTop: "1rem" }}>
-          <h3>Availability</h3>
-          <p className="muted">Toggle the days each staffer can work.</p>
-          <table cellPadding={6} style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th>Staff</th>
-                {DAYS.map((d) => (
-                  <th key={d}>{d}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {staffRows.map((row, idx) => (
-                <tr key={idx}>
-                  <td title={row.id || ""}>
-                    {row.name?.trim() ? row.name : "(no name set)"}
-                  </td>
-                  {DAYS.map((day) => (
-                    <td key={day} style={{ textAlign: "center" }}>
-                        <input
-                          type="checkbox"
-                          id={`avail-${idx}-${day}`}
-                          name={`avail-${idx}-${day}`}
-                          checked={row.availability?.[day] ?? true}
-                          onChange={(e) =>
-                            setStaffRows((prev) => {
-                            const next = [...prev];
-                            const avail = { ...(next[idx].availability ?? defaultAvailability) };
-                            avail[day] = e.target.checked;
-                            next[idx] = { ...next[idx], availability: avail };
-                            return next;
-                          })
-                        }
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        {activeTab === "avail" && (
+          <AvailabilityEditor rows={staffRows} onChange={setStaffRows} />
+        )}
 
-      {activeTab === "demand" && <DemandEditor rows={demandRows} onChange={setDemandRows} />}
-      {activeTab === "demand" && demandWarnings.length > 0 && (
-        <ul style={{ color: "#b45309" }}>
-          {demandWarnings.map((w, i) => (
-            <li key={i}>{w}</li>
-          ))}
-        </ul>
-      )}
+        {activeTab === "prefs" && (
+          <PrefsEditor rows={staffRows} onChange={setStaffRows} />
+        )}
 
-      {activeTab === "pto" && (
-        <>
-          <p className="muted">
-            Schedule window: {startDate || "n/a"} to {scheduleEnd || "n/a"}
-          </p>
-            <PTOEditor
-              rows={ptoRows}
-              onChange={setPtoRows}
-              staffOptions={staffRows
-                .filter((s) => s.id.trim())
-                .map((s) => ({ id: s.id, name: s.name?.trim() ? s.name : "(no name set)" }))}
-              scheduleStart={startDate}
-              scheduleEnd={scheduleEnd}
-            />
-          {ptoWarnings.length > 0 && (
-            <ul style={{ color: "#b45309" }}>
-              {ptoWarnings.map((w, i) => (
-                <li key={i}>{w}</li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
+        {activeTab === "demand" && <DemandEditor rows={demandRows} onChange={setDemandRows} />}
+        {activeTab === "demand" && demandWarnings.length > 0 && (
+          <ul style={{ color: "#b45309" }}>
+            {demandWarnings.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        )}
 
-      {activeTab === "run" && (
-        <div className="card" style={{ marginTop: "1rem" }}>
-          <h3>Run Scheduler</h3>
-          <div className="stack">
-            <label>
-              Clinic
-                <input
-                  id="run-clinic-name"
-                  name="run-clinic-name"
-                  value={configName}
-                  onChange={(e) => setConfigName(e.target.value)}
-                />
-            </label>
-            <label>
-              Timezone
-                <input
-                  id="run-timezone"
-                  name="run-timezone"
-                  value={timezone}
-                  onChange={(e) => setTimezone(e.target.value)}
-                />
-            </label>
-          </div>
-          <div className="stack">
-            <label>
-              Start date
-                <input
-                  id="run-start-date"
-                  name="run-start-date"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                />
-            </label>
-            <label>
-              Weeks
-                <input
-                  id="run-weeks"
-                  name="run-weeks"
-                  type="number"
-                  min={1}
-                  value={weeks}
-                  onChange={(e) => setWeeks(Number(e.target.value))}
-                />
-            </label>
-          </div>
-          <div className="stack constraint-stack">
-            <span className="muted small-note">0 = ignore, 10 = hard stop</span>
-            <label className="constraint-field">
-              3-day streak cap
-              <div className="constraint-control">
-                <input
-                  id="constraint-three-day"
-                  name="constraint-three-day"
-                  type="range"
-                  min={0}
-                  max={10}
-                  step={1}
-                  value={threeDayWeight}
-                  onChange={(e) => setThreeDayWeight(Number(e.target.value))}
-                />
-                <span className="constraint-value">{threeDayWeight}</span>
-              </div>
-            </label>
-            <label className="constraint-field">
-              No consecutive Saturdays
-              <div className="constraint-control">
-                <input
-                  id="constraint-alt-sat"
-                  name="constraint-alt-sat"
-                  type="range"
-                  min={0}
-                  max={10}
-                  step={1}
-                  value={altSatWeight}
-                  onChange={(e) => setAltSatWeight(Number(e.target.value))}
-                />
-                <span className="constraint-value">{altSatWeight}</span>
-              </div>
-            </label>
-            <label className="constraint-field">
-              Tech 4-day cap
-              <div className="constraint-control">
-                <input
-                  id="constraint-tech-four"
-                  name="constraint-tech-four"
-                  type="range"
-                  min={0}
-                  max={10}
-                  step={1}
-                  value={techFourWeight}
-                  onChange={(e) => setTechFourWeight(Number(e.target.value))}
-                />
-                <span className="constraint-value">{techFourWeight}</span>
-              </div>
-            </label>
-            <label className="constraint-field">
-              RN 4-day cap
-              <div className="constraint-control">
-                <input
-                  id="constraint-rn-four"
-                  name="constraint-rn-four"
-                  type="range"
-                  min={0}
-                  max={10}
-                  step={1}
-                  value={rnFourWeight}
-                  onChange={(e) => setRnFourWeight(Number(e.target.value))}
-                />
-                <span className="constraint-value">{rnFourWeight}</span>
-              </div>
-            </label>
-          </div>
-          <div className="stack">
-            <label>
-              Patients/Tech
-                <input
-                  id="ratio-patients-tech"
-                  name="ratio-patients-tech"
-                  type="number"
-                  min={1}
-                  value={patientsPerTech}
-                  onChange={(e) => setPatientsPerTech(Number(e.target.value))}
-                />
-            </label>
-            <label>
-              Patients/RN
-                <input
-                  id="ratio-patients-rn"
-                  name="ratio-patients-rn"
-                  type="number"
-                  min={1}
-                  value={patientsPerRn}
-                  onChange={(e) => setPatientsPerRn(Number(e.target.value))}
-                />
-            </label>
-            <label>
-              Techs/RN
-                <input
-                  id="ratio-techs-rn"
-                  name="ratio-techs-rn"
-                  type="number"
-                  min={1}
-                  value={techsPerRn}
-                  onChange={(e) => setTechsPerRn(Number(e.target.value))}
-                />
-            </label>
-            <label>
-              Trials
-                <input
-                  id="run-trials"
-                  name="run-trials"
-                  type="number"
-                  min={1}
-                  value={trials}
-                  onChange={(e) => setTrials(Number(e.target.value))}
-                />
-            </label>
-            <label>
-              Seed (0 = random)
-                <input
-                  id="run-seed"
-                  name="run-seed"
-                  type="number"
-                  min={0}
-                  value={baseSeed}
-                  onChange={(e) => setBaseSeed(Number(e.target.value))}
-                />
-            </label>
-            <label style={{ alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={usePrevSeed}
-                onChange={(e) => setUsePrevSeed(e.target.checked)}
-                style={{ marginRight: "6px" }}
-                id="use-prev-seed"
-                name="use-prev-seed"
+        {activeTab === "pto" && (
+          <>
+            <p className="muted">
+              Schedule window: {startDate || "n/a"} to {scheduleEnd || "n/a"}
+            </p>
+              <PTOEditor
+                rows={ptoRows}
+                onChange={setPtoRows}
+                staffOptions={staffRows
+                  .filter((s) => s.id.trim())
+                  .map((s) => ({ id: s.id, name: s.name?.trim() ? s.name : "(no name set)" }))}
+                scheduleStart={startDate}
+                scheduleEnd={scheduleEnd}
               />
-              Use previous best seed
-            </label>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <span>Export roles</span>
-              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.25rem" }}>
-                  {["Tech", "RN", "Admin"].map((role) => (
-                    <label key={role} style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                      <input
-                        type="checkbox"
-                        id={`export-role-${role.toLowerCase()}`}
-                        name={`export-role-${role.toLowerCase()}`}
-                        checked={exportRoles.includes(role)}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                        setExportRoles((prev) => {
-                          if (checked) return Array.from(new Set([...prev, role]));
-                          return prev.filter((r) => r !== role);
-                        });
-                      }}
-                    />
-                    {role}
-                  </label>
+            {ptoWarnings.length > 0 && (
+              <ul style={{ color: "#b45309" }}>
+                {ptoWarnings.map((w, i) => (
+                  <li key={i}>{w}</li>
                 ))}
-              </div>
-            </div>
-          </div>
-          <button
-            disabled={hasErrors}
-            onClick={async () => {
-              if (hasErrors) {
-                setStatus("Fix validation errors before running.");
-                setLastError(
-                  [
-                    staffWarnings[0] ? `Staff: ${staffWarnings[0]}` : "",
-                    demandWarnings[0] ? `Demand: ${demandWarnings[0]}` : "",
-                    ptoWarnings[0] ? `PTO: ${ptoWarnings[0]}` : ""
-                  ]
-                    .filter(Boolean)
-                    .join(" | ")
-                );
-                return;
-              }
-              try {
-                setIsRunning(true);
-                setProgress(0);
-                if (progressRef.current) clearInterval(progressRef.current);
-                progressRef.current = setInterval(() => {
-                  setProgress((p) => (p < 90 ? p + 5 : p));
-                }, 200);
-                setStatus("Running schedule...");
-                const staffPayload = staffRows.map((s) => ({
-                  id: s.id,
-                  name: s.name,
-                  role: s.role,
-                  can_open: s.can_open ?? false,
-                  can_close: s.can_close ?? false,
-                  can_bleach: s.can_bleach ?? false,
-                  availability: DAYS.reduce<Record<string, boolean>>((acc, day) => {
-                    acc[day] = s.availability?.[day] ?? true;
-                    return acc;
-                  }, {}),
-                  preferences: {
-                    open_mwf: 5 - (s.pref_open_mwf ?? 5),
-                    open_tts: 5 - (s.pref_open_tts ?? 5),
-                    mid_mwf: 5 - (s.pref_mid_mwf ?? 5),
-                    mid_tts: 5 - (s.pref_mid_tts ?? 5),
-                    close_mwf: 5 - (s.pref_close_mwf ?? 5),
-                    close_tts: 5 - (s.pref_close_tts ?? 5)
-                  }
-                }));
-                const requirements = demandRows.map((row) => ({
-                  day_name: row.Day,
-                  patient_count: row.Patients,
-                  tech_openers: row.Tech_Open,
-                  tech_mids: row.Tech_Mid,
-                  tech_closers: row.Tech_Close,
-                  rn_count: row.RN_Count,
-                  admin_count: row.Admin_Count
-                }));
-                const expandPTO = (): Array<{ staff_id: string; date: string }> => {
-                  const entries: Array<{ staff_id: string; date: string }> = [];
-                  for (const row of ptoRows) {
-                    if (!row.staff_id || !row.start_date) continue;
-                    const start = new Date(row.start_date);
-                    const end = new Date(row.end_date || row.start_date);
-                    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue;
-                    const [a, b] = start <= end ? [start, end] : [end, start];
-                    for (let dt = new Date(a); dt <= b; dt.setDate(dt.getDate() + 1)) {
-                      entries.push({ staff_id: row.staff_id, date: dt.toISOString().slice(0, 10) });
-                    }
-                  }
-                  return entries;
-                };
-                const selectedSeed =
-                  usePrevSeed && winningSeed !== null ? winningSeed : baseSeed > 0 ? baseSeed : null;
-                const payload = {
-                  staff: staffPayload,
-                  requirements,
-                  config: {
-                    clinic_name: configName || "Demo Clinic",
-                    timezone,
-                    start_date: startDate,
-                    weeks,
-                    bleach_day: bleachDay,
-                    bleach_rotation: bleachRotation,
-                    bleach_cursor: bleachCursor,
-                    bleach_frequency: bleachFrequency,
-                    patients_per_tech: patientsPerTech,
-                    patients_per_rn: patientsPerRn,
-                    techs_per_rn: techsPerRn,
-                    toggles: {
-                      enforce_three_day_cap: threeDayWeight,
-                      enforce_post_bleach_rest: postBleachWeight,
-                      enforce_alt_saturdays: altSatWeight,
-                      limit_tech_four_days: techFourWeight,
-                      limit_rn_four_days: rnFourWeight
-                  }
-                  },
-                  pto: expandPTO(),
-                  tournament_trials: trials,
-                  base_seed: selectedSeed,
-                  export_roles: exportRoles
-                };
-                const res = await runSchedule(payload);
-                  setAssignments(res.assignments);
-                  setStats(res.stats);
-                  setWinningSeed(res.winning_seed ?? null);
-                  setWinningScore(typeof res.total_penalty === "number" ? res.total_penalty : null);
-                  setScheduleStaffMap(null);
-                  if (typeof res.bleach_cursor === "number") {
-                    setBleachCursor(res.bleach_cursor);
-                  }
-                  setProgress(100);
-                if (res.excel) {
-                  const blob = Uint8Array.from(window.atob(res.excel), (c) => c.charCodeAt(0));
-                  const file = new Blob([blob], {
-                    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  });
-                  const url = URL.createObjectURL(file);
-                  setExcelUrl(url);
-                } else {
-                  setExcelUrl(null);
-                }
-                setRunResult(
-                  `Winning seed: ${res.winning_seed ?? "n/a"} | Score: ${
-                    res.total_penalty?.toFixed ? res.total_penalty.toFixed(2) : res.total_penalty ?? "n/a"
-                  } | Next bleach in rotation: ${res.bleach_cursor} | Assignments: ${res.assignments.length}`
-                );
-                setStatus("Schedule generated.");
-                refreshLatestMeta();
-                try {
-                  localStorage.setItem("latest_schedule_ts", new Date().toISOString());
-                  window.dispatchEvent(new Event("storage"));
-                } catch {
-                  /* ignore localStorage errors */
-                }
-              } catch (err: any) {
-                const msg = friendlyError(err, "Failed to generate schedule");
-                setStatus(msg);
-                setRunResult("");
-                setLastError(msg);
-                setProgress(0);
-              } finally {
-                setIsRunning(false);
-                if (progressRef.current) {
-                  clearInterval(progressRef.current);
-                  progressRef.current = null;
-                }
-              }
-            }}
-          >
-            Run Schedule
-          </button>
-          {isRunning && (
-            <div style={{ marginTop: "0.5rem" }}>
-              <div className="muted" style={{ marginBottom: "0.25rem" }}>
-                Running trials...
-              </div>
-              <div
-                style={{
-                  height: "6px",
-                  background: "var(--slate-200)",
-                  borderRadius: "999px",
-                  overflow: "hidden"
-                }}
-              >
-                <div
-                  style={{
-                    width: "40%",
-                    height: "100%",
-                    background: "var(--indigo-600)",
-                    animation: "progressPulse 1.2s ease-in-out infinite"
-                  }}
-                />
-              </div>
-            </div>
-          )}
-          {isRunning || progress > 0 ? (
-            <div style={{ marginTop: "0.75rem" }}>
-              <div className="muted">Running {trials} trials...</div>
-              <div
-                style={{
-                  height: "8px",
-                  background: "var(--warm-3)",
-                  borderRadius: "999px",
-                  overflow: "hidden",
-                  marginTop: "0.35rem"
-                }}
-              >
-                <div
-                  style={{
-                    width: `${Math.min(progress, 100)}%`,
-                    height: "100%",
-                    background: "var(--brand-blue)",
-                    transition: "width 0.2s ease"
-                  }}
-                />
-              </div>
-            </div>
-          ) : null}
-          {runResult && <p style={{ marginTop: "0.75rem" }}>{runResult}</p>}
-            {isAuthed && (
-              <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <button className="primary-btn" onClick={downloadSavedSchedule}>
-                  Download Latest Schedule
-                </button>
-                <button className="secondary-btn" onClick={downloadSavedScheduleCsv}>
-                  Download CSV
-                </button>
-                <button className="secondary-btn" onClick={loadLatestSavedSchedule}>
-                  Load Latest Schedule
-                </button>
-              </div>
+              </ul>
             )}
-          {assignments.length > 0 && (
-            <div style={{ marginTop: "1rem", overflowX: "auto" }}>
-              {(() => {
-                const uniqueDates = Array.from(new Set(assignments.map((a) => a.date))).sort();
-                const exportRoleSet = new Set(exportRoles.map((role) => role.toLowerCase()));
-                const matrixAssignments = assignments.filter((a) => exportRoleSet.has((a.role || "").toLowerCase()));
-                  const knownStaffIds = new Set(Object.keys(displayStaffMap));
-                const dateDayMap = uniqueDates.reduce<Record<string, string>>((acc, d) => {
-                  const found = assignments.find((a) => a.date === d);
-                  acc[d] = found?.day_name || "";
-                  return acc;
-                }, {});
-                const dateLabelMap = uniqueDates.reduce<Record<string, string>>((acc, d) => {
-                  const day = dateDayMap[d] || "";
-                  acc[d] = day ? `${d} (${day})` : d;
-                  return acc;
-                }, {});
-                const staffIdsByRole = ["Tech", "RN", "Admin"].reduce<Record<string, string[]>>((acc, role) => {
-                  if (!exportRoleSet.has(role.toLowerCase())) {
-                    acc[role] = [];
-                    return acc;
-                  }
-                  acc[role] = Array.from(
-                    new Set(
-                      matrixAssignments
-                        .filter((a) => a.role === role && a.staff_id && knownStaffIds.has(a.staff_id))
-                        .map((a) => a.staff_id as string)
-                    )
-                  );
-                  return acc;
-                }, {});
-                const dateMapByStaff = matrixAssignments.reduce<Record<string, Set<string>>>((acc, a) => {
-                  if (!a.staff_id) return acc;
-                  acc[a.staff_id] = acc[a.staff_id] || new Set();
-                  acc[a.staff_id].add(a.date);
-                  return acc;
-                }, {});
-                const labelMapByStaff = matrixAssignments.reduce<Record<string, Record<string, string>>>((acc, a) => {
-                  if (!a.staff_id) return acc;
-                  acc[a.staff_id] = acc[a.staff_id] || {};
-                  const label =
-                    a.duty === "bleach"
-                      ? "Bleach"
-                      : a.duty === "open"
-                      ? "Open"
-                      : a.duty === "close"
-                      ? "Close"
-                      : a.duty === "mid"
-                      ? `Mid${a.slot_index > 1 ? a.slot_index : ""}`.trim()
-                      : a.duty;
-                  acc[a.staff_id][a.date] = label;
-                  return acc;
-                }, {});
-                  const hasMatrix = uniqueDates.length > 0;
-                  const columns = uniqueDates.reduce<Array<{ key: string; date?: string; label?: string; isSeparator?: boolean }>>((acc, d) => {
-                    acc.push({ key: d, date: d, label: dateLabelMap[d] });
-                    const day = dateDayMap[d];
-                    if (day && day.toLowerCase().startsWith("sat")) {
-                      acc.push({ key: `${d}-sep`, isSeparator: true });
-                    }
-                    return acc;
-                  }, []);
-                  if (!hasMatrix) return null;
-                  return (
-                    <div style={{ marginTop: "1rem" }}>
-                      <h4>Schedule Matrix</h4>
-                    {["Tech", "RN", "Admin"].map((role) => {
-                      const staffIds = staffIdsByRole[role] || [];
-                      if (!staffIds.length) return null;
-                      return (
-                        <div key={role} style={{ marginBottom: "1rem" }}>
-                          <h5 style={{ margin: "0 0 0.5rem 0" }}>{role}</h5>
-                          <table
-                            cellPadding={6}
-                            style={{ minWidth: "700px", borderCollapse: "collapse", fontSize: "0.9rem" }}
-                          >
-                            <thead>
-                              <tr>
-                                <th>Staff</th>
-                                {columns.map((col) =>
-                                  col.isSeparator ? (
-                                    <th key={col.key} className="matrix-sep" aria-hidden="true" />
-                                  ) : (
-                                    <th key={col.key}>{col.label}</th>
-                                  )
-                                )}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {staffIds.map((sid) => (
-                                <tr key={`${role}-${sid}`}>
-                      <td>{displayStaffMap[sid] || sid}</td>
-                            {columns.map((col) =>
-                              col.isSeparator ? (
-                                <td key={`${sid}-${col.key}`} className="matrix-sep" aria-hidden="true" />
-                              ) : (
-                                <td key={`${sid}-${col.key}`} style={{ textAlign: "center" }}>
-                                  {labelMapByStaff[sid]?.[col.date as string] || ""}
-                                </td>
-                              )
-                            )}
-                          </tr>
-                        ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      );
-                      })}
-                    </div>
-                  );
-                })()}
-              </div>
-          )}
-          {stats && Object.keys(stats).length > 0 && (
-            <div style={{ marginTop: "1rem" }}>
-              <h4>Shift Totals</h4>
-              <table cellPadding={6} style={{ minWidth: "300px", borderCollapse: "collapse", fontSize: "0.9rem" }}>
-                <thead>
-                  <tr>
-                    <th>Staff</th>
-                    <th>Shifts</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(stats).map(([k, v]) => (
-                    <tr key={k}>
-                        <td>{displayStaffMap[k] || k}</td>
-                      <td>{v}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-      {activeTab === "bleach" && (
-        <div className="card" style={{ marginTop: "1rem" }}>
-          <h3>Bleach planning</h3>
-          <p className="muted">
-            Weekly runs use your chosen bleach day. Quarterly runs schedule bleach on the second week of Feb, May, Aug, and Nov.
-          </p>
-          <div className="stack">
-              <label>
-                Bleach day
-                <select
-                  id="bleach-day"
-                  name="bleach-day"
-                  value={bleachDay}
-                  onChange={(e) => setBleachDay(e.target.value)}
-                >
-                {DAYS.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </label>
-              <label>
-                Bleach frequency
-                <select
-                  id="bleach-frequency"
-                  name="bleach-frequency"
-                  value={bleachFrequency}
-                  onChange={(e) => setBleachFrequency(e.target.value)}
-                >
-                <option value="weekly">Weekly</option>
-                <option value="quarterly">Quarterly</option>
-              </select>
-            </label>
-              <label>
-                Bleach rotation position
-                <input
-                  type="number"
-                  id="bleach-rotation-position"
-                  name="bleach-rotation-position"
-                  min={0}
-                  value={bleachCursor}
-                  onChange={(e) => setBleachCursor(Number(e.target.value))}
-                />
-              </label>
-          </div>
-          <div className="stack" style={{ alignItems: "flex-start" }}>
-            <div style={{ minWidth: "280px" }}>
-              <p style={{ margin: "0 0 4px 0" }}>Bleach rotation (ordered)</p>
-                <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
-                  <select
-                    id="bleach-rotation-add"
-                    name="bleach-rotation-add"
-                    value=""
-                    onChange={(e) => {
-                      const sid = e.target.value;
-                      if (!sid) return;
-                    setBleachRotation((prev) => [...prev, sid]);
-                  }}
-                >
-                  <option value="">Add bleacher...</option>
-                  {availableBleachIds.map((sid) => (
-                    <option key={sid} value={sid}>
-                      {staffNameMap[sid] || sid}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="secondary-btn"
-                  onClick={() => setBleachRotation([])}
-                  disabled={bleachRotation.length === 0}
-                >
-                  Clear
-                </button>
-              </div>
-              {bleachRotation.length === 0 && <p className="muted">No bleach rotation set.</p>}
-              {bleachRotation.map((sid, idx) => (
-                <div
-                  key={`${sid}-${idx}`}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                    marginBottom: "0.25rem"
-                  }}
-                >
-                  <span style={{ minWidth: 24, textAlign: "right" }}>{idx + 1}.</span>
-                  <span style={{ flex: 1 }}>{staffNameMap[sid] || sid}</span>
-                  <button
-                    className="secondary-btn"
-                    onClick={() =>
-                      setBleachRotation((prev) => {
-                        const next = [...prev];
-                        if (idx > 0) [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-                        return next;
-                      })
-                    }
-                    disabled={idx === 0}
-                  >
-                    Move up
-                  </button>
-                  <button
-                    className="secondary-btn"
-                    onClick={() =>
-                      setBleachRotation((prev) => {
-                        const next = [...prev];
-                        if (idx < next.length - 1) [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
-                        return next;
-                      })
-                    }
-                    disabled={idx === bleachRotation.length - 1}
-                  >
-                    Move down
-                  </button>
-                  <button
-                    className="secondary-btn"
-                    onClick={() => setBleachRotation((prev) => prev.filter((_, i) => i !== idx))}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="stack">
-            <label className="constraint-field">
-              Post-bleach rest day
-              <div className="constraint-control">
-                <input
-                  type="range"
-                  min={0}
-                  max={10}
-                  step={1}
-                  value={postBleachWeight}
-                  onChange={(e) => setPostBleachWeight(Number(e.target.value))}
-                  id="bleach-rest-day"
-                  name="bleach-rest-day"
-                />
-                <span className="constraint-value">{postBleachWeight}</span>
-              </div>
-            </label>
-            <p className="muted">Cursor advances after a bleach assignment; PTO will skip to the next person.</p>
-          </div>
-        </div>
-      )}
-      {activeTab === "admin" && isAdmin && (
-        <div className="card" style={{ marginTop: "1rem" }}>
-          <h3>Admin</h3>
-          <div style={{ marginBottom: "0.5rem", display: "flex", gap: "0.5rem" }}>
-            <button className="secondary-btn" onClick={loadUsers}>
-              Refresh users
-            </button>
-          </div>
-          <div style={{ overflowX: "auto", marginBottom: "1rem" }}>
-            {users.length === 0 ? (
-              <p className="muted">No users found.</p>
-            ) : (
-              <table cellPadding={6} style={{ minWidth: "780px", borderCollapse: "collapse", fontSize: "0.9rem" }}>
-                <thead>
-                  <tr>
-                    <th>Public ID</th>
-                    <th>Username</th>
-                    <th>Role</th>
-                    <th>Status</th>
-                    <th>Last Login</th>
-                    <th>Invite Expires</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u) => (
-                    <tr key={u.id}>
-                      <td>{u.public_id || u.id}</td>
-                  <td>{u.username}</td>
-                  <td>
-                    <select
-                      id={`admin-user-role-${u.id}`}
-                      name={`admin-user-role-${u.id}`}
-                      disabled={u.username?.toLowerCase() === "admin" || u.id === 1}
-                      title={
-                        u.username?.toLowerCase() === "admin" || u.id === 1
-                          ? "Master admin cannot be changed"
-                          : undefined
-                      }
-                      value={u.role}
-                      onChange={async (e) => {
-                        const newRole = e.target.value;
-                        try {
-                          await updateUserRole(u.id, newRole);
-                              loadUsers();
-                            } catch {
-                              /* ignore */
-                            }
-                          }}
-                        >
-                          <option value="user">User</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                      </td>
-                      <td>{u.status}</td>
-                      <td>{formatDateTime(u.last_login)}</td>
-                      <td>{u.status === "active" ? "-" : formatDateTime(u.invite_expires_at)}</td>
-                      <td
-                        style={{
-                          display: "flex",
-                          gap: "0.35rem",
-                          flexWrap: "nowrap",
-                          alignItems: "center",
-                          justifyContent: "flex-start"
-                        }}
-                      >
-                        <button
-                          className="secondary-btn"
-                          onClick={async () => {
-                            try {
-                              await revokeInvite({ username: u.username, license_key: "" });
-                              loadUsers();
-                            } catch {
-                              /* ignore */
-                            }
-                          }}
-                        >
-                          Revoke invite
-                        </button>
-                        <button
-                          className="secondary-btn"
-                          onClick={async () => {
-                            try {
-                              await deleteUser(u.id);
-                              loadUsers();
-                            } catch {
-                              /* ignore */
-                            }
-                          }}
-                        >
-                          Delete
-                        </button>
-                        <button
-                          className="secondary-btn"
-                          onClick={async () => {
-                            try {
-                              const res = await resetUserInvite(u.id);
-                              setInviteResult(`Reset token for ${u.username}: ${res.token}`);
-                              loadUsers();
-                            } catch (err: any) {
-                              setInviteResult(err?.message ?? "Failed to reset invite");
-                            }
-                          }}
-                        >
-                          Reset password
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-          <div>
-            <h4>Recent activity</h4>
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "0.75rem",
-                alignItems: "flex-end",
-                margin: "0.5rem 0 0.75rem"
-              }}
-            >
-              <label className="field" style={{ minWidth: "160px" }}>
-                <span className="muted small-note">Event</span>
-                <select value={auditEvent} onChange={(e) => setAuditEvent(e.target.value)}>
-                  <option value="">All events</option>
-                  {auditEventOptions.map((event) => (
-                    <option key={event} value={event}>
-                      {event}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field" style={{ minWidth: "160px" }}>
-                <span className="muted small-note">User</span>
-                <select value={auditUserId} onChange={(e) => setAuditUserId(e.target.value)}>
-                  <option value="">All users</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.username}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field" style={{ minWidth: "220px", flex: "1 1 220px" }}>
-                <span className="muted small-note">Search</span>
-                <input
-                  value={auditSearch}
-                  onChange={(e) => setAuditSearch(e.target.value)}
-                  placeholder="event, detail, IP, location"
-                />
-              </label>
-              <label className="field" style={{ width: "110px" }}>
-                <span className="muted small-note">Limit</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={500}
-                  value={auditLimit}
-                  onChange={(e) => setAuditLimit(Math.max(1, Number(e.target.value) || 1))}
-                />
-              </label>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <button className="secondary-btn" onClick={() => loadAudit()}>
-                  Apply
-                </button>
-                <button
-                  className="secondary-btn"
-                  onClick={() => {
-                    setAuditEvent("");
-                    setAuditUserId("");
-                    setAuditSearch("");
-                    setAuditLimit(50);
-                    loadAudit({ limit: 50, event: undefined, user_id: undefined, search: undefined });
-                  }}
-                >
-                  Clear
-                </button>
-                <button className="secondary-btn" onClick={() => loadAudit()}>
-                  Refresh
-                </button>
-              </div>
-            </div>
-            {auditFeed.length === 0 ? (
-              <p className="muted">No audit entries.</p>
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table cellPadding={6} style={{ minWidth: "820px", borderCollapse: "collapse", fontSize: "0.9rem" }}>
-                  <thead>
-                    <tr>
-                      <th>Time</th>
-                      <th>Event</th>
-                      <th>User ID</th>
-                      <th>Detail</th>
-                      <th>Location</th>
-                      <th>IP</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditFeed.map((a) => (
-                      <tr key={a.id}>
-                        <td>{formatDateTime(a.created_at)}</td>
-                        <td>{a.event}</td>
-                        <td>{a.user_id != null ? `${userNameMap[a.user_id] ?? a.user_id}` : "-"}</td>
-                        <td>{a.detail || "-"}</td>
-                        <td>{a.location || "-"}</td>
-                        <td>{a.ip_v4 || a.ip || "-"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+          </>
+        )}
+
+        {activeTab === "bleach" && (
+          <BleachEditor
+            state={bleachState}
+            onChange={handleBleachChange}
+            staffNameMap={staffNameMap}
+            availableBleachIds={availableBleachIds}
+          />
+        )}
+
+        {activeTab === "run" && (
+          <RunPanel
+            config={runConfig}
+            onConfigChange={handleRunConfigChange}
+            isRunning={isRunning}
+            progress={progress}
+            runResult={runResult}
+            assignments={assignments}
+            stats={stats}
+            displayStaffMap={displayStaffMap}
+            hasErrors={hasErrors}
+            isAuthed={isAuthed}
+            onRun={handleRun}
+            onDownloadExcel={downloadSavedSchedule}
+            onDownloadCsv={downloadSavedScheduleCsv}
+            onLoadLatest={loadLatestSavedSchedule}
+          />
+        )}
+
+        {activeTab === "admin" && isAdmin && <AdminPanel />}
       </div>
     </section>
   );
