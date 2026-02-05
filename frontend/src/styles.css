@@ -149,6 +149,14 @@ h4 {
   margin: 0.2rem 0 0;
 }
 
+[data-theme="dark"] .muted {
+  color: var(--warm-2);
+}
+
+.page-shell.light .muted {
+  color: #5c667a;
+}
+
 .card {
   background: rgba(255, 255, 255, 0.96);
   border-radius: 18px;

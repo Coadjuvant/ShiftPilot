@@ -260,6 +260,11 @@ export const saveConfig = async (req: SaveConfigRequest): Promise<{ status: stri
   return data;
 };
 
+export const deleteConfig = async (filename: string): Promise<{ status: string; filename: string }> => {
+  const { data } = await api.delete(`configs/${filename}`);
+  return data;
+};
+
 export const runSchedule = async (req: ScheduleRequest): Promise<ScheduleResponse> => {
   const { data } = await api.post<ScheduleResponse>("schedule/run", req);
   return data;

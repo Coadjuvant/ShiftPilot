@@ -54,6 +54,7 @@ from backend.auth_db import (
     list_configs as list_user_configs,
     load_config as load_user_config,
     save_config as save_user_config,
+    delete_config as delete_user_config,
     save_schedule as persist_schedule,
     get_latest_schedule,
     export_config as export_user_config,
@@ -1099,6 +1100,19 @@ def import_config(request: Request, body: SaveConfigRequest, payload: dict = Dep
         return {"status": "imported", "filename": filename}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=_safe_error("Failed to import config", exc)) from exc
+
+
+@router.delete("/configs/{filename}")
+def delete_config(request: Request, filename: str, payload: dict = Depends(require_auth)) -> dict:
+    owner = _config_owner(payload)
+    safe_name = Path(filename).name
+    try:
+        delete_user_config(owner, safe_name)
+        ip, ip_v4, user_agent, location = _request_meta(request)
+        log_event(payload.get("sub"), "config_delete", f"config={safe_name}", ip, user_agent, location, ip_v4)
+        return {"status": "deleted", "filename": safe_name}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=_safe_error("Failed to delete config", exc)) from exc
 
 
 app.include_router(router)
