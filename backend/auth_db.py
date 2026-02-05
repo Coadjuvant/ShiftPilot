@@ -550,6 +550,13 @@ class PostgresAuth:
         conn.commit()
         conn.close()
 
+    def delete_config(self, owner: str, filename: str):
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM configs WHERE owner=%s AND filename=%s", (owner, filename))
+        conn.commit()
+        conn.close()
+
 # -----------------------
 # JSON backend (fallback)
 # -----------------------
@@ -799,6 +806,12 @@ class JsonAuth:
         data["configs"] = cfgs
         _save_json(data)
 
+    def delete_config(self, owner: str, filename: str):
+        data = _load_json()
+        cfgs = data.get("configs", [])
+        data["configs"] = [c for c in cfgs if not (c.get("owner") == owner and c.get("filename") == filename)]
+        _save_json(data)
+
     # --- admin helpers ---
     def list_users(self) -> List[Dict[str, Any]]:
         data = _load_json()
@@ -990,3 +1003,7 @@ def export_config(owner: str, filename: str) -> Optional[dict]:
 
 def import_config(owner: str, filename: str, payload: dict):
     return _backend.save_config(owner, filename, payload)
+
+
+def delete_config(owner: str, filename: str):
+    return _backend.delete_config(owner, filename)

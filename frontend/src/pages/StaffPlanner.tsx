@@ -3,6 +3,7 @@ import api, {
   ConfigPayload,
   SaveConfigRequest,
   SavedSchedule,
+  deleteConfig,
   exportScheduleCsv,
   exportScheduleExcel,
   fetchHealth,
@@ -627,6 +628,27 @@ export default function StaffPlanner() {
     }
   };
 
+  const handleDeleteConfig = async () => {
+    if (!selectedConfig) {
+      setStatus("No config selected to delete.");
+      return;
+    }
+    if (!confirm(`Delete config "${selectedConfig}"?`)) {
+      return;
+    }
+    try {
+      await deleteConfig(selectedConfig);
+      setStatus(`Deleted: ${selectedConfig}`);
+      const names = await listConfigs();
+      setConfigs(names);
+      setSelectedConfig("");
+    } catch (err: any) {
+      const msg = friendlyError(err, "Failed to delete config");
+      setStatus(msg);
+      setLastError(msg);
+    }
+  };
+
   // --- Auth handlers ---
   const handleLogin = async () => {
     try {
@@ -1028,6 +1050,9 @@ export default function StaffPlanner() {
           </label>
           <button onClick={() => handleLoadConfig(selectedConfig)} disabled={!selectedConfig}>
             Load
+          </button>
+          <button onClick={handleDeleteConfig} disabled={!selectedConfig} className="secondary-btn">
+            Delete
           </button>
             <input
               placeholder="Save as..."
