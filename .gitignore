@@ -46,6 +46,7 @@ Thumbs.db
 *.orig
 .idea/
 .vscode/
+.claude/
 
 # Builds/Reports
 *.log
