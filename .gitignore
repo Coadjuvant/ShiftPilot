@@ -52,4 +52,7 @@ Thumbs.db
 *.log
 coverage/
 
+# Deployment
+deploy-scripts/.local-*
+
 # Misc
