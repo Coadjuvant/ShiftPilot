@@ -670,8 +670,10 @@ table tbody tr:nth-child(even) {
 }
 
 .constraint-stack {
+  display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  gap: 1.5rem;
+  gap: 2rem;
 }
 
 .constraint-field {
@@ -713,7 +715,7 @@ table tbody tr:nth-child(even) {
 .constraint-control input[type="range"]::-webkit-slider-track {
   width: 100%;
   height: 6px;
-  background: linear-gradient(90deg, rgba(12, 75, 223, 0.2), rgba(12, 75, 223, 0.4));
+  background: linear-gradient(90deg, rgba(12, 75, 223, 0.12), rgba(12, 75, 223, 0.22));
   border-radius: 3px;
   border: none;
 }
@@ -721,7 +723,7 @@ table tbody tr:nth-child(even) {
 .constraint-control input[type="range"]::-moz-range-track {
   width: 100%;
   height: 6px;
-  background: linear-gradient(90deg, rgba(12, 75, 223, 0.2), rgba(12, 75, 223, 0.4));
+  background: linear-gradient(90deg, rgba(12, 75, 223, 0.12), rgba(12, 75, 223, 0.22));
   border-radius: 3px;
   border: none;
 }
