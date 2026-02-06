@@ -1,3 +1,5 @@
+import React from "react";
+
 export type RunConfig = {
   configName: string;
   timezone: string;
@@ -57,6 +59,19 @@ export default function RunPanel({
   onLoadLatest
 }: Props) {
   const { configName, timezone, startDate, weeks, patientsPerTech, patientsPerRn, techsPerRn, trials, baseSeed, usePrevSeed, exportRoles } = config;
+  const [collapsedRoles, setCollapsedRoles] = React.useState<Set<string>>(new Set());
+
+  const toggleRoleCollapse = (role: string) => {
+    setCollapsedRoles(prev => {
+      const next = new Set(prev);
+      if (next.has(role)) {
+        next.delete(role);
+      } else {
+        next.add(role);
+      }
+      return next;
+    });
+  };
 
   return (
     <div className="card" style={{ marginTop: "1rem" }}>
@@ -308,7 +323,7 @@ export default function RunPanel({
                   : a.duty === "close"
                   ? "Close"
                   : a.duty === "mid"
-                  ? `Mid${a.slot_index > 1 ? a.slot_index : ""}`.trim()
+                  ? `Pod ${a.slot_index - 1}`
                   : a.duty;
               acc[a.staff_id][a.date] = label;
               return acc;
@@ -329,11 +344,23 @@ export default function RunPanel({
                 {["Tech", "RN", "Admin"].map((role) => {
                   const staffIds = staffIdsByRole[role] || [];
                   if (!staffIds.length) return null;
+                  const isCollapsed = collapsedRoles.has(role);
                   return (
-                    <div key={role} style={{ marginBottom: "1rem" }}>
-                      <h5 style={{ margin: "0 0 0.5rem 0" }}>{role}</h5>
+                    <div key={role} style={{ marginBottom: "1.5rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem" }}>
+                        <h5 style={{ margin: 0 }}>{role} ({staffIds.length})</h5>
+                        <button
+                          className="secondary-btn"
+                          onClick={() => toggleRoleCollapse(role)}
+                          style={{ padding: "0.25rem 0.75rem", fontSize: "0.85rem" }}
+                        >
+                          {isCollapsed ? "Expand" : "Collapse"}
+                        </button>
+                      </div>
+                      {!isCollapsed && (
                       <table
-                        cellPadding={6}
+                        cellPadding={8}
+                        className="schedule-matrix"
                         style={{ minWidth: "700px", borderCollapse: "collapse", fontSize: "0.9rem" }}
                       >
                         <thead>
@@ -365,6 +392,7 @@ export default function RunPanel({
                     ))}
                         </tbody>
                       </table>
+                      )}
                     </div>
                   );
                   })}
