@@ -623,6 +623,44 @@ table tbody tr:nth-child(even) {
   );
 }
 
+.schedule-matrix {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.schedule-matrix thead th {
+  position: sticky;
+  top: 0;
+  background: var(--warm-3);
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] .schedule-matrix thead th {
+  background: var(--slate-800);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.schedule-matrix tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.schedule-matrix tbody tr:hover {
+  background: rgba(12, 75, 223, 0.04);
+}
+
+[data-theme="dark"] .schedule-matrix tbody tr:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.schedule-matrix tbody tr:nth-child(odd) {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+[data-theme="dark"] .schedule-matrix tbody tr:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
 .controls-row {
   display: flex;
   gap: 0.75rem;
