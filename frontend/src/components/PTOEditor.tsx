@@ -48,6 +48,7 @@ export default function PTOEditor({ rows, onChange, staffOptions = [], scheduleS
           </div>
           {entries.length === 0 && <p className="muted">No PTO entries.</p>}
           {entries.length > 0 && (
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
             <table cellPadding={6} style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.95rem" }}>
               <thead>
                 <tr>
@@ -90,6 +91,7 @@ export default function PTOEditor({ rows, onChange, staffOptions = [], scheduleS
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       ))}
@@ -107,6 +109,7 @@ export default function PTOEditor({ rows, onChange, staffOptions = [], scheduleS
           <p className="muted" style={{ fontSize: "0.9rem", marginBottom: "0.75rem" }}>
             These PTO entries need to be assigned to a staff member.
           </p>
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <table cellPadding={6} style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.95rem" }}>
             <thead>
               <tr>
@@ -165,6 +168,7 @@ export default function PTOEditor({ rows, onChange, staffOptions = [], scheduleS
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

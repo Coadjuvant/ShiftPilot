@@ -41,6 +41,7 @@ export default function DemandEditor({ rows, onChange }: Props) {
   return (
     <div className="card" style={{ marginTop: "1rem" }}>
       <h3>Demand Editor</h3>
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
       <table cellPadding={6} style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.95rem" }}>
         <thead>
           <tr>
@@ -130,6 +131,7 @@ export default function DemandEditor({ rows, onChange }: Props) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

@@ -361,7 +361,7 @@ export default function RunPanel({
                       <table
                         cellPadding={8}
                         className="schedule-matrix"
-                        style={{ minWidth: "700px", borderCollapse: "collapse", fontSize: "0.9rem" }}
+                        style={{ borderCollapse: "collapse", fontSize: "0.9rem" }}
                       >
                         <thead>
                           <tr>
@@ -404,7 +404,8 @@ export default function RunPanel({
       {stats && Object.keys(stats).length > 0 && (
         <div style={{ marginTop: "1rem" }}>
           <h4>Shift Totals</h4>
-          <table cellPadding={6} style={{ minWidth: "300px", borderCollapse: "collapse", fontSize: "0.9rem" }}>
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <table cellPadding={6} style={{ borderCollapse: "collapse", fontSize: "0.9rem" }}>
             <thead>
               <tr>
                 <th>Staff</th>
@@ -420,6 +421,7 @@ export default function RunPanel({
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
