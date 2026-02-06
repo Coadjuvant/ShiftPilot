@@ -175,11 +175,11 @@ export default function AdminPanel() {
           Refresh Users
         </button>
       </div>
-      <div style={{ overflowX: "auto", marginBottom: "1rem" }}>
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", marginBottom: "1rem" }}>
         {users.length === 0 ? (
           <p className="muted">No users found.</p>
         ) : (
-          <table cellPadding={6} style={{ minWidth: "780px", borderCollapse: "collapse", fontSize: "0.9rem" }}>
+          <table cellPadding={6} style={{ borderCollapse: "collapse", fontSize: "0.9rem" }}>
             <thead>
               <tr>
                 <th>Public ID</th>
@@ -355,8 +355,8 @@ export default function AdminPanel() {
         {auditFeed.length === 0 ? (
           <p className="muted">No audit entries.</p>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table cellPadding={6} style={{ minWidth: "820px", borderCollapse: "collapse", fontSize: "0.9rem" }}>
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            <table cellPadding={6} style={{ borderCollapse: "collapse", fontSize: "0.9rem" }}>
               <thead>
                 <tr>
                   <th>Time</th>

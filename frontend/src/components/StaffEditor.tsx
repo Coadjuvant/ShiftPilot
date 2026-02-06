@@ -46,6 +46,7 @@ export default function StaffEditor({ rows, onChange }: Props) {
       {rows.length === 0 ? (
         <p className="muted">No staff members yet. Add your first staff member to begin.</p>
       ) : (
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
         <table cellPadding={8} style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
@@ -135,6 +136,7 @@ export default function StaffEditor({ rows, onChange }: Props) {
           ))}
           </tbody>
         </table>
+        </div>
       )}
       <button style={{ marginTop: "1rem" }} onClick={addRow}>
         Add Staff Member

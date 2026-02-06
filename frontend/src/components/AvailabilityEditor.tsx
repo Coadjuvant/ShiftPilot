@@ -19,6 +19,7 @@ export default function AvailabilityEditor({ rows, onChange }: Props) {
       {rows.length === 0 ? (
         <p className="muted">Add staff members in the Staff tab to set availability.</p>
       ) : (
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
         <table cellPadding={6} style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
@@ -55,6 +56,7 @@ export default function AvailabilityEditor({ rows, onChange }: Props) {
           ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );
