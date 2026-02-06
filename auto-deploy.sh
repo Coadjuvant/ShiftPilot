@@ -6,7 +6,7 @@
 set -e  # Exit on error
 
 # Configuration
-REPO_DIR="/path/to/wip-scheduler"  # UPDATE THIS to your server repo path
+REPO_DIR="/opt/shiftpilot"  # UPDATE THIS to your server repo path
 BRANCH="main"  # or "dev" - whichever branch you deploy from
 LOG_FILE="/var/log/shiftpilot-deploy.log"
 LOCK_FILE="/tmp/shiftpilot-deploy.lock"
