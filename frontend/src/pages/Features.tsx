@@ -116,14 +116,14 @@ const tutorialSteps = [
       "Add PTO ranges for each staff member. The scheduler skips those dates and flags coverage gaps if needed. Use it for vacations, training, and planned absences.",
   },
   {
-    title: "Bleach tab",
+    title: "Constraints tab",
     body:
-      "Choose the bleach day and frequency, then order the rotation list. The cursor shows who is next in line and advances after each bleach assignment. If someone is unavailable, they are skipped and queued first for the next run.",
+      "Set constraint weights (0 to ignore, 1-9 for soft penalties, 10 to never break), then configure bleach day, frequency, and rotation order. The cursor shows who is next in line and advances after each bleach assignment.",
   },
   {
     title: "Run tab",
     body:
-      "Set the schedule window, trials, and constraint weights (0 to ignore, 10 to never break). Run the schedule and review the matrix and latest snapshot. Export Excel or CSV when you are ready.",
+      "Set the schedule window, clinic name, timezone, trials, and export roles. Run the schedule and review the matrix and shift totals. Export Excel or CSV when you are ready.",
   },
 ];
 
