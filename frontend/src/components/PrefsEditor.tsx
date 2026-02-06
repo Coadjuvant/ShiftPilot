@@ -57,7 +57,19 @@ export default function PrefsEditor({ rows, onChange }: Props) {
                       onChange(next);
                     }}
                   />
-                  <span className="constraint-value">{item.value}</span>
+                  <input
+                    type="number"
+                    className="constraint-value-input"
+                    min={0}
+                    max={10}
+                    step={0.25}
+                    value={item.value}
+                    onChange={(e) => {
+                      const next = [...rows];
+                      next[idx] = { ...next[idx], [item.key]: Number(e.target.value) || 5 } as any;
+                      onChange(next);
+                    }}
+                  />
                 </div>
               </label>
             ))}
