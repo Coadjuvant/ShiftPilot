@@ -52,6 +52,7 @@ services:
         VITE_API_URL: ${VITE_API_URL}
         VITE_APP_BUILD: ${VITE_APP_BUILD}
         VITE_APP_VERSION: ${VITE_APP_VERSION}
+        VITE_GIT_COMMIT: ${VITE_GIT_COMMIT}
     depends_on:
       - backend
     networks:
