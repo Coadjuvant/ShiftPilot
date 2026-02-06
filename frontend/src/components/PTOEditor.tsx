@@ -35,7 +35,7 @@ export default function PTOEditor({ rows, onChange, staffOptions = [], scheduleS
   return (
     <div className="card" style={{ marginTop: "1rem" }}>
       <h3>PTO</h3>
-      <p className="muted">Add PTO per staff member. Dates can be single day or ranges.</p>
+      <p className="muted" style={{ marginBottom: "1.5rem" }}>Add PTO per staff member. Dates can be single day or ranges.</p>
       {grouped.map(({ staff, entries }) => (
         <div key={staff.id || staff.name} style={{ marginBottom: "1rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
