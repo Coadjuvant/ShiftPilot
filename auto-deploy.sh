@@ -69,6 +69,12 @@ git pull origin "$BRANCH" 2>&1 | tee -a "$LOG_FILE"
 if [ -f "docker-compose.yml" ]; then
     log "Rebuilding and restarting Docker containers..."
 
+    # Capture git commit for version display
+    GIT_COMMIT=$(git rev-parse --short HEAD)
+    export VITE_APP_BUILD="$GIT_COMMIT"
+    export VITE_APP_VERSION="$GIT_COMMIT"
+    log "Building with commit: $GIT_COMMIT"
+
     # Stop containers
     docker-compose down 2>&1 | tee -a "$LOG_FILE"
 
