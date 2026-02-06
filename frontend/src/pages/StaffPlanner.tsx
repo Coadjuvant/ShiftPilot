@@ -23,6 +23,7 @@ import PrefsEditor from "../components/PrefsEditor";
 import DemandEditor from "../components/DemandEditor";
 import PTOEditor from "../components/PTOEditor";
 import BleachEditor, { BleachState } from "../components/BleachEditor";
+import ConstraintsEditor, { ConstraintsState } from "../components/ConstraintsEditor";
 import RunPanel, { RunConfig } from "../components/RunPanel";
 import AdminPanel from "../components/AdminPanel";
 import { DemandRow, PTORow, StaffRow } from "../types";
@@ -161,7 +162,7 @@ export default function StaffPlanner() {
   };
 
   const [status, setStatus] = useState<string>("Checking API...");
-  const [activeTab, setActiveTab] = useState<"staff" | "avail" | "prefs" | "demand" | "pto" | "run" | "bleach" | "admin">("staff");
+  const [activeTab, setActiveTab] = useState<"staff" | "avail" | "prefs" | "demand" | "pto" | "bleach" | "constraints" | "run" | "admin">("staff");
   const defaultAvailability = DAYS.reduce<Record<string, boolean>>((acc, day) => {
     acc[day] = true;
     return acc;
@@ -858,20 +859,32 @@ export default function StaffPlanner() {
     day: bleachDay,
     frequency: bleachFrequency,
     cursor: bleachCursor,
-    rotation: bleachRotation,
-    postBleachWeight
+    rotation: bleachRotation
   };
   const handleBleachChange = (next: BleachState) => {
     setBleachDay(next.day);
     setBleachFrequency(next.frequency);
     setBleachCursor(next.cursor);
     setBleachRotation(next.rotation);
+  };
+
+  const constraintsState: ConstraintsState = {
+    threeDayWeight,
+    altSatWeight,
+    techFourWeight,
+    rnFourWeight,
+    postBleachWeight
+  };
+  const handleConstraintsChange = (next: ConstraintsState) => {
+    setThreeDayWeight(next.threeDayWeight);
+    setAltSatWeight(next.altSatWeight);
+    setTechFourWeight(next.techFourWeight);
+    setRnFourWeight(next.rnFourWeight);
     setPostBleachWeight(next.postBleachWeight);
   };
 
   const runConfig: RunConfig = {
     configName, timezone, startDate, weeks,
-    threeDayWeight, altSatWeight, techFourWeight, rnFourWeight,
     patientsPerTech, patientsPerRn, techsPerRn,
     trials, baseSeed, usePrevSeed, exportRoles
   };
@@ -880,10 +893,6 @@ export default function StaffPlanner() {
     setTimezone(next.timezone);
     setStartDate(next.startDate);
     setWeeks(next.weeks);
-    setThreeDayWeight(next.threeDayWeight);
-    setAltSatWeight(next.altSatWeight);
-    setTechFourWeight(next.techFourWeight);
-    setRnFourWeight(next.rnFourWeight);
     setPatientsPerTech(next.patientsPerTech);
     setPatientsPerRn(next.patientsPerRn);
     setTechsPerRn(next.techsPerRn);
@@ -1051,7 +1060,7 @@ export default function StaffPlanner() {
           <button onClick={() => handleLoadConfig(selectedConfig)} disabled={!selectedConfig}>
             Load
           </button>
-          <button onClick={handleDeleteConfig} disabled={!selectedConfig} className="secondary-btn">
+          <button onClick={handleDeleteConfig} disabled={!selectedConfig}>
             Delete
           </button>
             <input
@@ -1072,6 +1081,7 @@ export default function StaffPlanner() {
             { key: "demand", label: "Demand" },
             { key: "pto", label: "PTO" },
             { key: "bleach", label: "Bleach" },
+            { key: "constraints", label: "Constraints" },
             { key: "run", label: "Run" },
             ...(isAdmin ? [{ key: "admin", label: "Admin" }] : [])
           ].map((tab) => (
@@ -1136,6 +1146,13 @@ export default function StaffPlanner() {
             onChange={handleBleachChange}
             staffNameMap={staffNameMap}
             availableBleachIds={availableBleachIds}
+          />
+        )}
+
+        {activeTab === "constraints" && (
+          <ConstraintsEditor
+            state={constraintsState}
+            onChange={handleConstraintsChange}
           />
         )}
 

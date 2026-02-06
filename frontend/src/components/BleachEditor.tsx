@@ -5,7 +5,6 @@ export type BleachState = {
   frequency: string;
   cursor: number;
   rotation: string[];
-  postBleachWeight: number;
 };
 
 type Props = {
@@ -16,7 +15,7 @@ type Props = {
 };
 
 export default function BleachEditor({ state, onChange, staffNameMap, availableBleachIds }: Props) {
-  const { day, frequency, cursor, rotation, postBleachWeight } = state;
+  const { day, frequency, cursor, rotation } = state;
 
   return (
     <div className="card" style={{ marginTop: "1rem" }}>
@@ -138,25 +137,7 @@ export default function BleachEditor({ state, onChange, staffNameMap, availableB
           ))}
         </div>
       </div>
-      <div className="stack">
-        <label className="constraint-field">
-          Post-bleach rest day
-          <div className="constraint-control">
-            <input
-              type="range"
-              min={0}
-              max={10}
-              step={1}
-              value={postBleachWeight}
-              onChange={(e) => onChange({ ...state, postBleachWeight: Number(e.target.value) })}
-              id="bleach-rest-day"
-              name="bleach-rest-day"
-            />
-            <span className="constraint-value">{postBleachWeight}</span>
-          </div>
-        </label>
-        <p className="muted">Cursor advances after a bleach assignment; PTO will skip to the next person.</p>
-      </div>
+      <p className="muted">Cursor advances after a bleach assignment; PTO will skip to the next person.</p>
     </div>
   );
 }

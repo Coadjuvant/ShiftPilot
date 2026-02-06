@@ -94,10 +94,19 @@ export default function PTOEditor({ rows, onChange, staffOptions = [], scheduleS
         </div>
       ))}
       {unassigned.length > 0 && (
-        <div style={{ marginTop: "1rem" }}>
+        <div style={{
+          marginTop: "1rem",
+          padding: "1rem",
+          background: "rgba(234, 88, 12, 0.08)",
+          borderRadius: "8px",
+          border: "1px solid rgba(234, 88, 12, 0.2)"
+        }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
-            <strong>Unassigned PTO</strong>
+            <strong style={{ color: "#ea580c" }}>⚠ Unassigned PTO</strong>
           </div>
+          <p className="muted" style={{ fontSize: "0.9rem", marginBottom: "0.75rem" }}>
+            These PTO entries need to be assigned to a staff member.
+          </p>
           <table cellPadding={6} style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.95rem" }}>
             <thead>
               <tr>

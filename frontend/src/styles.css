@@ -596,6 +596,19 @@ table th {
   padding: 6px 4px;
 }
 
+/* Zebra striping for tables */
+table tbody tr:nth-child(even) {
+  background: rgba(12, 75, 223, 0.03);
+}
+
+[data-theme="dark"] table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.page-shell.light table tbody tr:nth-child(even) {
+  background: rgba(12, 75, 223, 0.03);
+}
+
 .matrix-sep {
   width: 16px;
   min-width: 16px;
@@ -620,31 +633,110 @@ table th {
 
 .constraint-stack {
   align-items: flex-start;
+  gap: 1rem;
 }
 
 .constraint-field {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  font-size: 0.95rem;
-  font-weight: 700;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
   min-width: 240px;
+  padding: 0.75rem;
+  background: rgba(12, 75, 223, 0.04);
+  border-radius: 8px;
+  border: 1px solid rgba(12, 75, 223, 0.1);
+}
+
+[data-theme="dark"] .constraint-field {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .constraint-control {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.75rem;
 }
 
 .constraint-control input[type="range"] {
   flex: 1;
   min-width: 160px;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: transparent;
+  outline: none;
+  margin: 0;
+  padding: 0;
+}
+
+.constraint-control input[type="range"]::-webkit-slider-track {
+  width: 100%;
+  height: 6px;
+  background: linear-gradient(90deg, rgba(12, 75, 223, 0.2), rgba(12, 75, 223, 0.4));
+  border-radius: 3px;
+  border: none;
+}
+
+.constraint-control input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 6px;
+  background: linear-gradient(90deg, rgba(12, 75, 223, 0.2), rgba(12, 75, 223, 0.4));
+  border-radius: 3px;
+  border: none;
+}
+
+.constraint-control input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(135deg, #0033a0, #28aeca);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 51, 160, 0.3);
+  border: 2px solid #ffffff;
+}
+
+.constraint-control input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(135deg, #0033a0, #28aeca);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 51, 160, 0.3);
+  border: 2px solid #ffffff;
+}
+
+[data-theme="dark"] .constraint-control input[type="range"]::-webkit-slider-track {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.25));
+}
+
+[data-theme="dark"] .constraint-control input[type="range"]::-moz-range-track {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.25));
+}
+
+[data-theme="dark"] .constraint-control input[type="range"]::-webkit-slider-thumb {
+  background: linear-gradient(135deg, #0c4bdf, #32b5e6);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+[data-theme="dark"] .constraint-control input[type="range"]::-moz-range-thumb {
+  background: linear-gradient(135deg, #0c4bdf, #32b5e6);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .constraint-value {
   min-width: 2ch;
   font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--brand-blue);
+}
+
+[data-theme="dark"] .constraint-value {
+  color: var(--warm-1);
 }
 
 .controls-row label:not(.secondary-btn) {
