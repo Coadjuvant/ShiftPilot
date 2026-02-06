@@ -3,10 +3,6 @@ export type RunConfig = {
   timezone: string;
   startDate: string;
   weeks: number;
-  threeDayWeight: number;
-  altSatWeight: number;
-  techFourWeight: number;
-  rnFourWeight: number;
   patientsPerTech: number;
   patientsPerRn: number;
   techsPerRn: number;
@@ -60,7 +56,7 @@ export default function RunPanel({
   onDownloadCsv,
   onLoadLatest
 }: Props) {
-  const { configName, timezone, startDate, weeks, threeDayWeight, altSatWeight, techFourWeight, rnFourWeight, patientsPerTech, patientsPerRn, techsPerRn, trials, baseSeed, usePrevSeed, exportRoles } = config;
+  const { configName, timezone, startDate, weeks, patientsPerTech, patientsPerRn, techsPerRn, trials, baseSeed, usePrevSeed, exportRoles } = config;
 
   return (
     <div className="card" style={{ marginTop: "1rem" }}>
@@ -71,6 +67,7 @@ export default function RunPanel({
             <input
               id="run-clinic-name"
               name="run-clinic-name"
+              placeholder="Clinic name"
               value={configName}
               onChange={(e) => onConfigChange({ ...config, configName: e.target.value })}
             />
@@ -80,6 +77,7 @@ export default function RunPanel({
             <input
               id="run-timezone"
               name="run-timezone"
+              placeholder="UTC"
               value={timezone}
               onChange={(e) => onConfigChange({ ...config, timezone: e.target.value })}
             />
@@ -106,73 +104,6 @@ export default function RunPanel({
               value={weeks}
               onChange={(e) => onConfigChange({ ...config, weeks: Number(e.target.value) })}
             />
-        </label>
-      </div>
-      <div className="stack constraint-stack">
-        <span className="muted small-note">0 = ignore, 10 = hard stop</span>
-        <label className="constraint-field">
-          3-day streak cap
-          <div className="constraint-control">
-            <input
-              id="constraint-three-day"
-              name="constraint-three-day"
-              type="range"
-              min={0}
-              max={10}
-              step={1}
-              value={threeDayWeight}
-              onChange={(e) => onConfigChange({ ...config, threeDayWeight: Number(e.target.value) })}
-            />
-            <span className="constraint-value">{threeDayWeight}</span>
-          </div>
-        </label>
-        <label className="constraint-field">
-          No consecutive Saturdays
-          <div className="constraint-control">
-            <input
-              id="constraint-alt-sat"
-              name="constraint-alt-sat"
-              type="range"
-              min={0}
-              max={10}
-              step={1}
-              value={altSatWeight}
-              onChange={(e) => onConfigChange({ ...config, altSatWeight: Number(e.target.value) })}
-            />
-            <span className="constraint-value">{altSatWeight}</span>
-          </div>
-        </label>
-        <label className="constraint-field">
-          Tech 4-day cap
-          <div className="constraint-control">
-            <input
-              id="constraint-tech-four"
-              name="constraint-tech-four"
-              type="range"
-              min={0}
-              max={10}
-              step={1}
-              value={techFourWeight}
-              onChange={(e) => onConfigChange({ ...config, techFourWeight: Number(e.target.value) })}
-            />
-            <span className="constraint-value">{techFourWeight}</span>
-          </div>
-        </label>
-        <label className="constraint-field">
-          RN 4-day cap
-          <div className="constraint-control">
-            <input
-              id="constraint-rn-four"
-              name="constraint-rn-four"
-              type="range"
-              min={0}
-              max={10}
-              step={1}
-              value={rnFourWeight}
-              onChange={(e) => onConfigChange({ ...config, rnFourWeight: Number(e.target.value) })}
-            />
-            <span className="constraint-value">{rnFourWeight}</span>
-          </div>
         </label>
       </div>
       <div className="stack">

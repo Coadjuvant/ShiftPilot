@@ -124,7 +124,7 @@ export default function AdminPanel() {
         <strong>User tools</strong>
         <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem", alignItems: "center" }}>
             <input
-              placeholder="License key"
+              placeholder="DEMO"
               id="admin-invite-license"
               name="admin-invite-license"
               value={inviteLicense}
@@ -156,7 +156,7 @@ export default function AdminPanel() {
               }
             }}
           >
-            Create invite
+            Create Invite
           </button>
         </div>
         {inviteResult && (
@@ -164,7 +164,7 @@ export default function AdminPanel() {
             <span className="muted">Invite token:</span>
             <code>{inviteResult}</code>
             <button className="secondary-btn" onClick={() => copyText(inviteResult)}>
-              Copy
+              Copy Token
             </button>
             {copyNotice && <span className="muted">{copyNotice}</span>}
           </div>
@@ -172,7 +172,7 @@ export default function AdminPanel() {
       </div>
       <div style={{ marginBottom: "0.5rem", display: "flex", gap: "0.5rem" }}>
         <button className="secondary-btn" onClick={loadUsers}>
-          Refresh users
+          Refresh Users
         </button>
       </div>
       <div style={{ overflowX: "auto", marginBottom: "1rem" }}>
@@ -318,7 +318,7 @@ export default function AdminPanel() {
             <input
               value={auditSearch}
               onChange={(e) => setAuditSearch(e.target.value)}
-              placeholder="event, detail, IP, location"
+              placeholder="Search events, details, IP..."
             />
           </label>
           <label className="field" style={{ width: "110px" }}>
@@ -333,7 +333,7 @@ export default function AdminPanel() {
           </label>
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <button className="secondary-btn" onClick={() => loadAudit()}>
-              Apply
+              Apply Filters
             </button>
             <button
               className="secondary-btn"
@@ -345,10 +345,10 @@ export default function AdminPanel() {
                 loadAudit({ limit: 50, event: undefined, user_id: undefined, search: undefined });
               }}
             >
-              Clear
+              Clear Filters
             </button>
             <button className="secondary-btn" onClick={() => loadAudit()}>
-              Refresh
+              Refresh Audit
             </button>
           </div>
         </div>

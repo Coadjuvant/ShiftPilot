@@ -44,34 +44,39 @@ export default function DemandEditor({ rows, onChange }: Props) {
       <table cellPadding={6} style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.95rem" }}>
         <thead>
           <tr>
-            <th>Day</th>
-            <th>Patients</th>
-            <th>Tech Open</th>
-            <th>Tech Mid</th>
-            <th>Tech Close</th>
-            <th>RN Count</th>
-            <th>Admin Count</th>
+            <th rowSpan={2}>Day</th>
+            <th rowSpan={2}>Patients</th>
+            <th colSpan={3} style={{ borderLeft: "2px solid rgba(12, 75, 223, 0.2)", borderRight: "2px solid rgba(12, 75, 223, 0.2)", textAlign: "center" }}>Tech Shifts</th>
+            <th rowSpan={2}>RN Count</th>
+            <th rowSpan={2}>Admin Count</th>
+          </tr>
+          <tr>
+            <th style={{ borderLeft: "2px solid rgba(12, 75, 223, 0.2)" }}>Open</th>
+            <th>Mid</th>
+            <th style={{ borderRight: "2px solid rgba(12, 75, 223, 0.2)" }}>Close</th>
           </tr>
         </thead>
         <tbody>
           {normalized.map((row, idx) => (
             <tr key={row.Day}>
-              <td>{row.Day}</td>
+              <td><strong>{row.Day}</strong></td>
               <td>
                 <input
                   type="number"
                   id={`demand-${row.Day}-patients`}
                   name={`demand-${row.Day}-patients`}
+                  placeholder="0"
                   value={row.Patients}
                   onChange={(e) => update(idx, "Patients", e.target.value)}
                   min={0}
                 />
               </td>
-              <td>
+              <td style={{ borderLeft: "2px solid rgba(12, 75, 223, 0.2)" }}>
                 <input
                   type="number"
                   id={`demand-${row.Day}-tech-open`}
                   name={`demand-${row.Day}-tech-open`}
+                  placeholder="0"
                   value={row.Tech_Open}
                   onChange={(e) => update(idx, "Tech_Open", e.target.value)}
                   min={0}
@@ -82,16 +87,18 @@ export default function DemandEditor({ rows, onChange }: Props) {
                   type="number"
                   id={`demand-${row.Day}-tech-mid`}
                   name={`demand-${row.Day}-tech-mid`}
+                  placeholder="0"
                   value={row.Tech_Mid}
                   onChange={(e) => update(idx, "Tech_Mid", e.target.value)}
                   min={0}
                 />
               </td>
-              <td>
+              <td style={{ borderRight: "2px solid rgba(12, 75, 223, 0.2)" }}>
                 <input
                   type="number"
                   id={`demand-${row.Day}-tech-close`}
                   name={`demand-${row.Day}-tech-close`}
+                  placeholder="0"
                   value={row.Tech_Close}
                   onChange={(e) => update(idx, "Tech_Close", e.target.value)}
                   min={0}
@@ -102,6 +109,7 @@ export default function DemandEditor({ rows, onChange }: Props) {
                   type="number"
                   id={`demand-${row.Day}-rn-count`}
                   name={`demand-${row.Day}-rn-count`}
+                  placeholder="0"
                   value={row.RN_Count}
                   onChange={(e) => update(idx, "RN_Count", e.target.value)}
                   min={0}
@@ -112,6 +120,7 @@ export default function DemandEditor({ rows, onChange }: Props) {
                   type="number"
                   id={`demand-${row.Day}-admin-count`}
                   name={`demand-${row.Day}-admin-count`}
+                  placeholder="0"
                   value={row.Admin_Count}
                   onChange={(e) => update(idx, "Admin_Count", e.target.value)}
                   min={0}

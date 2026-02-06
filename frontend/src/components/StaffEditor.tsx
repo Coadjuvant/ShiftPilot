@@ -41,7 +41,8 @@ export default function StaffEditor({ rows, onChange }: Props) {
     onChange(rows.length > 1 ? rows.filter((_, i) => i !== index) : rows);
 
   return (
-    <>
+    <div className="card" style={{ marginTop: "1rem" }}>
+      <h3>Staff Management</h3>
       <table cellPadding={8} style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
@@ -60,6 +61,7 @@ export default function StaffEditor({ rows, onChange }: Props) {
                   <input
                     id={`staff-name-${index}`}
                     name={`staff-name-${index}`}
+                    placeholder="Staff name"
                     value={row.name}
                     onChange={(e) =>
                       onChange(rows.map((r, i) => (i === index ? { ...r, name: e.target.value } : r)))
@@ -131,8 +133,8 @@ export default function StaffEditor({ rows, onChange }: Props) {
         </tbody>
       </table>
       <button style={{ marginTop: "1rem" }} onClick={addRow}>
-        Add Row
+        Add Staff Member
       </button>
-    </>
+    </div>
   );
 }
