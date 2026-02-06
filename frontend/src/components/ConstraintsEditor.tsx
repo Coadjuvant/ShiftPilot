@@ -48,7 +48,15 @@ export default function ConstraintsEditor({ state, onChange, bleachState, onBlea
               value={threeDayWeight}
               onChange={(e) => onChange({ ...state, threeDayWeight: Number(e.target.value) })}
             />
-            <span className="constraint-value">{threeDayWeight}</span>
+            <input
+              type="number"
+              className="constraint-value-input"
+              min={0}
+              max={10}
+              step={1}
+              value={threeDayWeight}
+              onChange={(e) => onChange({ ...state, threeDayWeight: Number(e.target.value) })}
+            />
           </div>
         </label>
         <label className="constraint-field">
@@ -64,7 +72,15 @@ export default function ConstraintsEditor({ state, onChange, bleachState, onBlea
               value={altSatWeight}
               onChange={(e) => onChange({ ...state, altSatWeight: Number(e.target.value) })}
             />
-            <span className="constraint-value">{altSatWeight}</span>
+            <input
+              type="number"
+              className="constraint-value-input"
+              min={0}
+              max={10}
+              step={1}
+              value={altSatWeight}
+              onChange={(e) => onChange({ ...state, altSatWeight: Number(e.target.value) })}
+            />
           </div>
         </label>
         <label className="constraint-field">
@@ -80,7 +96,15 @@ export default function ConstraintsEditor({ state, onChange, bleachState, onBlea
               value={techFourWeight}
               onChange={(e) => onChange({ ...state, techFourWeight: Number(e.target.value) })}
             />
-            <span className="constraint-value">{techFourWeight}</span>
+            <input
+              type="number"
+              className="constraint-value-input"
+              min={0}
+              max={10}
+              step={1}
+              value={techFourWeight}
+              onChange={(e) => onChange({ ...state, techFourWeight: Number(e.target.value) })}
+            />
           </div>
         </label>
         <label className="constraint-field">
@@ -96,7 +120,15 @@ export default function ConstraintsEditor({ state, onChange, bleachState, onBlea
               value={rnFourWeight}
               onChange={(e) => onChange({ ...state, rnFourWeight: Number(e.target.value) })}
             />
-            <span className="constraint-value">{rnFourWeight}</span>
+            <input
+              type="number"
+              className="constraint-value-input"
+              min={0}
+              max={10}
+              step={1}
+              value={rnFourWeight}
+              onChange={(e) => onChange({ ...state, rnFourWeight: Number(e.target.value) })}
+            />
           </div>
         </label>
         <label className="constraint-field">
@@ -112,7 +144,15 @@ export default function ConstraintsEditor({ state, onChange, bleachState, onBlea
               value={postBleachWeight}
               onChange={(e) => onChange({ ...state, postBleachWeight: Number(e.target.value) })}
             />
-            <span className="constraint-value">{postBleachWeight}</span>
+            <input
+              type="number"
+              className="constraint-value-input"
+              min={0}
+              max={10}
+              step={1}
+              value={postBleachWeight}
+              onChange={(e) => onChange({ ...state, postBleachWeight: Number(e.target.value) })}
+            />
           </div>
         </label>
       </div>

@@ -633,7 +633,7 @@ table tbody tr:nth-child(even) {
 
 .constraint-stack {
   align-items: flex-start;
-  gap: 1rem;
+  gap: 1.5rem;
 }
 
 .constraint-field {
@@ -711,11 +711,11 @@ table tbody tr:nth-child(even) {
 }
 
 [data-theme="dark"] .constraint-control input[type="range"]::-webkit-slider-track {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.25));
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.35));
 }
 
 [data-theme="dark"] .constraint-control input[type="range"]::-moz-range-track {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.25));
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.35));
 }
 
 [data-theme="dark"] .constraint-control input[type="range"]::-webkit-slider-thumb {
@@ -737,6 +737,35 @@ table tbody tr:nth-child(even) {
 
 [data-theme="dark"] .constraint-value {
   color: var(--warm-1);
+}
+
+.constraint-value-input {
+  width: 70px;
+  padding: 0.4rem 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+  border: 2px solid rgba(12, 75, 223, 0.3);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--brand-blue);
+}
+
+.constraint-value-input:focus {
+  outline: none;
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 3px rgba(12, 75, 223, 0.1);
+}
+
+[data-theme="dark"] .constraint-value-input {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--warm-1);
+}
+
+[data-theme="dark"] .constraint-value-input:focus {
+  border-color: var(--warm-1);
+  box-shadow: 0 0 0 3px rgba(50, 181, 230, 0.15);
 }
 
 .controls-row label:not(.secondary-btn) {
