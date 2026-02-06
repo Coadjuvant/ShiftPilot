@@ -59,16 +59,12 @@ export default function App() {
     syncAuthState();
   }, [location, syncAuthState]);
 
-  const appVersion = (import.meta as any).env?.VITE_APP_VERSION || "";
   const appBuild = (import.meta as any).env?.VITE_APP_BUILD || "";
-  let versionLabel = "dev";
-  if (appVersion && appBuild) {
-    versionLabel = appVersion === appBuild ? appBuild : `${appVersion} (${appBuild})`;
-  } else if (appVersion) {
-    versionLabel = appVersion;
-  } else if (appBuild) {
-    versionLabel = appBuild;
-  }
+  const gitCommit = (import.meta as any).env?.VITE_GIT_COMMIT || "";
+  const versionLabel = appBuild || "dev";
+  const githubUrl = gitCommit
+    ? `https://github.com/Coadjuvant/ShiftPilot/commit/${gitCommit}`
+    : null;
 
   const handleLogout = () => {
     if (typeof window === "undefined") return;
@@ -174,7 +170,19 @@ export default function App() {
               </button>
             </div>
             <div className="site-footer__meta">
-              <span className="pill subtle">Build {versionLabel}</span>
+              {githubUrl ? (
+                <a
+                  href={githubUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="pill subtle"
+                  style={{ textDecoration: "none", cursor: "pointer" }}
+                >
+                  Build {versionLabel}
+                </a>
+              ) : (
+                <span className="pill subtle">Build {versionLabel}</span>
+              )}
             </div>
           </div>
         </footer>

@@ -3,8 +3,6 @@ import { useState } from "react";
 export default function Contact() {
   const supportEmail = "support@shiftpilot.me";
   const [supportCopyLabel, setSupportCopyLabel] = useState("Copy support email");
-  const [feedbackCopyLabel, setFeedbackCopyLabel] = useState("Copy feedback email");
-  const [detailCopyLabel, setDetailCopyLabel] = useState("Copy");
 
   const copySupportEmail = async (
     setLabel: (value: string) => void,
@@ -39,13 +37,6 @@ export default function Contact() {
             >
               {supportCopyLabel}
             </button>
-            <button
-              type="button"
-              className="secondary-link"
-              onClick={() => copySupportEmail(setFeedbackCopyLabel, "Copy feedback email", "Feedback email copied")}
-            >
-              {feedbackCopyLabel}
-            </button>
           </div>
           <div className="contact-meta">
             <span className="pill subtle">Response time: 1 business day</span>
@@ -56,16 +47,7 @@ export default function Contact() {
           <h3>Contact details</h3>
           <div className="contact-row">
             <span className="muted">Email</span>
-            <div className="contact-email">
-              <span>{supportEmail}</span>
-              <button
-                type="button"
-                className="secondary-link"
-                onClick={() => copySupportEmail(setDetailCopyLabel, "Copy", "Copied")}
-              >
-                {detailCopyLabel}
-              </button>
-            </div>
+            <span>{supportEmail}</span>
           </div>
           <div className="contact-row">
             <span className="muted">Coverage</span>
