@@ -22,8 +22,7 @@ import AvailabilityEditor from "../components/AvailabilityEditor";
 import PrefsEditor from "../components/PrefsEditor";
 import DemandEditor from "../components/DemandEditor";
 import PTOEditor from "../components/PTOEditor";
-import BleachEditor, { BleachState } from "../components/BleachEditor";
-import ConstraintsEditor, { ConstraintsState } from "../components/ConstraintsEditor";
+import ConstraintsEditor, { ConstraintsState, BleachState } from "../components/ConstraintsEditor";
 import RunPanel, { RunConfig } from "../components/RunPanel";
 import AdminPanel from "../components/AdminPanel";
 import { DemandRow, PTORow, StaffRow } from "../types";
@@ -162,7 +161,7 @@ export default function StaffPlanner() {
   };
 
   const [status, setStatus] = useState<string>("Checking API...");
-  const [activeTab, setActiveTab] = useState<"staff" | "avail" | "prefs" | "demand" | "pto" | "bleach" | "constraints" | "run" | "admin">("staff");
+  const [activeTab, setActiveTab] = useState<"staff" | "avail" | "prefs" | "demand" | "pto" | "constraints" | "run" | "admin">("staff");
   const defaultAvailability = DAYS.reduce<Record<string, boolean>>((acc, day) => {
     acc[day] = true;
     return acc;
@@ -1076,12 +1075,11 @@ export default function StaffPlanner() {
         <div className="tabs">
           {[
             { key: "staff", label: "Staff" },
-            { key: "avail", label: "Availability" },
-            { key: "prefs", label: "Prefs" },
             { key: "demand", label: "Demand" },
+            { key: "avail", label: "Availability" },
             { key: "pto", label: "PTO" },
-            { key: "bleach", label: "Bleach" },
             { key: "constraints", label: "Constraints" },
+            { key: "prefs", label: "Prefs" },
             { key: "run", label: "Run" },
             ...(isAdmin ? [{ key: "admin", label: "Admin" }] : [])
           ].map((tab) => (
@@ -1140,19 +1138,14 @@ export default function StaffPlanner() {
           </>
         )}
 
-        {activeTab === "bleach" && (
-          <BleachEditor
-            state={bleachState}
-            onChange={handleBleachChange}
-            staffNameMap={staffNameMap}
-            availableBleachIds={availableBleachIds}
-          />
-        )}
-
         {activeTab === "constraints" && (
           <ConstraintsEditor
             state={constraintsState}
             onChange={handleConstraintsChange}
+            bleachState={bleachState}
+            onBleachChange={handleBleachChange}
+            staffNameMap={staffNameMap}
+            availableBleachIds={availableBleachIds}
           />
         )}
 

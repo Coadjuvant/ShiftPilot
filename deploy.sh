@@ -4,10 +4,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-echo "[shiftpilot] pulling latest..."
-git pull --rebase --autostash
+if [ "${SKIP_GIT_PULL:-}" != "1" ]; then
+  echo "[shiftpilot] pulling latest..."
+  git pull --ff-only origin "${DEPLOY_BRANCH:-main}"
+else
+  echo "[shiftpilot] skipping git pull (SKIP_GIT_PULL=1)"
+fi
 
 export VITE_APP_BUILD="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+export VITE_APP_VERSION="${VITE_APP_VERSION:-$VITE_APP_BUILD}"
 
 echo "[shiftpilot] selecting compose..."
 if docker compose version >/dev/null 2>&1; then

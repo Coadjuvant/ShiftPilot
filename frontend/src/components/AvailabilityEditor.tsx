@@ -16,17 +16,20 @@ export default function AvailabilityEditor({ rows, onChange }: Props) {
     <div className="card" style={{ marginTop: "1rem" }}>
       <h3>Availability</h3>
       <p className="muted">Toggle the days each staffer can work.</p>
-      <table cellPadding={6} style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th>Staff</th>
-            {DAYS.map((d) => (
-              <th key={d}>{d}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, idx) => (
+      {rows.length === 0 ? (
+        <p className="muted">Add staff members in the Staff tab to set availability.</p>
+      ) : (
+        <table cellPadding={6} style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th>Staff</th>
+              {DAYS.map((d) => (
+                <th key={d}>{d}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, idx) => (
             <tr key={idx}>
               <td title={row.id || ""}>
                 {row.name?.trim() ? row.name : "(no name set)"}
@@ -50,8 +53,9 @@ export default function AvailabilityEditor({ rows, onChange }: Props) {
               ))}
             </tr>
           ))}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

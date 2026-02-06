@@ -43,19 +43,22 @@ export default function StaffEditor({ rows, onChange }: Props) {
   return (
     <div className="card" style={{ marginTop: "1rem" }}>
       <h3>Staff Management</h3>
-      <table cellPadding={8} style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th align="left">Name</th>
-            <th align="left">Role</th>
-            <th align="left">Can Open</th>
-            <th align="left">Can Close</th>
-            <th align="left">Can Bleach</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
+      {rows.length === 0 ? (
+        <p className="muted">No staff members yet. Add your first staff member to begin.</p>
+      ) : (
+        <table cellPadding={8} style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th align="left">Name</th>
+              <th align="left">Role</th>
+              <th align="left">Can Open</th>
+              <th align="left">Can Close</th>
+              <th align="left">Can Bleach</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
             <tr key={index}>
                 <td>
                   <input
@@ -130,8 +133,9 @@ export default function StaffEditor({ rows, onChange }: Props) {
               </td>
             </tr>
           ))}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      )}
       <button style={{ marginTop: "1rem" }} onClick={addRow}>
         Add Staff Member
       </button>
