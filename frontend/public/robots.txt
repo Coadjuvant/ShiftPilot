@@ -1,0 +1,12 @@
+# ShiftPilot - Clinic Staff Scheduling
+# https://shiftpilot.me
+
+User-agent: *
+Allow: /
+Allow: /features
+Allow: /contact
+Disallow: /planner
+Disallow: /login
+Disallow: /api/
+
+Sitemap: https://shiftpilot.me/sitemap.xml
