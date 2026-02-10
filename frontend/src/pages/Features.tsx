@@ -125,11 +125,6 @@ const tutorialSteps = [
     body:
       "Set the schedule window, clinic name, timezone, trials, and export roles. Run the schedule and review the matrix with Pod labels and shift totals. Export Excel or CSV when ready.",
   },
-  {
-    title: "Admin tab",
-    body:
-      "Manage user accounts, view audit logs with IP tracking, and create invite keys for new clinic managers. All administrative functions are contained here.",
-  },
 ];
 
 export default function Features() {
@@ -230,7 +225,7 @@ export default function Features() {
         <div className="section-head">
           <div>
             <div className="eyebrow-pill muted-pill">Planner walkthrough</div>
-            <h2>From setup to schedule in eight steps.</h2>
+            <h2>From setup to schedule in seven steps.</h2>
             <p className="muted">Each tab in the planner has a single job. Follow these in order to run a clean schedule.</p>
           </div>
         </div>

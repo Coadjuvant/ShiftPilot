@@ -2231,20 +2231,23 @@ button.secondary-link:hover {
 
 @media (max-width: 900px) {
   .top-nav {
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: "nav brand cta";
     align-items: center;
     gap: 0.5rem;
     padding-left: 0;
   }
   .nav-trigger {
-    position: absolute;
-    left: 12px;
-    top: 14px;
+    position: relative;
+    left: 0;
+    top: 0;
     transform: none;
-    align-self: flex-start;
+    align-self: center;
     flex-direction: column;
     gap: 0.5rem;
     display: flex;
+    grid-area: nav;
   }
   .menu-toggle {
     display: inline-flex;
@@ -2252,30 +2255,43 @@ button.secondary-link:hover {
     left: 0;
     top: 0;
     transform: none;
-    align-self: flex-start;
+    align-self: center;
   }
   .nav-links-mobile {
     position: absolute;
     top: 0;
-    left: calc(100% + 10px);
+    left: calc(100% + 8px);
     min-width: 200px;
     width: auto;
     align-items: flex-start;
     display: none;
     transform: none;
+    max-width: min(240px, calc(100vw - 32px));
   }
   .nav-links-mobile.open {
     display: flex;
   }
   .nav-cta {
-    margin-left: auto;
-    align-self: flex-end;
+    margin-left: 0;
+    align-self: center;
+  }
+  .nav-right {
+    grid-area: cta;
+    justify-self: end;
+    margin-left: 0;
+  }
+  .brand-mark {
+    grid-area: brand;
+    justify-self: center;
   }
   .brand-logo {
     height: 72px;
   }
   .brand-name {
     font-size: 2.2rem;
+  }
+  .hero-wrap {
+    overflow: visible;
   }
   .hero-grid {
     grid-template-columns: 1fr;

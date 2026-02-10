@@ -1,0 +1,8 @@
+Contact: mailto:support@shiftpilot.me
+Expires: 2027-12-31T23:59:59.000Z
+Preferred-Languages: en
+Canonical: https://shiftpilot.me/.well-known/security.txt
+
+# ShiftPilot Security Information
+# For security-related inquiries, please contact our support team.
+# Business hours: Mon-Fri, 8am-6pm (see /contact for details)
