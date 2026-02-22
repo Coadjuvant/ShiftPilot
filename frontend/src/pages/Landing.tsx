@@ -520,7 +520,7 @@ export default function Landing() {
                 <div className="pill muted-pill" title={constraintSummary.title}>
                   {constraintSummary.label}
                 </div>
-                <div className="pill muted-pill">Exports: Excel / CSV</div>
+                <div className="pill muted-pill">Exports: Excel</div>
               </div>
             </div>
           ) : (
@@ -568,7 +568,7 @@ export default function Landing() {
               </div>
               <div className="schedule-foot">
                 <div className="pill muted-pill">Constraints honored</div>
-                <div className="pill muted-pill">Exports: Excel / CSV</div>
+                <div className="pill muted-pill">Exports: Excel</div>
               </div>
             </div>
           )}
@@ -601,7 +601,7 @@ export default function Landing() {
             </span>
             <div>
               <h3>Export-ready</h3>
-              <p>Share clean Excel/CSV outputs for floor teams and leadership in seconds - no manual cleanup required.</p>
+              <p>Share clean Excel outputs for floor teams and leadership in seconds - no manual cleanup required.</p>
             </div>
           </article>
         </section>

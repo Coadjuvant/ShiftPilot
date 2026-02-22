@@ -6,7 +6,6 @@ import json
 import re
 import base64
 import os
-import csv
 import jwt
 from datetime import datetime, timedelta, timezone
 import ipaddress
@@ -922,60 +921,7 @@ def latest_schedule(response: Response, payload: dict = Depends(require_auth)) -
 
 @router.get("/schedule/export/csv")
 def export_schedule_csv(request: Request, payload: dict = Depends(require_auth)):
-    data = _latest_schedule_for(payload)
-    if not data or not data.get("assignments"):
-        raise HTTPException(status_code=404, detail="No saved schedule")
-    staff_map = {s.get("id"): s for s in data.get("staff", [])}
-    output_rows = []
-    for a in data.get("assignments", []):
-        staff = staff_map.get(a.get("staff_id"))
-        output_rows.append(
-            {
-                "date": a.get("date"),
-                "day_name": a.get("day_name"),
-                "role": a.get("role"),
-                "duty": a.get("duty"),
-                "staff_name": staff.get("name") if staff else "",
-                "staff_key": staff.get("id") if staff else "",
-                "is_bleach": a.get("is_bleach"),
-                "slot_index": a.get("slot_index"),
-                "notes": "|".join(a.get("notes", [])) if a.get("notes") else "",
-            }
-        )
-    # Return as CSV text for download
-    fieldnames = ["date", "day_name", "role", "duty", "staff_name", "staff_key", "is_bleach", "slot_index", "notes"]
-    import io
-
-    buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=fieldnames)
-    writer.writeheader()
-    writer.writerows(output_rows)
-    buf.seek(0)
-    from fastapi.responses import PlainTextResponse
-
-    clinic_name = data.get("clinic_name") or "schedule"
-    range_label = _schedule_date_range(data)
-    filename = f"{_slugify(clinic_name)}-{range_label}.csv" if range_label else f"{_slugify(clinic_name)}.csv"
-    ip, ip_v4, user_agent, location = _request_meta(request)
-    log_event(
-        payload.get("sub"),
-        "schedule_export",
-        f"format=csv;clinic={clinic_name};range={range_label or 'unknown'}",
-        ip,
-        user_agent,
-        location,
-        ip_v4,
-    )
-    return PlainTextResponse(
-        content=buf.getvalue(),
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "X-Content-Type-Options": "nosniff",
-            "X-Download-Options": "noopen",
-            "Cache-Control": "no-store, must-revalidate",
-        },
-    )
+    raise HTTPException(status_code=501, detail="CSV export is disabled for now")
 
 
 @router.get("/schedule/export/excel")
@@ -1020,70 +966,7 @@ def export_schedule_excel(request: Request, payload: dict = Depends(require_auth
 
 @router.post("/schedule/import/csv")
 async def import_schedule_csv(request: Request, payload: dict = Depends(require_auth)) -> dict:
-    owner = _schedule_owner(payload)
-    form = await request.form()
-    file = form.get("file")
-    if not file:
-        raise HTTPException(status_code=400, detail="CSV file required")
-    filename = getattr(file, "filename", "") or ""
-    if filename and not filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Only .csv files are allowed")
-    content_type = getattr(file, "content_type", "") or ""
-    if content_type and content_type not in ("text/csv", "application/vnd.ms-excel"):
-        raise HTTPException(status_code=400, detail="Invalid CSV content type")
-    raw = await file.read()
-    max_bytes = int(os.getenv("MAX_CSV_BYTES", "2097152"))
-    if len(raw) > max_bytes:
-        raise HTTPException(status_code=413, detail="CSV file too large")
-    content = raw.decode("utf-8", errors="ignore")
-    reader = csv.DictReader(content.splitlines())
-    assignments = []
-    staff_entries = {}
-    for row in reader:
-        staff_key = row.get("staff_key", "") or row.get("staff_id", "")
-        staff_name = row.get("staff_name", "") or ""
-        if staff_key and staff_name and staff_key not in staff_entries:
-            staff_entries[staff_key] = {"id": staff_key, "name": staff_name, "role": row.get("role", "Tech")}
-        assignments.append(
-            {
-                "date": row.get("date"),
-                "day_name": row.get("day_name"),
-                "role": row.get("role"),
-                "duty": row.get("duty"),
-                "staff_id": staff_key or None,
-                "notes": [n for n in (row.get("notes", "") or "").split("|") if n],
-                "slot_index": int(row.get("slot_index") or 0),
-                "is_bleach": str(row.get("is_bleach") or "").lower() in ["true", "1", "yes"],
-            }
-        )
-    if not assignments:
-        raise HTTPException(status_code=400, detail="No assignments found in CSV")
-    snapshot = {
-        "clinic_name": "Imported schedule",
-        "timezone": "UTC",
-        "start_date": assignments[0].get("date") or datetime.utcnow().date().isoformat(),
-        "weeks": 1,
-        "requirements": [],
-        "assignments": assignments,
-        "staff": list(staff_entries.values()),
-        "stats": {},
-        "total_penalty": 0,
-        "winning_seed": None,
-        "bleach_cursor": 0,
-        "generated_at": datetime.utcnow().isoformat(),
-    }
-    persist_schedule(owner, snapshot)
-    ip, ip_v4, user_agent, location = _request_meta(request)
-    log_event(
-        payload.get("sub"),
-        "schedule_import",
-        f"format=csv;rows={len(assignments)}",
-        ip,
-        user_agent,
-        location,
-        ip_v4,
-    )
-    return {"status": "imported", "assignments": len(assignments)}
+    raise HTTPException(status_code=501, detail="CSV import is disabled for now")
 
 
 @router.get("/configs/export/{filename}")

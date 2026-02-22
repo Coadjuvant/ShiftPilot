@@ -707,6 +707,9 @@ table tbody tr:nth-child(even) {
   appearance: none;
   height: 6px;
   background: transparent;
+  border: none;
+  border-radius: 999px;
+  box-shadow: none;
   outline: none;
   margin: 0;
   padding: 0;
@@ -751,11 +754,11 @@ table tbody tr:nth-child(even) {
 }
 
 [data-theme="dark"] .constraint-control input[type="range"]::-webkit-slider-track {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.35));
+  background: linear-gradient(90deg, rgba(132, 170, 255, 0.55), rgba(171, 210, 255, 0.7));
 }
 
 [data-theme="dark"] .constraint-control input[type="range"]::-moz-range-track {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.35));
+  background: linear-gradient(90deg, rgba(132, 170, 255, 0.55), rgba(171, 210, 255, 0.7));
 }
 
 [data-theme="dark"] .constraint-control input[type="range"]::-webkit-slider-thumb {

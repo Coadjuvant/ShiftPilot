@@ -4,7 +4,6 @@ import api, {
   SaveConfigRequest,
   SavedSchedule,
   deleteConfig,
-  exportScheduleCsv,
   exportScheduleExcel,
   fetchHealth,
   fetchLatestSchedule,
@@ -103,26 +102,6 @@ export default function StaffPlanner() {
       link.click();
       URL.revokeObjectURL(url);
       setStatus("Download started.");
-    } catch (err: any) {
-      const st = err?.response?.status;
-      setStatus(st === 404 ? "No saved schedule to download." : friendlyError(err, "Download failed."));
-    }
-  };
-  const downloadSavedScheduleCsv = async () => {
-    try {
-      const meta = await fetchLatestSchedule();
-      if ((meta as any)?.status === "none" || !meta?.assignments?.length) {
-        setStatus("No saved schedule to download.");
-        return;
-      }
-      const blob = await exportScheduleCsv();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = buildScheduleFilename(meta, "csv");
-      link.click();
-      URL.revokeObjectURL(url);
-      setStatus("CSV download started.");
     } catch (err: any) {
       const st = err?.response?.status;
       setStatus(st === 404 ? "No saved schedule to download." : friendlyError(err, "Download failed."));
@@ -1163,7 +1142,6 @@ export default function StaffPlanner() {
             isAuthed={isAuthed}
             onRun={handleRun}
             onDownloadExcel={downloadSavedSchedule}
-            onDownloadCsv={downloadSavedScheduleCsv}
             onLoadLatest={loadLatestSavedSchedule}
           />
         )}

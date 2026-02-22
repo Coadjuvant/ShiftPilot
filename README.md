@@ -50,7 +50,6 @@ Set the schedule window and constraints, then click `Run Schedule`.
 
 In the planner:
 - `Download Latest Schedule` exports the most recent saved schedule (Excel).
-- `Download CSV` exports the most recent saved schedule (CSV).
 - `Export roles` controls which roles appear in exports.
 
 ## Login behavior

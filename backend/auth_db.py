@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 """
-Auth storage layer with two backends:
-- Postgres (recommended for production): set AUTH_BACKEND=postgres and DATABASE_URL
-- JSON file (fallback/dev): default if DATABASE_URL is missing
+Auth storage layer.
+
+Production uses Postgres auth/config/schedule storage.
+JSON fallback is retained in this file for historical compatibility only, but
+is intentionally disabled by backend selection below.
 """
 
 import json
@@ -17,7 +19,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 # Config
-AUTH_BACKEND = os.getenv("AUTH_BACKEND", "json").lower()
+AUTH_BACKEND = os.getenv("AUTH_BACKEND", "postgres").lower()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 # JSON defaults
@@ -890,13 +892,16 @@ class JsonAuth:
 # -----------------------
 # Backend selector
 # -----------------------
-if AUTH_BACKEND == "postgres" and DATABASE_URL:
-    try:
-        _backend = PostgresAuth(DATABASE_URL)
-    except Exception:
-        _backend = JsonAuth()
-else:
-    _backend = JsonAuth()
+if AUTH_BACKEND != "postgres":
+    raise RuntimeError("AUTH_BACKEND must be 'postgres'. JSON auth backend is disabled.")
+
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is required when AUTH_BACKEND=postgres.")
+
+try:
+    _backend = PostgresAuth(DATABASE_URL)
+except Exception as exc:
+    raise RuntimeError("Failed to initialize Postgres auth backend.") from exc
 
 
 def init_db():

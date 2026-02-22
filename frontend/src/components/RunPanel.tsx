@@ -38,7 +38,6 @@ type Props = {
   isAuthed: boolean;
   onRun: () => void;
   onDownloadExcel: () => void;
-  onDownloadCsv: () => void;
   onLoadLatest: () => void;
 };
 
@@ -55,7 +54,6 @@ export default function RunPanel({
   isAuthed,
   onRun,
   onDownloadExcel,
-  onDownloadCsv,
   onLoadLatest
 }: Props) {
   const { configName, timezone, startDate, weeks, patientsPerTech, patientsPerRn, techsPerRn, trials, baseSeed, usePrevSeed, exportRoles } = config;
@@ -272,9 +270,6 @@ export default function RunPanel({
           <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <button className="primary-btn" onClick={onDownloadExcel}>
               Download Latest Schedule
-            </button>
-            <button className="secondary-btn" onClick={onDownloadCsv}>
-              Download CSV
             </button>
             <button className="secondary-btn" onClick={onLoadLatest}>
               Load Latest Schedule
