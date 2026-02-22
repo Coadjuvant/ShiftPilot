@@ -1,79 +1,91 @@
 # Shift Scheduler Design
 
-## Entities
+## Core Data Model
 
-### StaffMember
-- `id`: unique string
-- `name`: display name
-- `role`: `Tech` \| `RN` \| `Admin`
-- `can_open`: bool
-- `can_close`: bool
-- `can_bleach`: bool (Tech only)
-- `availability`: dict[str → bool] for days `Mon` … `Sat`
-- `preferences`:
-  - `open_weight`: float (MWF)
-  - `open_weight_tts`: float (TTS)
-  - `close_weight`: float (MWF)
-  - `close_weight_tts`: float (TTS)
-  - `mid_weight`: float (MWF)
-  - `mid_weight_tts`: float (TTS)
+### Staff Member
+- `id`: unique string.
+- `name`: display name.
+- `role`: `Tech` | `RN` | `Admin`.
+- `can_open`: Tech can work open duty.
+- `can_close`: Tech can work close duty.
+- `can_bleach`: Tech can take bleach close duty.
+- `availability`: day map for `Mon` to `Sat`.
+- `preferences` (Tech scoring weights, lower is better):
+  - `open_mwf`, `mid_mwf`, `close_mwf`
+  - `open_tts`, `mid_tts`, `close_tts`
 
-### ClinicDemand
-- `day`: `Mon` … `Sat`
-- `patient_count`: int (for deriving Tech/RN minimums)
-- `required_slots`:
-  - `openers`: int (<= 2)
-  - `mids`: int (>= 0)
-  - `closers`: int (>= 0)
+### Daily Requirement
+- `day_name`: `Mon` to `Sat`.
+- `patient_count`: integer census input.
+- `tech_openers`, `tech_mids`, `tech_closers`: requested Tech slots.
+- `rn_count`, `admin_count`: requested RN/Admin slots.
 
 ### Config
-- `clinic_name`
-- `timezone`
-- `bleach_day`: `Mon` … `Sat`
-- `bleach_rotation`: list of staff ids
-- `bleach_cursor`: next index (0-based)
-- `constraints` (toggle-able):
-  - `enforce_three_day_cap`: bool (no 3 consecutive work days)
-  - `enforce_post_bleach_rest`: bool (no shift day after bleaching)
-  - `enforce_alt_saturdays`: bool (no consecutive Saturdays)
-- `ratios`:
-  - `patients_per_tech`: default 4
-  - `patients_per_rn`: default 12
-  - `techs_per_rn`: default 4
+- Clinic metadata: `clinic_name`, `timezone`, `start_date`, `weeks`.
+- Bleach config: `bleach_day`, `bleach_rotation`, `bleach_cursor`, `bleach_frequency`.
+- Ratios:
+  - `patients_per_tech`
+  - `patients_per_rn`
+  - `techs_per_rn`
+- Constraint sliders (`0` to `10`):
+  - `enforce_three_day_cap`
+  - `enforce_post_bleach_rest`
+  - `enforce_alt_saturdays`
+  - `limit_tech_four_days`
+  - `limit_rn_four_days`
 
 ### PTO
-- records with `staff_id`, `date`
-- support range upload (expand to list of dates)
+- Flattened entries: `staff_id`, `date`.
+- UI supports date ranges; backend consumes per-day records.
 
-## Scheduling Notes
+## Scheduling Rules
 
-1. Build daily slot list (openers, mids, closers) respecting required counts.
-2. Determine minimum Tech/RN counts using ratios and patient totals.
-3. Assign bleach slot: on `bleach_day`, select next eligible closer (`can_bleach` & `can_close`).
-4. Search strategy:
-   - Start with greedy assignment ordered by day/role.
-   - Score = weighted sum of preference penalties + fairness penalty for uneven Tech distribution.
-   - Local improvement via hill-climb swap among same-role slots.
-5. Constraints enforced hard:
-   - Availability, PTO exclusion, ratio minimums, bleach requirement.
-6. Optional constraints applied when toggled.
+1. Build slots for each day/week in this order:
+   - Tech open, Tech mid, Tech close, RN coverage, Admin coverage.
+2. Auto-expand demand from ratios:
+   - If patient census implies more Techs, add the gap to Tech mids.
+   - RN demand is raised to the max of:
+     - explicit `rn_count`
+     - `ceil(patient_count / patients_per_rn)`
+     - `ceil(total_tech_slots / techs_per_rn)`
+3. Saturdays force `admin_count = 0`.
+4. Tech same-day rule:
+   - Max 2 shifts/day.
+   - If 2 shifts, they must be adjacent across `open -> mid(s) -> close`.
+5. Hard eligibility filters:
+   - Role match, availability, PTO, open/close permissions, bleach permission.
+6. Slider semantics:
+   - `10` means hard constraint (cannot be violated).
+   - `1..9` means soft penalty added when violated.
+   - `0` disables that penalty.
+7. If a slot cannot be staffed:
+   - Tech open/close: stored as unfilled (`staff_id = null`).
+   - Other slots: assigned to `FLOAT`.
+   - Each unfilled slot adds fixed penalty `10`.
 
-## Outputs
+## Scoring Model
 
-- `schedule.xlsx` with sheets:
-  - Coverage (counts per day/role)
-  - Roster (rows: day, role, staff, duty)
-  - Summary (per staff totals, bleach count)
+- Lower is better.
+- For scored roles, candidate score is:
+  - preference penalty
+  - plus soft constraint penalties (`1..9`)
+  - plus fairness penalty (`FAIRNESS_WEIGHT * current_assignments`).
+- Hard violations (`10`) are filtered out before scoring.
+- Bleach slots also respect rotation and cursor behavior.
+- Unfilled slots always add penalty `10`.
 
-## Modernized Architecture (2025-11-21)
+## Role Export and Scheduling Scope
 
-The Streamlit prototype remains in `UI/app.py`, but the long-term product will move to a FastAPI + React stack:
+- `export_roles` is required when running a schedule.
+- If no roles are selected, API returns `400`.
+- Selected roles control:
+  - which roles are scheduled,
+  - which roles are scored,
+  - which roles appear in exported output.
+- Any role not selected for export is not scheduled.
 
-- **FastAPI** (`backend/api/main.py`): exposes `/health` and `/schedule/run`. The API wraps the existing scheduler engine so clinics or external tools can request rosters programmatically. Add new endpoints here as more config surfaces.
-- **React (Vite + TypeScript)** (`frontend/`): owns UI state locally. The prototype `StaffPlanner` page demonstrates the non-resetting editor behavior that motivated the migration. Eventually each Streamlit tab will be rebuilt as isolated React routes/components backed by the API.
+## Current Stack
 
-Workflow:
-
-1. Run the API with `uvicorn backend.api.main:app --reload`.
-2. Install frontend deps (`npm install` inside `frontend/`) and start the dev server (`npm run dev`). Vite proxies `/api/*` calls to the FastAPI server for local development.
-3. When features reach parity, retire the Streamlit UI and package the React app via WebView2/Electron for distributable desktop builds.
+- Backend: FastAPI (`backend/api/main.py`) + scheduler engine (`backend/scheduler/engine.py`).
+- Frontend: React + TypeScript (`frontend/`).
+- Main run endpoint: `POST /schedule/run`.

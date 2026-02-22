@@ -193,9 +193,7 @@ export default function StaffPlanner() {
     }>
   >([]);
   const [stats, setStats] = useState<Record<string, number>>({});
-  const [excelUrl, setExcelUrl] = useState<string | null>(null);
   const [winningSeed, setWinningSeed] = useState<number | null>(null);
-  const [winningScore, setWinningScore] = useState<number | null>(null);
   const [authToken, setAuthTokenState] = useState<string | null>(() => {
     return getStoredToken();
   });
@@ -327,9 +325,7 @@ export default function StaffPlanner() {
     setAssignments([]);
     setStats({});
     setRunResult("");
-    setExcelUrl(null);
     setWinningSeed(null);
-    setWinningScore(null);
     setProgress(0);
     setSelectedConfig("");
     setConfigs([]);
@@ -681,15 +677,14 @@ export default function StaffPlanner() {
     }
   };
 
-  const handleLogout = () => {
-    setAuthTokenState(null);
-    setAuthToken(null);
-    setIsAdmin(false);
-    resetWorkspaceState("Logged out.");
-  };
-
   // --- Run handler (stays in parent — touches shared state) ---
   const handleRun = async () => {
+    if (exportRoles.length === 0) {
+      const msg = "Select at least one export role before running.";
+      setStatus(msg);
+      setLastError(msg);
+      return;
+    }
     if (hasErrors) {
       setStatus("Fix validation errors before running.");
       setLastError(
@@ -788,22 +783,11 @@ export default function StaffPlanner() {
         setAssignments(res.assignments);
         setStats(res.stats);
         setWinningSeed(res.winning_seed ?? null);
-        setWinningScore(typeof res.total_penalty === "number" ? res.total_penalty : null);
         setScheduleStaffMap(null);
         if (typeof res.bleach_cursor === "number") {
           setBleachCursor(res.bleach_cursor);
         }
         setProgress(100);
-      if (res.excel) {
-        const blob = Uint8Array.from(window.atob(res.excel), (c) => c.charCodeAt(0));
-        const file = new Blob([blob], {
-          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        });
-        const url = URL.createObjectURL(file);
-        setExcelUrl(url);
-      } else {
-        setExcelUrl(null);
-      }
       setRunResult(
         `Winning seed: ${res.winning_seed ?? "n/a"} | Score: ${
           res.total_penalty?.toFixed ? res.total_penalty.toFixed(2) : res.total_penalty ?? "n/a"

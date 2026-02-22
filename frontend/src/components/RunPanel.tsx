@@ -58,6 +58,8 @@ export default function RunPanel({
 }: Props) {
   const FLOAT_ROW_ID = "__FLOAT__";
   const { configName, timezone, startDate, weeks, patientsPerTech, patientsPerRn, techsPerRn, trials, baseSeed, usePrevSeed, exportRoles } = config;
+  const hasNoExportRoles = exportRoles.length === 0;
+  const hasRunErrors = hasErrors || hasNoExportRoles;
   const [collapsedRoles, setCollapsedRoles] = React.useState<Set<string>>(new Set());
 
   const toggleRoleCollapse = (role: string) => {
@@ -228,12 +230,14 @@ export default function RunPanel({
           </div>
         </div>
       </div>
-      <button
-        disabled={hasErrors}
-        onClick={onRun}
-      >
+      <button disabled={hasRunErrors} onClick={onRun}>
         Run Schedule
       </button>
+      {hasNoExportRoles && (
+        <p className="muted" style={{ color: "var(--danger, #cc3d3d)", marginTop: "0.5rem" }}>
+          Select at least one export role before running.
+        </p>
+      )}
       {isRunning && (
         <div style={{ marginTop: "0.5rem" }}>
           <div className="muted" style={{ marginBottom: "0.25rem" }}>

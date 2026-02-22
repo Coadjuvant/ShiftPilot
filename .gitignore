@@ -23,6 +23,7 @@ frontend/dist/
 frontend/.vite/
 .vite/
 .eslintcache
+*.tsbuildinfo
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -34,6 +35,9 @@ pnpm-debug.log*
 .env.production.local
 configs/
 backend/auth.db
+backend/auth.db-shm
+backend/auth.db-wal
+backend/auth.db-journal
 wip-scheduler.tgz
 
 # OS/Editor

@@ -261,20 +261,8 @@ def _select_bleach_candidate(
     return None, None
 
 
-def _open_slot_penalty(slot: ScheduleSlot, cfg: ScheduleConfig) -> float:
-    weights = cfg.toggles
-    candidates = [
-        _clamp_weight(weights.enforce_three_day_cap),
-        _clamp_weight(weights.enforce_alt_saturdays),
-    ]
-    if slot.role == "Tech":
-        candidates.append(_clamp_weight(weights.enforce_post_bleach_rest))
-        candidates.append(_clamp_weight(weights.limit_tech_four_days))
-    elif slot.role == "RN":
-        candidates.append(_clamp_weight(weights.limit_rn_four_days))
-    penalty = max(candidates) if candidates else 0.0
-    # Always penalize open coverage gaps, even if all sliders are set to 0.
-    return penalty if penalty > 0 else 1.0
+def _open_slot_penalty(_slot: ScheduleSlot, _cfg: ScheduleConfig) -> float:
+    return CONSTRAINT_HARD_THRESHOLD
 
 
 def _tech_shift_position(slot: ScheduleSlot, tech_mid_slots_by_day: Dict[int, int]) -> Optional[int]:

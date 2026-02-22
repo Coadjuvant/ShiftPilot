@@ -604,7 +604,9 @@ def run_schedule(
             toggles=toggles,
         )
         pto_entries = [PTOEntry(staff_id=item.staff_id, date=item.date) for item in body.pto]
-        active_roles = body.export_roles or ["Tech", "RN", "Admin"]
+        if not body.export_roles:
+            raise HTTPException(status_code=400, detail="Select at least one export role.")
+        active_roles = body.export_roles
         result, winning_seed = run_tournament(
             staff_members,
             requirements,
@@ -628,7 +630,7 @@ def run_schedule(
             )
             for assignment in result.assignments
         ]
-        roles_filter = body.export_roles or None
+        roles_filter = body.export_roles
         excel_bytes = export_schedule_to_excel(
             result,
             {s.id: s for s in staff_members},
