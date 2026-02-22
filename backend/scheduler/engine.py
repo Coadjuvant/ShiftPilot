@@ -268,12 +268,23 @@ def generate_schedule(
     *,
     rng_seed: Optional[int] = None,
     rng: Optional[random.Random] = None,
+    scheduled_roles: Optional[Sequence[str]] = None,
+    score_roles: Optional[Sequence[str]] = None,
 ) -> ScheduleResult:
     """
     Generate a schedule and return assignments + updated bleach cursor.
     """
+    normalized_scheduled_roles = {
+        str(role).strip().lower()
+        for role in (scheduled_roles if scheduled_roles is not None else ("Tech", "RN", "Admin"))
+        if str(role).strip()
+    }
     requirements_map = _ensure_requirements(requirements)
-    slots = _build_slots(requirements_map, cfg)
+    slots = [
+        slot
+        for slot in _build_slots(requirements_map, cfg)
+        if (slot.role or "").strip().lower() in normalized_scheduled_roles
+    ]
     pto_lookup = _pto_lookup(pto_entries)
 
     if rng is None:
@@ -291,9 +302,17 @@ def generate_schedule(
     assignments: List[Assignment] = []
     bleach_cursor = cfg.bleach_cursor % len(cfg.bleach_rotation) if cfg.bleach_rotation else 0
 
+    normalized_score_roles = {
+        str(role).strip().lower()
+        for role in (score_roles if score_roles is not None else normalized_scheduled_roles)
+        if str(role).strip()
+    }
+    normalized_score_roles &= normalized_scheduled_roles
     total_penalty = 0.0
 
     for slot in slots:
+        role_key = (slot.role or "").strip().lower()
+        role_is_scored = role_key in normalized_score_roles
         role_candidates = staff_by_role.get(slot.role, [])
         if role_candidates:
             role_candidates = role_candidates.copy()
@@ -324,50 +343,65 @@ def generate_schedule(
         base_penalty = None
 
         if slot.is_bleach and cfg.bleach_rotation:
-            best_score: Optional[Tuple[float, int, StaffMember, _StaffState, float]] = None
-            for offset in range(len(cfg.bleach_rotation)):
-                idx = (bleach_cursor + offset) % len(cfg.bleach_rotation)
-                rid = cfg.bleach_rotation[idx]
-                member = staff_map.get(rid)
-                if member is None:
-                    continue
-                state = states.get(rid)
-                if state is None:
-                    continue
-                if slot.day_index in state.worked_day_indices:
-                    continue
-                if not _is_available(member, slot, pto_lookup):
-                    continue
-                constraint_penalty, hard_violation = _constraint_penalty(state, slot, cfg)
-                if hard_violation:
-                    continue
-                base = _preference_penalty(member, slot) + constraint_penalty + offset * BLEACH_ROTATION_OFFSET_PENALTY
-                score = _score_candidate(state, base_penalty=base, fairness_weight=FAIRNESS_WEIGHT)
-                if best_score is None or score < best_score[0]:
-                    best_score = (score, idx, member, state, base)
-            if best_score is not None:
-                _, rotation_index_used, chosen, chosen_state, base_penalty = best_score
+            if role_is_scored:
+                best_score: Optional[Tuple[float, int, StaffMember, _StaffState, float]] = None
+                for offset in range(len(cfg.bleach_rotation)):
+                    idx = (bleach_cursor + offset) % len(cfg.bleach_rotation)
+                    rid = cfg.bleach_rotation[idx]
+                    member = staff_map.get(rid)
+                    if member is None:
+                        continue
+                    state = states.get(rid)
+                    if state is None:
+                        continue
+                    if slot.day_index in state.worked_day_indices:
+                        continue
+                    if not _is_available(member, slot, pto_lookup):
+                        continue
+                    constraint_penalty, hard_violation = _constraint_penalty(state, slot, cfg)
+                    if hard_violation:
+                        continue
+                    base = _preference_penalty(member, slot) + constraint_penalty + offset * BLEACH_ROTATION_OFFSET_PENALTY
+                    score = _score_candidate(state, base_penalty=base, fairness_weight=FAIRNESS_WEIGHT)
+                    if best_score is None or score < best_score[0]:
+                        best_score = (score, idx, member, state, base)
+                if best_score is not None:
+                    _, rotation_index_used, chosen, chosen_state, base_penalty = best_score
+                else:
+                    note = "Bleach rotation unavailable"
             else:
-                note = "Bleach rotation unavailable"
+                bleach_candidates = [(member, state) for member, state, _ in candidates]
+                chosen, rotation_index_used = _select_bleach_candidate(
+                    cfg.bleach_rotation,
+                    bleach_cursor,
+                    bleach_candidates,
+                )
+                if chosen is not None:
+                    chosen_state = states[chosen.id]
+                else:
+                    note = "Bleach rotation unavailable"
 
         if chosen is None and candidates and not slot.is_bleach:
-            scored: List[Tuple[float, float, StaffMember, _StaffState]] = []
-            for member, state, constraint_penalty in candidates:
-                base = _preference_penalty(member, slot) + constraint_penalty
-                if slot.is_bleach and cfg.bleach_rotation:
-                    # apply extra penalty if we are off rotation
-                    try:
-                        pos = cfg.bleach_rotation.index(member.id)
-                    except ValueError:
-                        pos = None
-                    if pos is None:
-                        base += BLEACH_PENALTY
-                score = _score_candidate(state, base_penalty=base, fairness_weight=FAIRNESS_WEIGHT)
-                jitter = rng.random() * JITTER_SCALE
-                scored.append((score + jitter, score, member, state))
-            scored.sort(key=lambda tup: (tup[0], tup[2].id))
-            _, score_value, chosen, chosen_state = scored[0]
-            base_penalty = score_value - FAIRNESS_WEIGHT * chosen_state.total_assignments()
+            if role_is_scored:
+                scored: List[Tuple[float, float, StaffMember, _StaffState]] = []
+                for member, state, constraint_penalty in candidates:
+                    base = _preference_penalty(member, slot) + constraint_penalty
+                    if slot.is_bleach and cfg.bleach_rotation:
+                        # apply extra penalty if we are off rotation
+                        try:
+                            pos = cfg.bleach_rotation.index(member.id)
+                        except ValueError:
+                            pos = None
+                        if pos is None:
+                            base += BLEACH_PENALTY
+                    score = _score_candidate(state, base_penalty=base, fairness_weight=FAIRNESS_WEIGHT)
+                    jitter = rng.random() * JITTER_SCALE
+                    scored.append((score + jitter, score, member, state))
+                scored.sort(key=lambda tup: (tup[0], tup[2].id))
+                _, score_value, chosen, chosen_state = scored[0]
+                base_penalty = score_value - FAIRNESS_WEIGHT * chosen_state.total_assignments()
+            else:
+                chosen, chosen_state, _ = candidates[0]
 
         if chosen is None:
             notes = [note] if note else []
@@ -391,12 +425,20 @@ def generate_schedule(
                 bleach_cursor = (rotation_index_used + 1) % len(cfg.bleach_rotation)
         if slot.day_name == "Sat":
             chosen_state.last_saturday_week = week_idx
-        if base_penalty is None:
+        if role_is_scored and base_penalty is None:
             base_penalty = _preference_penalty(chosen, slot)
-        total_penalty += _score_candidate(chosen_state, base_penalty=base_penalty, fairness_weight=FAIRNESS_WEIGHT)
+        if role_is_scored:
+            total_penalty += _score_candidate(chosen_state, base_penalty=base_penalty, fairness_weight=FAIRNESS_WEIGHT)
 
     # compute summary stats
-    totals = {staff_id: state.total_assignments() for staff_id, state in states.items()}
+    totals = {
+        staff_id: state.total_assignments()
+        for staff_id, state in states.items()
+        if (
+            (staff_map.get(staff_id) is not None)
+            and ((staff_map[staff_id].role or "").strip().lower() in normalized_scheduled_roles)
+        )
+    }
     stats = {member_id: float(count) for member_id, count in totals.items()}
 
     return ScheduleResult(

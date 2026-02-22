@@ -715,7 +715,7 @@ table tbody tr:nth-child(even) {
   padding: 0;
 }
 
-.constraint-control input[type="range"]::-webkit-slider-track {
+.constraint-control input[type="range"]::-webkit-slider-runnable-track {
   width: 100%;
   height: 6px;
   background: linear-gradient(90deg, rgba(12, 75, 223, 0.12), rgba(12, 75, 223, 0.22));
@@ -753,7 +753,7 @@ table tbody tr:nth-child(even) {
   border: 2px solid #ffffff;
 }
 
-[data-theme="dark"] .constraint-control input[type="range"]::-webkit-slider-track {
+[data-theme="dark"] .constraint-control input[type="range"]::-webkit-slider-runnable-track {
   background: linear-gradient(90deg, rgba(132, 170, 255, 0.55), rgba(171, 210, 255, 0.7));
 }
 

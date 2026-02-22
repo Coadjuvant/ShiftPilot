@@ -15,6 +15,8 @@ def run_tournament(
     *,
     trials: int = 10,
     base_seed: Optional[int] = None,
+    scheduled_roles: Optional[Sequence[str]] = None,
+    score_roles: Optional[Sequence[str]] = None,
 ) -> Tuple[ScheduleResult, int]:
     trials = max(1, trials)
     seed_source = random.Random(base_seed)
@@ -29,6 +31,8 @@ def run_tournament(
             cfg,
             pto_entries=pto_entries,
             rng_seed=seed,
+            scheduled_roles=scheduled_roles,
+            score_roles=score_roles,
         )
         result.seed = seed
         if best_result is None or result.total_penalty < best_result.total_penalty:
