@@ -32,14 +32,17 @@ const formatDateTime = (value?: string | null) => {
   if (!value) return "";
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return value;
-  return dt.toLocaleString(undefined, {
-    year: "2-digit",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit"
-  });
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const month = pad2(dt.getMonth() + 1);
+  const day = pad2(dt.getDate());
+  const year = pad2(dt.getFullYear() % 100);
+  const minutes = pad2(dt.getMinutes());
+  const seconds = pad2(dt.getSeconds());
+  const rawHour = dt.getHours();
+  const suffix = rawHour >= 12 ? "PM" : "AM";
+  const hour12 = rawHour % 12 || 12;
+  const hours = pad2(hour12);
+  return `${month}/${day}/${year} ${hours}:${minutes}:${seconds} ${suffix}`;
 };
 
 const friendlyError = (err: any, fallback: string) => {
@@ -364,7 +367,7 @@ export default function AdminPanel() {
                   <th>User ID</th>
                   <th>Detail</th>
                   <th>Location</th>
-                  <th>IP</th>
+                  <th style={{ textAlign: "center" }}>IP</th>
                 </tr>
               </thead>
               <tbody>
@@ -375,7 +378,7 @@ export default function AdminPanel() {
                     <td>{a.user_id != null ? `${userNameMap[a.user_id] ?? a.user_id}` : "-"}</td>
                     <td>{a.detail || "-"}</td>
                     <td>{a.location || "-"}</td>
-                    <td>{a.ip_v4 || a.ip || "-"}</td>
+                    <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>{a.ip_v4 || a.ip || "-"}</td>
                   </tr>
                 ))}
               </tbody>
