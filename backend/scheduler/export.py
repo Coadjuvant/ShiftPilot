@@ -10,21 +10,50 @@ import pandas as pd
 from .model import Assignment, ScheduleResult, StaffMember
 from .engine import OPEN_LABEL
 
+LEGACY_OPEN_LABEL = "OPEN"
+
+
+def _is_open_staff_id(staff_id: object) -> bool:
+    if staff_id is None:
+        return True
+    text = str(staff_id).strip()
+    if not text:
+        return True
+    return text.upper() in {OPEN_LABEL.upper(), LEGACY_OPEN_LABEL}
+
+
+def _shift_label(assignment: Assignment) -> str:
+    slot = assignment.slot
+    if slot.is_bleach:
+        return "Bleach"
+    duty = (slot.duty or "").lower()
+    if duty == "open":
+        return f"Open {slot.slot_index}" if slot.slot_index and slot.slot_index > 1 else "Open"
+    if duty == "mid":
+        return f"Mid {slot.slot_index}" if slot.slot_index and slot.slot_index > 1 else "Mid"
+    if duty == "close":
+        return f"Close {slot.slot_index}" if slot.slot_index and slot.slot_index > 1 else "Close"
+    base = slot.duty.capitalize() if slot.duty else "Shift"
+    if slot.slot_index and slot.slot_index > 1:
+        return f"{base} {slot.slot_index}"
+    return base
+
 
 def _roster_rows(result: ScheduleResult, staff_lookup: Dict[str, StaffMember], allowed_roles: Set[str]):
     for assignment in result.assignments:
         slot = assignment.slot
         if allowed_roles and slot.role not in allowed_roles:
             continue
-        staff = staff_lookup.get(assignment.staff_id or "", None)
+        normalized_staff_id = OPEN_LABEL if _is_open_staff_id(assignment.staff_id) else assignment.staff_id
+        staff = staff_lookup.get(normalized_staff_id or "", None)
         yield {
             "Date": slot.date.strftime("%Y-%m-%d"),
             "Day": slot.day_name,
             "Role": slot.role,
             "Duty": ("bleach" if slot.is_bleach else slot.duty) or "",
             "Slot": slot.slot_index,
-            "StaffID": assignment.staff_id or "",
-            "StaffName": staff.name if staff else assignment.staff_id or "",
+            "StaffID": normalized_staff_id or "",
+            "StaffName": staff.name if staff else normalized_staff_id or "",
             "Notes": "; ".join(assignment.notes) if assignment.notes else "",
         }
 
@@ -34,7 +63,7 @@ def _coverage_rows(result: ScheduleResult):
     for assignment in result.assignments:
         slot = assignment.slot
         key = (slot.date.strftime("%Y-%m-%d"), slot.day_name, slot.role, slot.duty)
-        filled = assignment.staff_id not in (None, "", OPEN_LABEL)
+        filled = not _is_open_staff_id(assignment.staff_id)
         day_role_counts[key] = day_role_counts.get(key, 0) + (1 if filled else 0)
     for (date_str, day_name, role, duty), count in sorted(day_role_counts.items()):
         yield {
@@ -64,10 +93,8 @@ def _note_rows(result: ScheduleResult, staff_lookup: Dict[str, StaffMember]) -> 
         if assignment.notes:
             for n in assignment.notes:
                 notes_by_date[date_str].add(n)
-        if assignment.staff_id in (None, "", OPEN_LABEL):
-            notes_by_date[date_str].add(
-                f"Open slot: {slot.role} {slot.duty or ''}#{slot.slot_index}".strip()
-            )
+        if _is_open_staff_id(assignment.staff_id):
+            notes_by_date[date_str].add(f"Open slot: {slot.role} {_shift_label(assignment)}")
     rows: List[Dict[str, str]] = []
     for date_str in sorted(notes_by_date.keys()):
         rows.append(
@@ -87,10 +114,8 @@ def _notes_map(result: ScheduleResult) -> Dict[str, str]:
         if assignment.notes:
             for n in assignment.notes:
                 out[date_str].add(n)
-        if assignment.staff_id in (None, "", OPEN_LABEL):
-            out[date_str].add(
-                f"Open slot: {slot.role} {slot.duty or ''}#{slot.slot_index}".strip()
-            )
+        if _is_open_staff_id(assignment.staff_id):
+            out[date_str].add(f"Open slot: {slot.role} {_shift_label(assignment)}")
     return {d: "; ".join(sorted(vals)) for d, vals in out.items()}
 
 
@@ -129,11 +154,8 @@ def _role_matrix(
         slot = assignment.slot
         if slot.role != role:
             continue
-        staff_id = assignment.staff_id or OPEN_LABEL
-        duty_label = "Bleach" if slot.is_bleach else (slot.duty.capitalize() if slot.duty else "Shift")
-        if slot.slot_index:
-            duty_label = f"{duty_label} #{slot.slot_index}"
-        text = duty_label
+        staff_id = OPEN_LABEL if _is_open_staff_id(assignment.staff_id) else str(assignment.staff_id)
+        text = _shift_label(assignment)
         if assignment.notes:
             text += f" ({'; '.join(assignment.notes)})"
         entries[staff_id][slot.date].append(text)
@@ -174,12 +196,12 @@ def _roster_matrix(
         slot = assignment.slot
         date_str = slot.date.strftime("%Y-%m-%d")
         date_day[date_str] = slot.day_name
-        duty_label = "Bleach" if slot.is_bleach else (slot.duty.capitalize() if slot.duty else "Duty")
+        duty_label = _shift_label(assignment)
         col = f"{slot.role}-{duty_label}-{slot.slot_index}"
         cols.add(col)
         name = (
             OPEN_LABEL
-            if assignment.staff_id in (None, "", OPEN_LABEL)
+            if _is_open_staff_id(assignment.staff_id)
             else staff_lookup.get(
                 assignment.staff_id,
                 StaffMember(id=assignment.staff_id, name=assignment.staff_id, role=slot.role),
@@ -187,16 +209,24 @@ def _roster_matrix(
         )
         data[date_str][col] = name
 
-    duty_priority = {"Open": 1, "Mid": 2, "Mid2": 2.5, "Mid3": 2.75, "Mid4": 2.8, "Bleach": 3.5, "Close": 4}
-
     def _col_key(col: str):
         # col format: Role-Duty-idx
         try:
-            role, duty, idx = col.split("-")
+            role, duty, idx = col.split("-", 2)
             idx_val = float(idx)
         except ValueError:
             role, duty, idx_val = col, "", 0
-        base = duty_priority.get(duty, 5)
+        duty_l = duty.lower()
+        if duty_l.startswith("open"):
+            base = 1
+        elif duty_l.startswith("mid"):
+            base = 2
+        elif duty_l.startswith("bleach"):
+            base = 3.5
+        elif duty_l.startswith("close"):
+            base = 4
+        else:
+            base = 5
         return (role, base, idx_val)
 
     ordered_cols = sorted(cols, key=_col_key)
@@ -233,7 +263,7 @@ def export_schedule_to_excel(
     # recompute stats for filtered roles (filled slots only)
     filtered_stats: Dict[str, int] = defaultdict(int)
     for a in filtered_assignments:
-        if a.staff_id and a.staff_id not in ("", OPEN_LABEL):
+        if not _is_open_staff_id(a.staff_id):
             filtered_stats[a.staff_id] += 1
 
     class _FilteredResult:

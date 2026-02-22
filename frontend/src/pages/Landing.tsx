@@ -150,7 +150,8 @@ export default function Landing() {
         .filter((a) => allowedRoles.has((a.role || "").toString()));
       const isOpenSlot = (assignment: { staff_id?: string | null }) => {
         if (!assignment.staff_id) return true;
-        return assignment.staff_id.toString().toUpperCase() === "OPEN";
+        const staffId = assignment.staff_id.toString().trim().toUpperCase();
+        return staffId === "OPEN" || staffId === "FLOAT";
       };
       const isFilled = (assignment: { staff_id?: string | null }) => !isOpenSlot(assignment);
       const techAssignments = dayAssignments.filter((a) => a.role?.toLowerCase() === "tech");
@@ -272,7 +273,8 @@ export default function Landing() {
     };
 
     for (const assignment of latestSchedule.assignments || []) {
-      if (!assignment.staff_id || assignment.staff_id.toString().toUpperCase() === "OPEN") continue;
+      const staffIdRaw = assignment.staff_id ? assignment.staff_id.toString().trim().toUpperCase() : "";
+      if (!assignment.staff_id || staffIdRaw === "OPEN" || staffIdRaw === "FLOAT") continue;
       const idx = toDayIndex(assignment);
       if (idx == null) continue;
       const staffId = assignment.staff_id.toString();

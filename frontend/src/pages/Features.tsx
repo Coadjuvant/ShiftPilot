@@ -98,7 +98,7 @@ const tutorialSteps = [
   {
     title: "Demand tab",
     body:
-      "Enter patient load and required Tech opener, Pod (mid), and closer counts per day. This snapshot defines what fully staffed means for the run. Update it for each schedule window.",
+      "Enter patient load and required Tech opener, mid, and closer counts per day. This snapshot defines what fully staffed means for the run. Update it for each schedule window.",
   },
   {
     title: "Availability tab",
@@ -118,12 +118,12 @@ const tutorialSteps = [
   {
     title: "Prefs tab",
     body:
-      "Use the sliders to nudge who prefers open, Pod, or close on MWF vs TTS. Lower values avoid the shift (0), higher values prefer it (10), and 5 is neutral. Keep weights light if coverage is tight.",
+      "Use the sliders to nudge who prefers open, mid, or close on MWF vs TTS. Lower values avoid the shift (0), higher values prefer it (10), and 5 is neutral. Keep weights light if coverage is tight.",
   },
   {
     title: "Run tab",
     body:
-      "Set the schedule window, clinic name, timezone, trials, and export roles. Run the schedule and review the matrix with Pod labels and shift totals. Export Excel when ready.",
+      "Set the schedule window, clinic name, timezone, trials, and export roles. Run the schedule and review the matrix with shift labels and shift totals. Export Excel when ready.",
   },
 ];
 

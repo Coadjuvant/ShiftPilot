@@ -24,13 +24,14 @@ BLEACH_PENALTY = 5.0  # discourage assigning bleach-capable techs outside rotati
 BLEACH_ROTATION_OFFSET_PENALTY = 1.0
 CONSTRAINT_HARD_THRESHOLD = 10.0
 JITTER_SCALE = 1e-3
-OPEN_LABEL = "OPEN"
+OPEN_LABEL = "FLOAT"
 
 
 @dataclass
 class _StaffState:
     assignments: List[Assignment]
     worked_day_indices: List[int]
+    day_shift_positions: Dict[int, set] = field(default_factory=lambda: defaultdict(set))
     last_bleach_day: Optional[int] = None
     last_saturday_week: Optional[int] = None
     week_assignments: Dict[int, set] = field(default_factory=lambda: defaultdict(set))
@@ -120,6 +121,7 @@ def _build_slots(requirements: Dict[str, DailyRequirement], cfg: ScheduleConfig)
                     )
 
             add_slot("Tech", "open", req.tech_openers)
+            add_slot("Tech", "mid", req.tech_mids)
             bleach = False
             if req.tech_closers > 0:
                 freq = (cfg.bleach_frequency or "weekly").lower()
@@ -132,7 +134,6 @@ def _build_slots(requirements: Dict[str, DailyRequirement], cfg: ScheduleConfig)
                 else:
                     bleach = day_name == cfg.bleach_day
             add_slot("Tech", "close", req.tech_closers, bleach=bleach)
-            add_slot("Tech", "mid", req.tech_mids)
             add_slot("RN", "coverage", req.rn_count)
             add_slot("Admin", "coverage", req.admin_count)
 
@@ -260,6 +261,58 @@ def _select_bleach_candidate(
     return None, None
 
 
+def _open_slot_penalty(slot: ScheduleSlot, cfg: ScheduleConfig) -> float:
+    weights = cfg.toggles
+    candidates = [
+        _clamp_weight(weights.enforce_three_day_cap),
+        _clamp_weight(weights.enforce_alt_saturdays),
+    ]
+    if slot.role == "Tech":
+        candidates.append(_clamp_weight(weights.enforce_post_bleach_rest))
+        candidates.append(_clamp_weight(weights.limit_tech_four_days))
+    elif slot.role == "RN":
+        candidates.append(_clamp_weight(weights.limit_rn_four_days))
+    penalty = max(candidates) if candidates else 0.0
+    # Always penalize open coverage gaps, even if all sliders are set to 0.
+    return penalty if penalty > 0 else 1.0
+
+
+def _tech_shift_position(slot: ScheduleSlot, tech_mid_slots_by_day: Dict[int, int]) -> Optional[int]:
+    if slot.role != "Tech":
+        return None
+    duty = (slot.duty or "").lower()
+    if duty == "open":
+        return 0
+    if duty == "mid":
+        return max(1, int(slot.slot_index or 1))
+    if duty == "close":
+        return tech_mid_slots_by_day.get(slot.day_index, 0) + 1
+    return None
+
+
+def _violates_daily_shift_rule(
+    member_state: _StaffState,
+    slot: ScheduleSlot,
+    tech_mid_slots_by_day: Dict[int, int],
+) -> bool:
+    worked_today = member_state.day_shift_positions.get(slot.day_index, set())
+    if slot.role != "Tech":
+        return bool(worked_today)
+
+    pos = _tech_shift_position(slot, tech_mid_slots_by_day)
+    if pos is None:
+        return bool(worked_today)
+    if pos in worked_today:
+        return True
+    if len(worked_today) >= 2:
+        return True
+    if not worked_today:
+        return False
+    existing = next(iter(worked_today))
+    # Techs can work at most two same-day shifts, and those shifts must be adjacent.
+    return abs(existing - pos) != 1
+
+
 def generate_schedule(
     staff: Sequence[StaffMember],
     requirements: Sequence[DailyRequirement],
@@ -285,6 +338,13 @@ def generate_schedule(
         for slot in _build_slots(requirements_map, cfg)
         if (slot.role or "").strip().lower() in normalized_scheduled_roles
     ]
+    tech_mid_slots_by_day: Dict[int, int] = defaultdict(int)
+    for slot in slots:
+        if slot.role == "Tech" and slot.duty == "mid":
+            tech_mid_slots_by_day[slot.day_index] = max(
+                tech_mid_slots_by_day[slot.day_index],
+                int(slot.slot_index or 0),
+            )
     pto_lookup = _pto_lookup(pto_entries)
 
     if rng is None:
@@ -322,7 +382,7 @@ def generate_schedule(
             found: List[Tuple[StaffMember, _StaffState, float]] = []
             for member in role_candidates:
                 state = states[member.id]
-                if slot.day_index in state.worked_day_indices:
+                if _violates_daily_shift_rule(state, slot, tech_mid_slots_by_day):
                     continue
                 if not _is_available(member, slot, pto_lookup):
                     continue
@@ -354,7 +414,7 @@ def generate_schedule(
                     state = states.get(rid)
                     if state is None:
                         continue
-                    if slot.day_index in state.worked_day_indices:
+                    if _violates_daily_shift_rule(state, slot, tech_mid_slots_by_day):
                         continue
                     if not _is_available(member, slot, pto_lookup):
                         continue
@@ -410,13 +470,21 @@ def generate_schedule(
                 assignments.append(Assignment(slot=slot, staff_id=None, notes=notes))
             else:
                 assignments.append(Assignment(slot=slot, staff_id=OPEN_LABEL, notes=notes))
+            if role_is_scored:
+                total_penalty += _open_slot_penalty(slot, cfg)
             continue
 
         # Update state
         assigned = Assignment(slot=slot, staff_id=chosen.id, notes=[note] if note else [])
         assignments.append(assigned)
         chosen_state.assignments.append(assigned)
-        chosen_state.worked_day_indices.append(slot.day_index)
+        if slot.day_index not in chosen_state.worked_day_indices:
+            chosen_state.worked_day_indices.append(slot.day_index)
+        if slot.role == "Tech":
+            pos = _tech_shift_position(slot, tech_mid_slots_by_day)
+            chosen_state.day_shift_positions.setdefault(slot.day_index, set()).add(pos if pos is not None else 0)
+        else:
+            chosen_state.day_shift_positions.setdefault(slot.day_index, set()).add(0)
         week_idx, _ = _week_and_day_index(slot.day_index)
         chosen_state.week_assignments.setdefault(week_idx, set()).add(slot.day_index)
         if slot.is_bleach and slot.role == "Tech":

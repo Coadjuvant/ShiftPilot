@@ -56,6 +56,7 @@ export default function RunPanel({
   onDownloadExcel,
   onLoadLatest
 }: Props) {
+  const FLOAT_ROW_ID = "__FLOAT__";
   const { configName, timezone, startDate, weeks, patientsPerTech, patientsPerRn, techsPerRn, trials, baseSeed, usePrevSeed, exportRoles } = config;
   const [collapsedRoles, setCollapsedRoles] = React.useState<Set<string>>(new Set());
 
@@ -69,6 +70,21 @@ export default function RunPanel({
       }
       return next;
     });
+  };
+
+  const isOpenLike = (staffId: string | null | undefined) => {
+    if (!staffId) return true;
+    const value = String(staffId).trim().toUpperCase();
+    return value === "OPEN" || value === "FLOAT";
+  };
+
+  const formatShiftLabel = (assignment: Assignment) => {
+    const duty = (assignment.duty || "").toLowerCase();
+    if (assignment.is_bleach || duty === "bleach") return "Bleach";
+    if (duty === "open") return assignment.slot_index > 1 ? `Open ${assignment.slot_index}` : "Open";
+    if (duty === "mid") return assignment.slot_index > 1 ? `Mid ${assignment.slot_index}` : "Mid";
+    if (duty === "close") return assignment.slot_index > 1 ? `Close ${assignment.slot_index}` : "Close";
+    return assignment.duty;
   };
 
   return (
@@ -282,7 +298,6 @@ export default function RunPanel({
             const uniqueDates = Array.from(new Set(assignments.map((a) => a.date))).sort();
             const exportRoleSet = new Set(exportRoles.map((role) => role.toLowerCase()));
             const matrixAssignments = assignments.filter((a) => exportRoleSet.has((a.role || "").toLowerCase()));
-              const knownStaffIds = new Set(Object.keys(displayStaffMap));
             const dateDayMap = uniqueDates.reduce<Record<string, string>>((acc, d) => {
               const found = assignments.find((a) => a.date === d);
               acc[d] = found?.day_name || "";
@@ -298,29 +313,32 @@ export default function RunPanel({
                 acc[role] = [];
                 return acc;
               }
-              acc[role] = Array.from(
-                new Set(
-                  matrixAssignments
-                    .filter((a) => a.role === role && a.staff_id && knownStaffIds.has(a.staff_id))
-                    .map((a) => a.staff_id as string)
-                )
-              );
+              const roleAssignments = matrixAssignments.filter((a) => a.role === role);
+              const ids = new Set<string>();
+              roleAssignments.forEach((assignment) => {
+                const rawId = assignment.staff_id ? String(assignment.staff_id) : "";
+                if (isOpenLike(rawId)) {
+                  ids.add(FLOAT_ROW_ID);
+                  return;
+                }
+                ids.add(rawId);
+              });
+              const sorted = Array.from(ids).sort((a, b) => {
+                if (a === FLOAT_ROW_ID) return 1;
+                if (b === FLOAT_ROW_ID) return -1;
+                const aLabel = displayStaffMap[a] || a;
+                const bLabel = displayStaffMap[b] || b;
+                return aLabel.localeCompare(bLabel);
+              });
+              acc[role] = sorted;
               return acc;
             }, {});
-            const labelMapByStaff = matrixAssignments.reduce<Record<string, Record<string, string>>>((acc, a) => {
-              if (!a.staff_id) return acc;
-              acc[a.staff_id] = acc[a.staff_id] || {};
-              const label =
-                a.duty === "bleach"
-                  ? "Bleach"
-                  : a.duty === "open"
-                  ? "Open"
-                  : a.duty === "close"
-                  ? "Close"
-                  : a.duty === "mid"
-                  ? `Pod ${a.slot_index - 1}`
-                  : a.duty;
-              acc[a.staff_id][a.date] = label;
+            const labelMapByStaff = matrixAssignments.reduce<Record<string, Record<string, string[]>>>((acc, assignment) => {
+              const rawId = assignment.staff_id ? String(assignment.staff_id) : "";
+              const sid = isOpenLike(rawId) ? FLOAT_ROW_ID : rawId;
+              acc[sid] = acc[sid] || {};
+              acc[sid][assignment.date] = acc[sid][assignment.date] || [];
+              acc[sid][assignment.date].push(formatShiftLabel(assignment));
               return acc;
             }, {});
               const hasMatrix = uniqueDates.length > 0;
@@ -373,13 +391,13 @@ export default function RunPanel({
                         <tbody>
                           {staffIds.map((sid) => (
                             <tr key={`${role}-${sid}`}>
-                  <td>{displayStaffMap[sid] || sid}</td>
+                  <td>{sid === FLOAT_ROW_ID ? "FLOAT" : displayStaffMap[sid] || sid}</td>
                         {columns.map((col) =>
                           col.isSeparator ? (
                             <td key={`${sid}-${col.key}`} className="matrix-sep" aria-hidden="true" />
                           ) : (
-                            <td key={`${sid}-${col.key}`} style={{ textAlign: "center" }}>
-                              {labelMapByStaff[sid]?.[col.date as string] || ""}
+                            <td key={`${sid}-${col.key}`} style={{ textAlign: "center", whiteSpace: "pre-line" }}>
+                              {(labelMapByStaff[sid]?.[col.date as string] || []).join("\n")}
                             </td>
                           )
                         )}

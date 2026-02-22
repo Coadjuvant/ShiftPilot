@@ -35,6 +35,7 @@ from backend.scheduler import (
     export_schedule_to_excel,
     run_tournament,
 )
+from backend.scheduler.engine import OPEN_LABEL
 from backend.scheduler.model import DAYS, Assignment, ScheduleResult, ScheduleSlot, PTOEntry
 from backend.auth_db import (
     init_db,
@@ -699,7 +700,10 @@ def run_schedule(
         open_slots = sum(
             1
             for assignment in assignments
-            if assignment.staff_id is None or str(assignment.staff_id).upper() == "OPEN"
+            if (
+                assignment.staff_id is None
+                or str(assignment.staff_id).strip().upper() in {"OPEN", str(OPEN_LABEL).upper()}
+            )
         )
         start_label = (
             body.config.start_date.isoformat()
