@@ -41,7 +41,9 @@ export default function StaffPlanner() {
 
   const friendlyError = (err: any, fallback: string) => {
     const status = err?.response?.status;
+    const detail = err?.response?.data?.detail;
     if (status === 401) return "Invalid username or password";
+    if (status === 422 && detail) return String(detail);
     if (status === 422) return "Validation failed. Please check your inputs.";
     if (status === 409 && err?.response?.data?.detail) return String(err.response.data.detail);
     if (status === 409) return "Conflict: value already in use.";

@@ -265,6 +265,18 @@ def _open_slot_penalty(_slot: ScheduleSlot, _cfg: ScheduleConfig) -> float:
     return CONSTRAINT_HARD_THRESHOLD
 
 
+def _slot_priority(slot: ScheduleSlot) -> Tuple[int, int]:
+    if slot.role == "Tech":
+        duty = (slot.duty or "").lower()
+        if duty == "close":
+            return 0, int(slot.slot_index or 0)
+        if duty == "open":
+            return 1, int(slot.slot_index or 0)
+        if duty == "mid":
+            return 2, int(slot.slot_index or 0)
+    return 3, int(slot.slot_index or 0)
+
+
 def _tech_shift_position(slot: ScheduleSlot, tech_mid_slots_by_day: Dict[int, int]) -> Optional[int]:
     if slot.role != "Tech":
         return None
@@ -286,19 +298,8 @@ def _violates_daily_shift_rule(
     worked_today = member_state.day_shift_positions.get(slot.day_index, set())
     if slot.role != "Tech":
         return bool(worked_today)
-
-    pos = _tech_shift_position(slot, tech_mid_slots_by_day)
-    if pos is None:
-        return bool(worked_today)
-    if pos in worked_today:
-        return True
-    if len(worked_today) >= 2:
-        return True
-    if not worked_today:
-        return False
-    existing = next(iter(worked_today))
-    # Techs can work at most two same-day shifts, and those shifts must be adjacent.
-    return abs(existing - pos) != 1
+    # Techs are limited to one labeled patient-duty slot per day.
+    return bool(worked_today)
 
 
 def generate_schedule(
@@ -326,6 +327,7 @@ def generate_schedule(
         for slot in _build_slots(requirements_map, cfg)
         if (slot.role or "").strip().lower() in normalized_scheduled_roles
     ]
+    slots.sort(key=lambda slot: (slot.day_index, *_slot_priority(slot), (slot.role or "")))
     tech_mid_slots_by_day: Dict[int, int] = defaultdict(int)
     for slot in slots:
         if slot.role == "Tech" and slot.duty == "mid":

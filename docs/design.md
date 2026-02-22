@@ -49,9 +49,9 @@
      - `ceil(patient_count / patients_per_rn)`
      - `ceil(total_tech_slots / techs_per_rn)`
 3. Saturdays force `admin_count = 0`.
-4. Tech same-day rule:
-   - Max 2 shifts/day.
-   - If 2 shifts, they must be adjacent across `open -> mid(s) -> close`.
+4. Tech assignment order and daily rule:
+   - Tech `close` and `open` are assigned before Tech `mid` slots.
+   - Techs can hold only one labeled duty slot per day (`open`, `mid`, `mid 2`, `close`, `bleach`).
 5. Hard eligibility filters:
    - Role match, availability, PTO, open/close permissions, bleach permission.
 6. Slider semantics:
@@ -62,6 +62,9 @@
    - Tech open/close: stored as unfilled (`staff_id = null`).
    - Other slots: assigned to `FLOAT`.
    - Each unfilled slot adds fixed penalty `10`.
+8. Run failure rule:
+   - If any required Tech `open` or `close` slot is unfilled, the run is rejected with an error message.
+   - The API response includes why it failed and suggested fixes (availability/capability, demand, or hard constraints).
 
 ## Scoring Model
 

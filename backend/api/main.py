@@ -617,6 +617,32 @@ def run_schedule(
             scheduled_roles=active_roles,
             score_roles=active_roles,
         )
+        critical_unfilled: List[str] = []
+        for assignment in result.assignments:
+            slot = assignment.slot
+            if slot.role != "Tech":
+                continue
+            duty = (slot.duty or "").strip().lower()
+            if duty not in {"open", "close"}:
+                continue
+            staff_raw = "" if assignment.staff_id is None else str(assignment.staff_id).strip()
+            staff_norm = staff_raw.upper()
+            if not staff_raw or staff_norm in {"OPEN", str(OPEN_LABEL).upper()}:
+                duty_label = "Close (Bleach)" if slot.is_bleach else duty.capitalize()
+                critical_unfilled.append(f"{slot.date.isoformat()} {slot.day_name} {duty_label}")
+        if critical_unfilled:
+            preview = ", ".join(critical_unfilled[:6])
+            if len(critical_unfilled) > 6:
+                preview += f", +{len(critical_unfilled) - 6} more"
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Schedule failed: required Tech opener/closer coverage could not be filled. "
+                    f"Unfilled slots: {preview}. "
+                    "Suggested fix: add opener/closer-capable Tech availability (and bleach-capable closer for bleach day), "
+                    "reduce open/close demand, or lower hard constraints set to 10 that block these assignments."
+                ),
+            )
         assignments = [
             AssignmentOut(
                 date=assignment.slot.date,
@@ -726,6 +752,8 @@ def run_schedule(
             stats=result.stats,
             excel=excel_b64,
         )
+    except HTTPException as exc:
+        raise exc
     except Exception as exc:
         detail = str(exc) if not IS_PROD else "Invalid schedule request"
         raise HTTPException(status_code=400, detail=detail) from exc

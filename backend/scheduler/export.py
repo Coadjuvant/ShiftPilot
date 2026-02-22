@@ -11,9 +11,19 @@ from .model import Assignment, ScheduleResult, StaffMember
 from .engine import OPEN_LABEL
 
 LEGACY_OPEN_LABEL = "OPEN"
+UNFILLED_LABEL = "UNFILLED"
 
 
 def _is_open_staff_id(staff_id: object) -> bool:
+    if staff_id is None:
+        return False
+    text = str(staff_id).strip()
+    if not text:
+        return False
+    return text.upper() in {OPEN_LABEL.upper(), LEGACY_OPEN_LABEL}
+
+
+def _is_unfilled_staff_id(staff_id: object) -> bool:
     if staff_id is None:
         return True
     text = str(staff_id).strip()
@@ -44,7 +54,7 @@ def _roster_rows(result: ScheduleResult, staff_lookup: Dict[str, StaffMember], a
         slot = assignment.slot
         if allowed_roles and slot.role not in allowed_roles:
             continue
-        normalized_staff_id = OPEN_LABEL if _is_open_staff_id(assignment.staff_id) else assignment.staff_id
+        normalized_staff_id = OPEN_LABEL if _is_open_staff_id(assignment.staff_id) else (assignment.staff_id or "")
         staff = staff_lookup.get(normalized_staff_id or "", None)
         yield {
             "Date": slot.date.strftime("%Y-%m-%d"),
@@ -63,7 +73,7 @@ def _coverage_rows(result: ScheduleResult):
     for assignment in result.assignments:
         slot = assignment.slot
         key = (slot.date.strftime("%Y-%m-%d"), slot.day_name, slot.role, slot.duty)
-        filled = not _is_open_staff_id(assignment.staff_id)
+        filled = not _is_unfilled_staff_id(assignment.staff_id)
         day_role_counts[key] = day_role_counts.get(key, 0) + (1 if filled else 0)
     for (date_str, day_name, role, duty), count in sorted(day_role_counts.items()):
         yield {
@@ -93,7 +103,7 @@ def _note_rows(result: ScheduleResult, staff_lookup: Dict[str, StaffMember]) -> 
         if assignment.notes:
             for n in assignment.notes:
                 notes_by_date[date_str].add(n)
-        if _is_open_staff_id(assignment.staff_id):
+        if _is_unfilled_staff_id(assignment.staff_id):
             notes_by_date[date_str].add(f"Open slot: {slot.role} {_shift_label(assignment)}")
     rows: List[Dict[str, str]] = []
     for date_str in sorted(notes_by_date.keys()):
@@ -114,7 +124,7 @@ def _notes_map(result: ScheduleResult) -> Dict[str, str]:
         if assignment.notes:
             for n in assignment.notes:
                 out[date_str].add(n)
-        if _is_open_staff_id(assignment.staff_id):
+        if _is_unfilled_staff_id(assignment.staff_id):
             out[date_str].add(f"Open slot: {slot.role} {_shift_label(assignment)}")
     return {d: "; ".join(sorted(vals)) for d, vals in out.items()}
 
@@ -154,7 +164,12 @@ def _role_matrix(
         slot = assignment.slot
         if slot.role != role:
             continue
-        staff_id = OPEN_LABEL if _is_open_staff_id(assignment.staff_id) else str(assignment.staff_id)
+        if _is_open_staff_id(assignment.staff_id):
+            staff_id = OPEN_LABEL
+        elif assignment.staff_id is None or not str(assignment.staff_id).strip():
+            staff_id = ""
+        else:
+            staff_id = str(assignment.staff_id)
         text = _shift_label(assignment)
         if assignment.notes:
             text += f" ({'; '.join(assignment.notes)})"
@@ -175,6 +190,12 @@ def _role_matrix(
         row = {"Name": OPEN_LABEL, "Role": role}
         for dt, label in zip(dates, date_labels):
             cell = "\n".join(entries[OPEN_LABEL].get(dt, []))
+            row[label] = cell
+        rows.append(row)
+    if entries.get(""):
+        row = {"Name": UNFILLED_LABEL, "Role": role}
+        for dt, label in zip(dates, date_labels):
+            cell = "\n".join(entries[""].get(dt, []))
             row[label] = cell
         rows.append(row)
 
@@ -199,14 +220,16 @@ def _roster_matrix(
         duty_label = _shift_label(assignment)
         col = f"{slot.role}-{duty_label}-{slot.slot_index}"
         cols.add(col)
-        name = (
-            OPEN_LABEL
-            if _is_open_staff_id(assignment.staff_id)
-            else staff_lookup.get(
-                assignment.staff_id,
-                StaffMember(id=assignment.staff_id, name=assignment.staff_id, role=slot.role),
+        if _is_open_staff_id(assignment.staff_id):
+            name = OPEN_LABEL
+        elif assignment.staff_id is None or not str(assignment.staff_id).strip():
+            name = UNFILLED_LABEL
+        else:
+            staff_id = str(assignment.staff_id)
+            name = staff_lookup.get(
+                staff_id,
+                StaffMember(id=staff_id, name=staff_id, role=slot.role),
             ).name
-        )
         data[date_str][col] = name
 
     def _col_key(col: str):
@@ -263,8 +286,8 @@ def export_schedule_to_excel(
     # recompute stats for filtered roles (filled slots only)
     filtered_stats: Dict[str, int] = defaultdict(int)
     for a in filtered_assignments:
-        if not _is_open_staff_id(a.staff_id):
-            filtered_stats[a.staff_id] += 1
+        if not _is_unfilled_staff_id(a.staff_id):
+            filtered_stats[str(a.staff_id)] += 1
 
     class _FilteredResult:
         def __init__(self, assignments, stats):

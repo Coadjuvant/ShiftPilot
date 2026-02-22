@@ -57,6 +57,7 @@ export default function RunPanel({
   onLoadLatest
 }: Props) {
   const FLOAT_ROW_ID = "__FLOAT__";
+  const UNFILLED_ROW_ID = "__UNFILLED__";
   const { configName, timezone, startDate, weeks, patientsPerTech, patientsPerRn, techsPerRn, trials, baseSeed, usePrevSeed, exportRoles } = config;
   const hasNoExportRoles = exportRoles.length === 0;
   const hasRunErrors = hasErrors || hasNoExportRoles;
@@ -75,7 +76,7 @@ export default function RunPanel({
   };
 
   const isOpenLike = (staffId: string | null | undefined) => {
-    if (!staffId) return true;
+    if (!staffId) return false;
     const value = String(staffId).trim().toUpperCase();
     return value === "OPEN" || value === "FLOAT";
   };
@@ -321,6 +322,10 @@ export default function RunPanel({
               const ids = new Set<string>();
               roleAssignments.forEach((assignment) => {
                 const rawId = assignment.staff_id ? String(assignment.staff_id) : "";
+                if (!rawId.trim()) {
+                  ids.add(UNFILLED_ROW_ID);
+                  return;
+                }
                 if (isOpenLike(rawId)) {
                   ids.add(FLOAT_ROW_ID);
                   return;
@@ -328,6 +333,8 @@ export default function RunPanel({
                 ids.add(rawId);
               });
               const sorted = Array.from(ids).sort((a, b) => {
+                if (a === UNFILLED_ROW_ID) return 1;
+                if (b === UNFILLED_ROW_ID) return -1;
                 if (a === FLOAT_ROW_ID) return 1;
                 if (b === FLOAT_ROW_ID) return -1;
                 const aLabel = displayStaffMap[a] || a;
@@ -339,7 +346,7 @@ export default function RunPanel({
             }, {});
             const labelMapByStaff = matrixAssignments.reduce<Record<string, Record<string, string[]>>>((acc, assignment) => {
               const rawId = assignment.staff_id ? String(assignment.staff_id) : "";
-              const sid = isOpenLike(rawId) ? FLOAT_ROW_ID : rawId;
+              const sid = !rawId.trim() ? UNFILLED_ROW_ID : isOpenLike(rawId) ? FLOAT_ROW_ID : rawId;
               acc[sid] = acc[sid] || {};
               acc[sid][assignment.date] = acc[sid][assignment.date] || [];
               acc[sid][assignment.date].push(formatShiftLabel(assignment));
@@ -395,7 +402,9 @@ export default function RunPanel({
                         <tbody>
                           {staffIds.map((sid) => (
                             <tr key={`${role}-${sid}`}>
-                  <td>{sid === FLOAT_ROW_ID ? "FLOAT" : displayStaffMap[sid] || sid}</td>
+                  <td>
+                    {sid === FLOAT_ROW_ID ? "FLOAT" : sid === UNFILLED_ROW_ID ? "UNFILLED" : displayStaffMap[sid] || sid}
+                  </td>
                         {columns.map((col) =>
                           col.isSeparator ? (
                             <td key={`${sid}-${col.key}`} className="matrix-sep" aria-hidden="true" />
