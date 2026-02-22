@@ -11,20 +11,47 @@ BRANCH="main"  # or "dev" - whichever branch you deploy from
 LOG_FILE="/var/log/shiftpilot-deploy.log"
 LOCK_FILE="/tmp/shiftpilot-deploy.lock"
 
+# Enable color unless explicitly disabled.
+if [ -n "${NO_COLOR:-}" ]; then
+    USE_COLOR=0
+else
+    USE_COLOR=1
+fi
+
 # Colors for output
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
 YELLOW=$'\033[1;33m'
-NC=$'\033[0m' # No Color
+CYAN=$'\033[0;36m'
+NC=$'\033[0m'
 
-# Logging function
-log() {
-    echo -e "[$(date +'%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+log_line() {
+    local level="$1"
+    local color="$2"
+    shift 2
+    local message="$*"
+    local timestamp
+    timestamp="$(date +'%Y-%m-%d %H:%M:%S')"
+    local plain="[$timestamp] [$level] $message"
+
+    mkdir -p "$(dirname "$LOG_FILE")"
+    echo "$plain" >> "$LOG_FILE"
+
+    if [ "$USE_COLOR" -eq 1 ]; then
+        printf "%b\n" "${color}${plain}${NC}"
+    else
+        printf "%s\n" "$plain"
+    fi
 }
+
+log_info() { log_line "INFO" "$CYAN" "$*"; }
+log_warn() { log_line "WARN" "$YELLOW" "$*"; }
+log_error() { log_line "ERROR" "$RED" "$*"; }
+log_success() { log_line "SUCCESS" "$GREEN" "$*"; }
 
 # Check if script is already running
 if [ -f "$LOCK_FILE" ]; then
-    log "${YELLOW}Deployment already in progress. Exiting.${NC}"
+    log_warn "Deployment already in progress. Exiting."
     exit 0
 fi
 
@@ -32,16 +59,16 @@ fi
 touch "$LOCK_FILE"
 trap "rm -f $LOCK_FILE" EXIT
 
-log "${GREEN}=== Starting auto-deployment check ===${NC}"
+log_success "=== Starting auto-deployment check ==="
 
 # Navigate to repo directory
 cd "$REPO_DIR" || {
-    log "${RED}ERROR: Could not navigate to $REPO_DIR${NC}"
+    log_error "Could not navigate to $REPO_DIR"
     exit 1
 }
 
 # Fetch latest changes from remote
-log "Fetching latest changes from GitHub..."
+log_info "Fetching latest changes from GitHub..."
 git fetch origin "$BRANCH" 2>&1 | tee -a "$LOG_FILE"
 
 # Check if there are new commits
@@ -49,25 +76,25 @@ LOCAL=$(git rev-parse @)
 REMOTE=$(git rev-parse @{u})
 
 if [ "$LOCAL" = "$REMOTE" ]; then
-    log "${GREEN}No changes detected. Repository is up to date.${NC}"
+    log_success "No changes detected. Repository is up to date."
     exit 0
 fi
 
-log "${YELLOW}Changes detected! Starting deployment...${NC}"
+log_warn "Changes detected! Starting deployment..."
 
 # Stash any local changes (just in case)
 if ! git diff-index --quiet HEAD --; then
-    log "Stashing local changes..."
+    log_warn "Stashing local changes..."
     git stash
 fi
 
 # Pull latest changes
-log "Pulling latest changes from $BRANCH..."
+log_info "Pulling latest changes from $BRANCH..."
 git pull origin "$BRANCH" 2>&1 | tee -a "$LOG_FILE"
 
 # Check if docker-compose.yml exists
 if [ -f "docker-compose.yml" ]; then
-    log "Rebuilding and restarting Docker containers..."
+    log_info "Rebuilding and restarting Docker containers..."
 
     # Capture git commit and date for version display
     GIT_COMMIT=$(git rev-parse --short HEAD)
@@ -75,7 +102,7 @@ if [ -f "docker-compose.yml" ]; then
     export VITE_APP_BUILD="$GIT_DATE.$GIT_COMMIT"
     export VITE_APP_VERSION="$GIT_COMMIT"
     export VITE_GIT_COMMIT="$GIT_COMMIT"
-    log "Building with version: $GIT_DATE.$GIT_COMMIT"
+    log_info "Building with version: $GIT_DATE.$GIT_COMMIT"
 
     # Stop containers
     docker-compose down 2>&1 | tee -a "$LOG_FILE"
@@ -84,22 +111,22 @@ if [ -f "docker-compose.yml" ]; then
     docker-compose up -d --build 2>&1 | tee -a "$LOG_FILE"
 
     # Wait for services to be healthy
-    log "Waiting for services to start..."
+    log_info "Waiting for services to start..."
     sleep 10
 
     # Check if containers are running
     if docker-compose ps | grep -q "Up"; then
-        log "${GREEN}Docker containers successfully restarted${NC}"
+        log_success "Docker containers successfully restarted"
     else
-        log "${RED}WARNING: Some containers may not be running properly${NC}"
+        log_warn "Some containers may not be running properly"
         docker-compose ps | tee -a "$LOG_FILE"
     fi
 else
-    log "${YELLOW}No docker-compose.yml found. Running manual build...${NC}"
+    log_warn "No docker-compose.yml found. Running manual build..."
 
     # Build frontend if package.json exists
     if [ -f "frontend/package.json" ]; then
-        log "Building frontend..."
+        log_info "Building frontend..."
         cd frontend
         npm install 2>&1 | tee -a "$LOG_FILE"
         npm run build 2>&1 | tee -a "$LOG_FILE"
@@ -108,7 +135,7 @@ else
 
     # Install backend dependencies if requirements.txt exists
     if [ -f "backend/requirements.txt" ]; then
-        log "Installing backend dependencies..."
+        log_info "Installing backend dependencies..."
         cd backend
         pip install -r requirements.txt 2>&1 | tee -a "$LOG_FILE"
         cd ..
@@ -116,16 +143,16 @@ else
 
     # Restart backend service (adjust service name as needed)
     if systemctl is-active --quiet shiftpilot-backend; then
-        log "Restarting backend service..."
+        log_info "Restarting backend service..."
         sudo systemctl restart shiftpilot-backend 2>&1 | tee -a "$LOG_FILE"
     fi
 fi
 
 # Log the deployed commit
 DEPLOYED_COMMIT=$(git rev-parse --short HEAD)
-log "${GREEN}=== Deployment completed successfully ===${NC}"
-log "Deployed commit: $DEPLOYED_COMMIT"
-log "Commit message: $(git log -1 --pretty=%B)"
+log_success "=== Deployment completed successfully ==="
+log_info "Deployed commit: $DEPLOYED_COMMIT"
+log_info "Commit message: $(git log -1 --pretty=%B)"
 
 # Optional: Send notification (uncomment if you want)
 # curl -X POST -H 'Content-type: application/json' \

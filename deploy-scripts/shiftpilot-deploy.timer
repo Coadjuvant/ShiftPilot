@@ -13,9 +13,6 @@ OnCalendar=*:0/5
 # Run 1 minute after boot
 OnBootSec=1min
 
-# If the service fails, retry after 2 minutes
-OnFailure=2min
-
 # Ensure the timer is persistent across reboots
 Persistent=true
 
