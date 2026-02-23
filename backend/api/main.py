@@ -628,6 +628,32 @@ def run_schedule(
             scheduled_roles=active_roles,
             score_roles=active_roles,
         )
+        essential_float_slots: List[str] = []
+        for assignment in result.assignments:
+            slot = assignment.slot
+            if slot.role != "Tech":
+                continue
+            duty = (slot.duty or "").strip().lower()
+            if duty not in {"open", "close"}:
+                continue
+            staff_raw = "" if assignment.staff_id is None else str(assignment.staff_id).strip()
+            staff_norm = staff_raw.upper()
+            if not staff_raw or staff_norm in {"OPEN", str(OPEN_LABEL).upper()}:
+                duty_label = "Close (Bleach)" if slot.is_bleach else duty.capitalize()
+                essential_float_slots.append(f"{slot.date.isoformat()} {slot.day_name} {duty_label}")
+        if essential_float_slots:
+            preview = ", ".join(essential_float_slots[:6])
+            if len(essential_float_slots) > 6:
+                preview += f", +{len(essential_float_slots) - 6} more"
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Schedule failed: essential opener/closer coverage became FLOAT. "
+                    f"Affected slots: {preview}. "
+                    "Suggested fix: add Tech staff who can open/close (and bleach-capable closer on bleach day), "
+                    "reduce open/close demand for the affected days, or lower conflicting hard constraints set to 10."
+                ),
+            )
         assignments = [
             AssignmentOut(
                 date=assignment.slot.date,

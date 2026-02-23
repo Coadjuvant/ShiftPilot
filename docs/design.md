@@ -58,16 +58,15 @@
    - `10` means hard constraint (cannot be violated).
    - `1..9` means soft penalty added when violated.
    - `0` disables that penalty.
-7. If a slot cannot be staffed:
-   - Tech open/close: stored as unfilled (`staff_id = null`).
-   - Other slots: assigned to `FLOAT`.
-   - Each unfilled slot adds fixed penalty `10`.
-8. Unfilled slot behavior:
-   - If a slot cannot be staffed under constraints, it is assigned to `FLOAT` and the run still completes.
-   - Each unfilled/FLOAT slot adds penalty `10`, so tournament selection still prefers runs with fewer gaps.
-9. Hard 4-day cap behavior:
-   - If Tech or RN 4-day cap slider is `10`, the scheduler should avoid assigning a 5th day for that role.
-   - If demand cannot be satisfied under hard constraints, remaining non-critical slots fall back to `FLOAT`/unfilled handling.
+7. If a slot cannot be staffed under constraints:
+   - It is assigned to `FLOAT`.
+   - Each `FLOAT` slot adds fixed penalty `10`.
+8. Essential slot failure rule:
+   - If a Tech `open` or Tech `close`/bleach slot becomes `FLOAT`, the run is rejected.
+   - The API returns an actionable message with suggestions (staff capability/availability, demand adjustment, or hard-constraint conflict).
+9. Hard 4-day cap behavior (per clinic week `Mon-Sat`):
+   - If Tech or RN 4-day cap slider is `10`, the scheduler blocks a 5th worked day for that role.
+   - When demand still cannot be fully covered, non-essential gaps are represented as `FLOAT`.
 
 ## Scoring Model
 
