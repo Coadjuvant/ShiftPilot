@@ -588,6 +588,17 @@ def run_schedule(
         ]
         if len(requirements) != len(DAYS):
             raise ValueError("Requirements must include all clinic days (Mon-Sat).")
+        if body.config.start_date.weekday() != 0:
+            selected = body.config.start_date.isoformat()
+            weekday = body.config.start_date.strftime("%A")
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Schedule failed: start date must be a Monday for Mon-Sat demand templates. "
+                    f"You selected {selected} ({weekday}). "
+                    "Suggested fix: choose the Monday for that schedule week, then run again."
+                ),
+            )
         toggles = ConstraintToggles(**body.config.toggles.dict())
         config = ScheduleConfig(
             clinic_name=body.config.clinic_name,

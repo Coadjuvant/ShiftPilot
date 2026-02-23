@@ -34,6 +34,24 @@ type UserInfo = {
 };
 
 export default function StaffPlanner() {
+  const toLocalYmd = (dt: Date) => {
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const d = String(dt.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+  const parseLocalYmd = (value: string): Date | null => {
+    const parts = value.split("-").map(Number);
+    if (parts.length >= 3 && parts.every((n) => Number.isFinite(n))) {
+      const dt = new Date(parts[0], parts[1] - 1, parts[2]);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed;
+  };
+  const todayLocalYmd = () => toLocalYmd(new Date());
+
   const genId = () => {
     if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
     return Math.random().toString(36).slice(2, 10);
@@ -63,13 +81,10 @@ export default function StaffPlanner() {
     });
   };
   const formatDateYmd = (value: string) => {
-    const parts = value.split("-").map(Number);
-    if (parts.length >= 3 && parts.every((n) => Number.isFinite(n))) {
-      return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])).toISOString().slice(0, 10);
-    }
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return value;
-    return parsed.toISOString().slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    const parsed = parseLocalYmd(value);
+    if (!parsed) return value;
+    return toLocalYmd(parsed);
   };
   const coerceConstraintWeight = (value: unknown, fallback = 10) => {
     if (typeof value === "boolean") return value ? 10 : 0;
@@ -83,10 +98,11 @@ export default function StaffPlanner() {
       return `${base || "schedule"}.${ext}`;
     }
     const start = formatDateYmd(meta.start_date);
-    const startDt = new Date(`${start}T00:00:00Z`);
+    const startDt = parseLocalYmd(start);
+    if (!startDt) return `${base || "schedule"}.${ext}`;
     const endDt = new Date(startDt);
-    endDt.setUTCDate(endDt.getUTCDate() + meta.weeks * 7 - 2);
-    const end = endDt.toISOString().slice(0, 10);
+    endDt.setDate(endDt.getDate() + meta.weeks * 7 - 2);
+    const end = toLocalYmd(endDt);
     return `${base || "schedule"}-${start}_to_${end}.${ext}`;
   };
   const downloadSavedSchedule = async () => {
@@ -204,7 +220,7 @@ export default function StaffPlanner() {
   const [loginPass, setLoginPass] = useState<string>("");
   const [inviteToken, setInviteToken] = useState<string>("");
   const [loginError, setLoginError] = useState<string>("");
-  const [startDate, setStartDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState<string>(todayLocalYmd());
   const [weeks, setWeeks] = useState<number>(1);
   const [patientsPerTech, setPatientsPerTech] = useState<number>(4);
   const [patientsPerRn, setPatientsPerRn] = useState<number>(12);
@@ -245,11 +261,11 @@ export default function StaffPlanner() {
   );
   const availableBleachIds = uniqueStaffIds.filter((sid) => !bleachRotation.includes(sid));
   const scheduleEnd = (() => {
-    const start = startDate ? new Date(startDate) : null;
-    if (!start || Number.isNaN(start.getTime())) return "";
+    const start = startDate ? parseLocalYmd(startDate) : null;
+    if (!start) return "";
     const end = new Date(start);
     end.setDate(end.getDate() + weeks * 7 - 1);
-    return end.toISOString().slice(0, 10);
+    return toLocalYmd(end);
   })();
 
   const formatGeneratedAt = (value?: string) => {
@@ -305,7 +321,7 @@ export default function StaffPlanner() {
     setPtoRows([]);
     setConfigName("Demo Clinic");
     setTimezone("UTC");
-    setStartDate(new Date().toISOString().slice(0, 10));
+    setStartDate(todayLocalYmd());
     setWeeks(1);
     setPatientsPerTech(4);
     setPatientsPerRn(12);
@@ -366,21 +382,27 @@ export default function StaffPlanner() {
       const who = staffNameMap[row.staff_id] || row.staff_id || `PTO row ${idx + 1}`;
       if (!row.staff_id) return `${who}: missing staff`;
       if (!row.start_date) return `${who}: missing start date`;
-      const start = new Date(row.start_date);
-      if (Number.isNaN(start.getTime())) return `${who}: invalid start date`;
+      const start = parseLocalYmd(row.start_date);
+      if (!start) return `${who}: invalid start date`;
       const endVal = row.end_date || row.start_date;
-      const end = new Date(endVal);
-      if (Number.isNaN(end.getTime())) return `${who}: invalid end date`;
+      const end = parseLocalYmd(endVal);
+      if (!end) return `${who}: invalid end date`;
       if (end < start) return `${who}: end before start`;
       if (scheduleEnd) {
-        const schedStart = new Date(startDate);
-        const schedEnd = new Date(scheduleEnd);
-        if (start < schedStart || end > schedEnd) return `${who}: outside schedule window`;
+        const schedStart = parseLocalYmd(startDate);
+        const schedEnd = parseLocalYmd(scheduleEnd);
+        if (schedStart && schedEnd && (start < schedStart || end > schedEnd)) {
+          return `${who}: outside schedule window`;
+        }
       }
       return "";
     })
     .filter(Boolean);
   const hasErrors = staffWarnings.length > 0 || demandWarnings.length > 0 || ptoWarnings.length > 0;
+  const statusText = (status || "").trim();
+  const errorText = (lastError || "").trim();
+  const showStatusLine = isAdmin || !statusText.toLowerCase().startsWith("api status");
+  const showErrorLine = errorText.length > 0 && errorText !== statusText;
 
   // --- useEffects ---
   useEffect(() => {
@@ -701,6 +723,7 @@ export default function StaffPlanner() {
       return;
     }
     try {
+      setLastError("");
       setIsRunning(true);
       setProgress(0);
       if (progressRef.current) clearInterval(progressRef.current);
@@ -741,12 +764,12 @@ export default function StaffPlanner() {
         const entries: Array<{ staff_id: string; date: string }> = [];
         for (const row of ptoRows) {
           if (!row.staff_id || !row.start_date) continue;
-          const start = new Date(row.start_date);
-          const end = new Date(row.end_date || row.start_date);
-          if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue;
+          const start = parseLocalYmd(row.start_date);
+          const end = parseLocalYmd(row.end_date || row.start_date);
+          if (!start || !end) continue;
           const [a, b] = start <= end ? [start, end] : [end, start];
           for (let dt = new Date(a); dt <= b; dt.setDate(dt.getDate() + 1)) {
-            entries.push({ staff_id: row.staff_id, date: dt.toISOString().slice(0, 10) });
+            entries.push({ staff_id: row.staff_id, date: toLocalYmd(dt) });
           }
         }
         return entries;
@@ -796,6 +819,7 @@ export default function StaffPlanner() {
         } | Next bleach in rotation: ${res.bleach_cursor} | Assignments: ${res.assignments.length}`
       );
       setStatus("Schedule generated.");
+      setLastError("");
       refreshLatestMeta();
       try {
         localStorage.setItem("latest_schedule_ts", new Date().toISOString());
@@ -995,8 +1019,8 @@ export default function StaffPlanner() {
             : "No saved schedule"}
         </span>
       </div>
-      {isAdmin || !status.toLowerCase().startsWith("api status") ? <p>{status}</p> : null}
-      {lastError && <p style={{ color: "#b45309", marginTop: "0.35rem" }}>{lastError}</p>}
+      {showStatusLine ? <p>{statusText}</p> : null}
+      {showErrorLine ? <p style={{ color: "#b45309", marginTop: "0.35rem" }}>{errorText}</p> : null}
       <div
         style={{
           pointerEvents: isAuthed ? "auto" : "none",
