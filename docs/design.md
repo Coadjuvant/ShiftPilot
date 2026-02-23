@@ -62,9 +62,12 @@
    - Tech open/close: stored as unfilled (`staff_id = null`).
    - Other slots: assigned to `FLOAT`.
    - Each unfilled slot adds fixed penalty `10`.
-8. Run failure rule:
-   - If any required Tech `open` or `close` slot is unfilled, the run is rejected with an error message.
-   - The API response includes why it failed and suggested fixes (availability/capability, demand, or hard constraints).
+8. Unfilled slot behavior:
+   - If a slot cannot be staffed under constraints, it is assigned to `FLOAT` and the run still completes.
+   - Each unfilled/FLOAT slot adds penalty `10`, so tournament selection still prefers runs with fewer gaps.
+9. Hard 4-day cap behavior:
+   - If Tech or RN 4-day cap slider is `10`, the scheduler should avoid assigning a 5th day for that role.
+   - If demand cannot be satisfied under hard constraints, remaining non-critical slots fall back to `FLOAT`/unfilled handling.
 
 ## Scoring Model
 

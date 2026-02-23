@@ -170,6 +170,8 @@ def _is_available(
 
 
 def _clamp_weight(value: object) -> float:
+    if isinstance(value, bool):
+        return CONSTRAINT_HARD_THRESHOLD if value else 0.0
     try:
         weight = float(value)
     except (TypeError, ValueError):
@@ -456,10 +458,7 @@ def generate_schedule(
         if chosen is None:
             notes = [note] if note else []
             notes.append("Needs coverage")
-            if slot.role == "Tech" and slot.duty in ("open", "close"):
-                assignments.append(Assignment(slot=slot, staff_id=None, notes=notes))
-            else:
-                assignments.append(Assignment(slot=slot, staff_id=OPEN_LABEL, notes=notes))
+            assignments.append(Assignment(slot=slot, staff_id=OPEN_LABEL, notes=notes))
             if role_is_scored:
                 total_penalty += _open_slot_penalty(slot, cfg)
             continue
