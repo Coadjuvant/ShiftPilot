@@ -94,3 +94,8 @@
 - Backend: FastAPI (`backend/api/main.py`) + scheduler engine (`backend/scheduler/engine.py`).
 - Frontend: React + TypeScript (`frontend/`).
 - Main run endpoint: `POST /schedule/run`.
+
+## Export Tabs
+
+- `Per Staff Long`: one row per assignment (`Staff`, `Date`, `Day`, `Shift`, `Role`, `Duty`, `Notes`).
+- `Per Staff Wide`: one row per staff member, date columns across the schedule window, cells containing assigned shift label(s).
