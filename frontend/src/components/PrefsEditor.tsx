@@ -9,7 +9,7 @@ export default function PrefsEditor({ rows, onChange }: Props) {
   return (
     <div className="card" style={{ marginTop: "1rem" }}>
       <h3>Preference Weights</h3>
-      <p className="muted">Lower values avoid (0), higher values prefer (10), 5 is neutral. Set separately for MWF vs TTS.</p>
+      <p className="muted">Lower values prefer (0), higher values avoid (10), 5 is neutral. Set separately for MWF vs TTS.</p>
       {rows.length === 0 ? (
         <p className="muted">Add staff members in the Staff tab to set preferences.</p>
       ) : (

@@ -92,6 +92,11 @@ export default function StaffPlanner() {
     if (!Number.isFinite(parsed)) return fallback;
     return Math.min(10, Math.max(0, parsed));
   };
+  const coercePrefWeight = (value: unknown, fallback = 5) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(10, Math.max(0, parsed));
+  };
   const buildScheduleFilename = (meta: SavedSchedule | null, ext: "xlsx" | "csv") => {
     const base = (meta?.clinic_name || configName || "schedule").trim().replace(/\s+/g, "-").toLowerCase();
     if (!meta?.start_date || typeof meta.weeks !== "number") {
@@ -531,12 +536,12 @@ export default function StaffPlanner() {
             acc[day] = Boolean(row[day] ?? row?.availability?.[day] ?? true);
             return acc;
           }, {}),
-          pref_open_mwf: 5 - Number(row.pref_open_mwf ?? row.open_mwf ?? 0),
-          pref_open_tts: 5 - Number(row.pref_open_tts ?? row.open_tts ?? 0),
-          pref_mid_mwf: 5 - Number(row.pref_mid_mwf ?? row.mid_mwf ?? 0),
-          pref_mid_tts: 5 - Number(row.pref_mid_tts ?? row.mid_tts ?? 0),
-          pref_close_mwf: 5 - Number(row.pref_close_mwf ?? row.close_mwf ?? 0),
-          pref_close_tts: 5 - Number(row.pref_close_tts ?? row.close_tts ?? 0)
+          pref_open_mwf: coercePrefWeight(row.pref_open_mwf ?? row.open_mwf, 5),
+          pref_open_tts: coercePrefWeight(row.pref_open_tts ?? row.open_tts, 5),
+          pref_mid_mwf: coercePrefWeight(row.pref_mid_mwf ?? row.mid_mwf, 5),
+          pref_mid_tts: coercePrefWeight(row.pref_mid_tts ?? row.mid_tts, 5),
+          pref_close_mwf: coercePrefWeight(row.pref_close_mwf ?? row.close_mwf, 5),
+          pref_close_tts: coercePrefWeight(row.pref_close_tts ?? row.close_tts, 5)
         }));
         setStaffRows(normalized.length ? normalized : [{ id: "", name: "", role: "Tech" }]);
       }
@@ -600,12 +605,12 @@ export default function StaffPlanner() {
       export_roles: exportRoles,
       staff: staffRows.map((s) => ({
         ...s,
-        pref_open_mwf: 5 - (s.pref_open_mwf ?? 5),
-        pref_open_tts: 5 - (s.pref_open_tts ?? 5),
-        pref_mid_mwf: 5 - (s.pref_mid_mwf ?? 5),
-        pref_mid_tts: 5 - (s.pref_mid_tts ?? 5),
-        pref_close_mwf: 5 - (s.pref_close_mwf ?? 5),
-        pref_close_tts: 5 - (s.pref_close_tts ?? 5)
+        pref_open_mwf: coercePrefWeight(s.pref_open_mwf, 5),
+        pref_open_tts: coercePrefWeight(s.pref_open_tts, 5),
+        pref_mid_mwf: coercePrefWeight(s.pref_mid_mwf, 5),
+        pref_mid_tts: coercePrefWeight(s.pref_mid_tts, 5),
+        pref_close_mwf: coercePrefWeight(s.pref_close_mwf, 5),
+        pref_close_tts: coercePrefWeight(s.pref_close_tts, 5)
       })),
       demand: demandRows,
       pto: ptoRows
@@ -743,12 +748,12 @@ export default function StaffPlanner() {
           return acc;
         }, {}),
         preferences: {
-          open_mwf: 5 - (s.pref_open_mwf ?? 5),
-          open_tts: 5 - (s.pref_open_tts ?? 5),
-          mid_mwf: 5 - (s.pref_mid_mwf ?? 5),
-          mid_tts: 5 - (s.pref_mid_tts ?? 5),
-          close_mwf: 5 - (s.pref_close_mwf ?? 5),
-          close_tts: 5 - (s.pref_close_tts ?? 5)
+          open_mwf: coercePrefWeight(s.pref_open_mwf, 5),
+          open_tts: coercePrefWeight(s.pref_open_tts, 5),
+          mid_mwf: coercePrefWeight(s.pref_mid_mwf, 5),
+          mid_tts: coercePrefWeight(s.pref_mid_tts, 5),
+          close_mwf: coercePrefWeight(s.pref_close_mwf, 5),
+          close_tts: coercePrefWeight(s.pref_close_tts, 5)
         }
       }));
       const requirements = demandRows.map((row) => ({
