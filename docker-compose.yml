@@ -31,9 +31,10 @@ services:
       - ADMIN_LICENSE=${ADMIN_LICENSE}
       - AUTH_BACKEND=${AUTH_BACKEND}
       - DATABASE_URL=${DATABASE_URL}
-      - GEOIP_API_URL=${GEOIP_API_URL}
-      - GEOIP_API_TIMEOUT=${GEOIP_API_TIMEOUT}
-      - GEOIP_CACHE_TTL=${GEOIP_CACHE_TTL}
+      - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-http://localhost:8080,http://localhost:5173,http://127.0.0.1:8080,http://127.0.0.1:5173}
+      - GEOIP_API_URL=${GEOIP_API_URL:-}
+      - GEOIP_API_TIMEOUT=${GEOIP_API_TIMEOUT:-2.0}
+      - GEOIP_CACHE_TTL=${GEOIP_CACHE_TTL:-3600}
     depends_on:
       - db
     networks:

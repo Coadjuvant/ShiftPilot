@@ -14,11 +14,14 @@ This app has a React/Vite frontend and a FastAPI backend. Below are simple steps
 ### Using the provided Dockerfile
 - `backend/Dockerfile` builds the FastAPI server. It expects to run from the repository root with `./backend` copied in.
 - Required env vars:
+  - `APP_ENV=prod`
   - `JWT_SECRET` (choose a strong random string)
   - `AUTH_BACKEND=postgres`
   - `DATABASE_URL=postgres://USER:PASSWORD@HOST:PORT/DBNAME`
-  - Optional: `ADMIN_USER`, `ADMIN_PASS`, `LICENSE_KEY` (defaults: admin/admin/DEMO)
-  - If you want to force JSON fallback: `AUTH_BACKEND=json` and `AUTH_STORE_PATH=/data/auth_store.json`
+  - `CORS_ALLOW_ORIGINS=https://your-frontend-domain.example`
+  - Optional: `ADMIN_USER`, `ADMIN_PASS`, `ADMIN_LICENSE`
+
+JSON auth/config storage is no longer supported at runtime. Use Postgres for production and local Docker preview.
 
 ### Fly.io (example)
 1. Install `flyctl`, run `fly launch` (choose a region, supply `backend/Dockerfile`).
@@ -27,7 +30,7 @@ This app has a React/Vite frontend and a FastAPI backend. Below are simple steps
 4. Deploy: `fly deploy`.
 
 ### Render (example)
-1. Create a new Web Service, point to this repo, set build command `docker build -t app .` and start command `uvicorn api.main:app --host 0.0.0.0 --port 8000`.
+1. Create a new Web Service, point to this repo, set build command `docker build -t app .` and start command `uvicorn backend.api.main:app --host 0.0.0.0 --port 8000`.
 2. Add env vars in the Render dashboard (same as above).
 3. Optional free Postgres: create a Render Postgres instance and copy its `DATABASE_URL`.
 
@@ -44,7 +47,7 @@ This app has a React/Vite frontend and a FastAPI backend. Below are simple steps
 ## Frontend env file (dev)
 - `frontend/.env.local`:
   ```
-  VITE_API_URL=http://localhost:8000
+  VITE_API_URL=http://localhost:8000/api
   # VITE_API_KEY=...
   ```
 

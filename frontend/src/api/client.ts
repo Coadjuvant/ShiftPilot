@@ -289,19 +289,6 @@ export const importConfig = async (req: SaveConfigRequest & { encoded?: string }
   return api.post("configs/import", req);
 };
 
-export const importScheduleCsv = async (file: File) => {
-  const form = new FormData();
-  form.append("file", file);
-  const { data } = await api.post<{ status: string; assignments: number }>("schedule/import/csv", form, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-  return data;
-};
-export const exportScheduleCsv = async () => {
-  const { data } = await api.get<Blob>("schedule/export/csv", { responseType: "blob" });
-  return data;
-};
-
 export const exportScheduleExcel = async () => {
   const { data } = await api.get<Blob>("schedule/export/excel", { responseType: "blob" });
   return data;

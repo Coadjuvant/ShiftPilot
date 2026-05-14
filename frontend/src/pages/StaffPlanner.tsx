@@ -26,6 +26,15 @@ import RunPanel, { RunConfig } from "../components/RunPanel";
 import AdminPanel from "../components/AdminPanel";
 import { DemandRow, PTORow, StaffRow } from "../types";
 import { DAYS } from "../constants";
+import { coerceConstraintWeight, parseLocalYmd, todayLocalYmd, toLocalYmd } from "../utils/planner";
+import {
+  buildConfigPayload,
+  buildScheduleRequest,
+  fallbackStaffRow,
+  normalizeDemandRows,
+  normalizePtoRows,
+  normalizeStaffRows
+} from "../utils/plannerPayload";
 
 type UserInfo = {
   sub: string;
@@ -34,29 +43,6 @@ type UserInfo = {
 };
 
 export default function StaffPlanner() {
-  const toLocalYmd = (dt: Date) => {
-    const y = dt.getFullYear();
-    const m = String(dt.getMonth() + 1).padStart(2, "0");
-    const d = String(dt.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  };
-  const parseLocalYmd = (value: string): Date | null => {
-    const parts = value.split("-").map(Number);
-    if (parts.length >= 3 && parts.every((n) => Number.isFinite(n))) {
-      const dt = new Date(parts[0], parts[1] - 1, parts[2]);
-      return Number.isNaN(dt.getTime()) ? null : dt;
-    }
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return parsed;
-  };
-  const todayLocalYmd = () => toLocalYmd(new Date());
-
-  const genId = () => {
-    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
-    return Math.random().toString(36).slice(2, 10);
-  };
-
   const friendlyError = (err: any, fallback: string) => {
     const status = err?.response?.status;
     const detail = err?.response?.data?.detail;
@@ -85,17 +71,6 @@ export default function StaffPlanner() {
     const parsed = parseLocalYmd(value);
     if (!parsed) return value;
     return toLocalYmd(parsed);
-  };
-  const coerceConstraintWeight = (value: unknown, fallback = 10) => {
-    if (typeof value === "boolean") return value ? 10 : 0;
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return fallback;
-    return Math.min(10, Math.max(0, parsed));
-  };
-  const coercePrefWeight = (value: unknown, fallback = 5) => {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return fallback;
-    return Math.min(10, Math.max(0, parsed));
   };
   const buildScheduleFilename = (meta: SavedSchedule | null, ext: "xlsx" | "csv") => {
     const base = (meta?.clinic_name || configName || "schedule").trim().replace(/\s+/g, "-").toLowerCase();
@@ -164,26 +139,8 @@ export default function StaffPlanner() {
 
   const [status, setStatus] = useState<string>("Checking API...");
   const [activeTab, setActiveTab] = useState<"staff" | "avail" | "prefs" | "demand" | "pto" | "constraints" | "run" | "admin">("staff");
-  const defaultAvailability = DAYS.reduce<Record<string, boolean>>((acc, day) => {
-    acc[day] = true;
-    return acc;
-  }, {});
   const [staffRows, setStaffRows] = useState<StaffRow[]>([
-    {
-      id: genId(),
-      name: "",
-      role: "Tech",
-      can_bleach: false,
-      can_open: false,
-      can_close: false,
-      availability: { ...defaultAvailability },
-      pref_open_mwf: 5,
-      pref_open_tts: 5,
-      pref_mid_mwf: 5,
-      pref_mid_tts: 5,
-      pref_close_mwf: 5,
-      pref_close_tts: 5
-    }
+    fallbackStaffRow()
   ]);
   const [demandRows, setDemandRows] = useState<DemandRow[]>(
     DAYS.map((day) => ({
@@ -525,47 +482,13 @@ export default function StaffPlanner() {
         setExportRoles(cfg.export_roles as string[]);
       }
       if (cfg.staff && Array.isArray(cfg.staff)) {
-        const normalized = cfg.staff.map((row: any) => ({
-          id: String(row.id ?? genId()),
-          name: String(row.name ?? ""),
-          role: String(row.role ?? "Tech") || "Tech",
-          can_bleach: Boolean(row.can_bleach ?? false),
-          can_open: Boolean(row.can_open ?? false),
-          can_close: Boolean(row.can_close ?? false),
-          availability: DAYS.reduce<Record<string, boolean>>((acc, day) => {
-            acc[day] = Boolean(row[day] ?? row?.availability?.[day] ?? true);
-            return acc;
-          }, {}),
-          pref_open_mwf: coercePrefWeight(row.pref_open_mwf ?? row.open_mwf, 5),
-          pref_open_tts: coercePrefWeight(row.pref_open_tts ?? row.open_tts, 5),
-          pref_mid_mwf: coercePrefWeight(row.pref_mid_mwf ?? row.mid_mwf, 5),
-          pref_mid_tts: coercePrefWeight(row.pref_mid_tts ?? row.mid_tts, 5),
-          pref_close_mwf: coercePrefWeight(row.pref_close_mwf ?? row.close_mwf, 5),
-          pref_close_tts: coercePrefWeight(row.pref_close_tts ?? row.close_tts, 5)
-        }));
-        setStaffRows(normalized.length ? normalized : [{ id: "", name: "", role: "Tech" }]);
+        setStaffRows(normalizeStaffRows(cfg.staff));
       }
       if (cfg.demand && Array.isArray(cfg.demand)) {
-        setDemandRows(
-          cfg.demand.map((row: any) => ({
-            Day: String(row.Day ?? row.day ?? ""),
-            Patients: Number(row.Patients ?? 0),
-            Tech_Open: Number(row.Tech_Open ?? 0),
-            Tech_Mid: Number(row.Tech_Mid ?? 0),
-            Tech_Close: Number(row.Tech_Close ?? 0),
-            RN_Count: Number(row.RN_Count ?? 0),
-            Admin_Count: Number(row.Admin_Count ?? 0)
-          }))
-        );
+        setDemandRows(normalizeDemandRows(cfg.demand));
       }
       if (cfg.pto && Array.isArray(cfg.pto)) {
-        setPtoRows(
-          cfg.pto.map((row: any) => ({
-            staff_id: String(row.staff_id ?? ""),
-            start_date: row.start_date ?? "",
-            end_date: row.end_date ?? row.start_date ?? ""
-          }))
-        );
+        setPtoRows(normalizePtoRows(cfg.pto));
       } else {
         setPtoRows([]);
       }
@@ -583,38 +506,29 @@ export default function StaffPlanner() {
       setStatus("Fix validation errors before saving.");
       return;
     }
-    const scheduleStart = startDate || "";
-
-    const payload: ConfigPayload = {
-      clinic: { name: configName || "Demo Clinic", timezone },
-      schedule: { start: scheduleStart, weeks, bleach_frequency: bleachFrequency },
-      ratios: {
-        patients_per_tech: patientsPerTech,
-        patients_per_rn: patientsPerRn,
-        techs_per_rn: techsPerRn
-      },
-      constraints: {
-        enforce_three_day_cap: threeDayWeight,
-        enforce_post_bleach_rest: postBleachWeight,
-        enforce_alt_saturdays: altSatWeight,
-        limit_tech_four_days: techFourWeight,
-        limit_rn_four_days: rnFourWeight
-      },
-      bleach: { day: bleachDay, rotation: bleachRotation, cursor: bleachCursor, frequency: bleachFrequency },
-      tournament: { trials, last_seed: 0 },
-      export_roles: exportRoles,
-      staff: staffRows.map((s) => ({
-        ...s,
-        pref_open_mwf: coercePrefWeight(s.pref_open_mwf, 5),
-        pref_open_tts: coercePrefWeight(s.pref_open_tts, 5),
-        pref_mid_mwf: coercePrefWeight(s.pref_mid_mwf, 5),
-        pref_mid_tts: coercePrefWeight(s.pref_mid_tts, 5),
-        pref_close_mwf: coercePrefWeight(s.pref_close_mwf, 5),
-        pref_close_tts: coercePrefWeight(s.pref_close_tts, 5)
-      })),
-      demand: demandRows,
-      pto: ptoRows
-    };
+    const payload = buildConfigPayload({
+      configName,
+      timezone,
+      startDate,
+      weeks,
+      bleachFrequency,
+      patientsPerTech,
+      patientsPerRn,
+      techsPerRn,
+      threeDayWeight,
+      postBleachWeight,
+      altSatWeight,
+      techFourWeight,
+      rnFourWeight,
+      bleachDay,
+      bleachRotation,
+      bleachCursor,
+      trials,
+      exportRoles,
+      staffRows,
+      demandRows,
+      ptoRows
+    });
     const req: SaveConfigRequest = { payload, filename: configName ? `${configName}.json` : undefined };
     try {
       const res = await saveConfig(req);
@@ -736,79 +650,32 @@ export default function StaffPlanner() {
         setProgress((p) => (p < 90 ? p + 5 : p));
       }, 200);
       setStatus("Running schedule...");
-      const staffPayload = staffRows.map((s) => ({
-        id: s.id,
-        name: s.name,
-        role: s.role,
-        can_open: s.can_open ?? false,
-        can_close: s.can_close ?? false,
-        can_bleach: s.can_bleach ?? false,
-        availability: DAYS.reduce<Record<string, boolean>>((acc, day) => {
-          acc[day] = s.availability?.[day] ?? true;
-          return acc;
-        }, {}),
-        preferences: {
-          open_mwf: coercePrefWeight(s.pref_open_mwf, 5),
-          open_tts: coercePrefWeight(s.pref_open_tts, 5),
-          mid_mwf: coercePrefWeight(s.pref_mid_mwf, 5),
-          mid_tts: coercePrefWeight(s.pref_mid_tts, 5),
-          close_mwf: coercePrefWeight(s.pref_close_mwf, 5),
-          close_tts: coercePrefWeight(s.pref_close_tts, 5)
-        }
-      }));
-      const requirements = demandRows.map((row) => ({
-        day_name: row.Day,
-        patient_count: row.Patients,
-        tech_openers: row.Tech_Open,
-        tech_mids: row.Tech_Mid,
-        tech_closers: row.Tech_Close,
-        rn_count: row.RN_Count,
-        admin_count: row.Admin_Count
-      }));
-      const expandPTO = (): Array<{ staff_id: string; date: string }> => {
-        const entries: Array<{ staff_id: string; date: string }> = [];
-        for (const row of ptoRows) {
-          if (!row.staff_id || !row.start_date) continue;
-          const start = parseLocalYmd(row.start_date);
-          const end = parseLocalYmd(row.end_date || row.start_date);
-          if (!start || !end) continue;
-          const [a, b] = start <= end ? [start, end] : [end, start];
-          for (let dt = new Date(a); dt <= b; dt.setDate(dt.getDate() + 1)) {
-            entries.push({ staff_id: row.staff_id, date: toLocalYmd(dt) });
-          }
-        }
-        return entries;
-      };
       const selectedSeed =
         usePrevSeed && winningSeed !== null ? winningSeed : baseSeed > 0 ? baseSeed : null;
-      const payload = {
-        staff: staffPayload,
-        requirements,
-        config: {
-          clinic_name: configName || "Demo Clinic",
-          timezone,
-          start_date: startDate,
-          weeks,
-          bleach_day: bleachDay,
-          bleach_rotation: bleachRotation,
-          bleach_cursor: bleachCursor,
-          bleach_frequency: bleachFrequency,
-          patients_per_tech: patientsPerTech,
-          patients_per_rn: patientsPerRn,
-          techs_per_rn: techsPerRn,
-          toggles: {
-            enforce_three_day_cap: threeDayWeight,
-            enforce_post_bleach_rest: postBleachWeight,
-            enforce_alt_saturdays: altSatWeight,
-            limit_tech_four_days: techFourWeight,
-            limit_rn_four_days: rnFourWeight
-          }
-        },
-        pto: expandPTO(),
-        tournament_trials: trials,
-        base_seed: selectedSeed,
-        export_roles: exportRoles
-      };
+      const payload = buildScheduleRequest({
+        configName,
+        timezone,
+        startDate,
+        weeks,
+        bleachFrequency,
+        patientsPerTech,
+        patientsPerRn,
+        techsPerRn,
+        threeDayWeight,
+        postBleachWeight,
+        altSatWeight,
+        techFourWeight,
+        rnFourWeight,
+        bleachDay,
+        bleachRotation,
+        bleachCursor,
+        trials,
+        exportRoles,
+        staffRows,
+        demandRows,
+        ptoRows,
+        selectedSeed
+      });
       const res = await runSchedule(payload);
         setAssignments(res.assignments);
         setStats(res.stats);

@@ -8,6 +8,41 @@ ShiftPilot helps clinic managers build multi-week staff schedules, enforce clini
 2) After login, go to `Planner`.
 3) Load a config, update inputs, then run the schedule.
 
+## Local preview
+
+1) Copy `.env.example` to `.env` and adjust local secrets if needed.
+2) Start the Docker stack:
+   ```
+   docker compose up -d --build
+   ```
+3) Open `http://localhost:8080`.
+4) Check backend health at `http://localhost:8000/api/health`.
+
+For frontend hot reload, keep the Docker database/backend running and start Vite separately:
+
+```
+docker compose up -d db backend
+cd frontend
+npm install
+npm run dev
+```
+
+Run local checks:
+
+```
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements-dev.txt
+python -m pytest -q
+SHIFT_TEST_LIVE_API=1 python -m pytest tests/api/test_live_api.py -q
+cd frontend
+npm install
+npm run lint
+npm run build
+```
+
+The baseline Postgres schema is documented in `db/migrations/0001_initial.sql`; app startup still applies compatible `CREATE TABLE IF NOT EXISTS` checks for simple deployments.
+
 ## Planner workflow
 
 ### 1) Load or create a config

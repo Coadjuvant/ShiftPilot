@@ -4,7 +4,7 @@ from datetime import date
 from typing import Dict, List, Optional, Literal
 
 try:
-    from pydantic import BaseModel, Field, conint, constr, validator  # type: ignore
+    from pydantic import BaseModel, ConfigDict, Field, conint, constr, validator  # type: ignore
 except Exception:
     # Minimal fallback when pydantic is not available (prevents editor/linter errors).
     # This does not replicate pydantic's validation; it's only to allow imports and defaults.
@@ -14,6 +14,9 @@ except Exception:
         def __init__(self, **kwargs):
             for k, v in kwargs.items():
                 setattr(self, k, v)
+
+    def ConfigDict(**kwargs):  # type: ignore
+        return kwargs
 
     def Field(*, default: Any = None, default_factory: Optional[Callable[[], Any]] = None, **kwargs):
         # If a default_factory is provided, use it to produce a default value now.
@@ -39,9 +42,7 @@ UserRole = Literal["user", "admin"]
 
 
 class BaseSchema(BaseModel):
-    class Config:
-        extra = "forbid"
-        anystr_strip_whitespace = True
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
 class StaffPreferencesIn(BaseSchema):
