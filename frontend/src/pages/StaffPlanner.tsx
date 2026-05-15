@@ -10,6 +10,7 @@ import api, {
   getStoredToken,
   listConfigs,
   loadConfig,
+  lookupInvite,
   login,
   runSchedule,
   saveConfig,
@@ -40,6 +41,11 @@ type UserInfo = {
   sub: string;
   username: string;
   role: string;
+};
+
+type InviteLookupState = {
+  username: string;
+  type: "invite" | "reset";
 };
 
 export default function StaffPlanner() {
@@ -181,6 +187,7 @@ export default function StaffPlanner() {
   const [loginUser, setLoginUser] = useState<string>("");
   const [loginPass, setLoginPass] = useState<string>("");
   const [inviteToken, setInviteToken] = useState<string>("");
+  const [inviteLookup, setInviteLookup] = useState<InviteLookupState | null>(null);
   const [loginError, setLoginError] = useState<string>("");
   const [startDate, setStartDate] = useState<string>(todayLocalYmd());
   const [weeks, setWeeks] = useState<number>(1);
@@ -252,23 +259,7 @@ export default function StaffPlanner() {
   };
 
   const resetWorkspaceState = (message?: string) => {
-    setStaffRows([
-      {
-        id: genId(),
-        name: "",
-        role: "Tech",
-        can_bleach: false,
-        can_open: false,
-        can_close: false,
-        availability: { ...defaultAvailability },
-        pref_open_mwf: 5,
-        pref_open_tts: 5,
-        pref_mid_mwf: 5,
-        pref_mid_tts: 5,
-        pref_close_mwf: 5,
-        pref_close_tts: 5
-      }
-    ]);
+    setStaffRows([fallbackStaffRow()]);
     setDemandRows(
       DAYS.map((day) => ({
         Day: day,
@@ -396,6 +387,28 @@ export default function StaffPlanner() {
         setIsAdmin(false);
       });
   }, [isAuthed, authToken]);
+  useEffect(() => {
+    const token = inviteToken.trim();
+    if (loginMode !== "setup" || token.length < 8) {
+      setInviteLookup(null);
+      return;
+    }
+    let cancelled = false;
+    lookupInvite(token)
+      .then((data) => {
+        if (cancelled) return;
+        setInviteLookup(data);
+        if (data.type === "reset") {
+          setLoginUser(data.username);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setInviteLookup(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [inviteToken, loginMode]);
   useEffect(() => {
     if (!isAuthed) {
       setLatestScheduleMeta(null);
@@ -851,13 +864,21 @@ export default function StaffPlanner() {
                         onChange={(e) => setInviteToken(e.target.value)}
                       />
                     </label>
+                    {inviteLookup && (
+                      <p className="muted" style={{ margin: 0 }}>
+                        {inviteLookup.type === "reset"
+                          ? `Password reset for ${inviteLookup.username}`
+                          : "New user invite"}
+                      </p>
+                    )}
                     <label className="field">
-                      <span>Choose username</span>
+                      <span>{inviteLookup?.type === "reset" ? "Username" : "Choose username"}</span>
                       <input
                         id="planner-setup-username"
                         name="planner-setup-username"
                         value={loginUser}
                         onChange={(e) => setLoginUser(e.target.value)}
+                        readOnly={inviteLookup?.type === "reset"}
                       />
                     </label>
                     <label className="field">

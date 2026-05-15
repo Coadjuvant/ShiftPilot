@@ -4,19 +4,20 @@ import importlib
 
 
 class FakeCursor:
-    def __init__(self) -> None:
+    def __init__(self, row=("test",)) -> None:
         self.statements: list[tuple[str, tuple | None]] = []
+        self.row = row
 
     def execute(self, statement: str, params: tuple | None = None) -> None:
         self.statements.append((statement, params))
 
     def fetchone(self):
-        return ("test",)
+        return self.row
 
 
 class FakeConnection:
-    def __init__(self) -> None:
-        self.cursor_obj = FakeCursor()
+    def __init__(self, row=("test",)) -> None:
+        self.cursor_obj = FakeCursor(row)
         self.committed = False
         self.closed = False
 
@@ -49,3 +50,18 @@ def test_reset_invite_returns_generated_token(monkeypatch) -> None:
     update_params = conn.cursor_obj.statements[-1][1]
     assert update_params is not None
     assert update_params[0] == token
+
+
+def test_invite_context_identifies_reset_tokens(monkeypatch) -> None:
+    monkeypatch.setenv("AUTH_BACKEND", "postgres")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://example")
+    auth_db = importlib.import_module("backend.auth_db")
+    auth_db = importlib.reload(auth_db)
+
+    store = auth_db.PostgresAuth("postgresql://example")
+    conn = FakeConnection(row=("test-user", "active", "hashed-password", None))
+    monkeypatch.setattr(store, "_conn", lambda: conn)
+
+    context = store.get_invite_context("abc123")
+
+    assert context == {"username": "test-user", "type": "reset"}

@@ -125,6 +125,11 @@ export interface InviteRequest {
   role?: string;
 }
 
+export interface InviteLookup {
+  username: string;
+  type: "invite" | "reset";
+}
+
 export interface UserSummary {
   id: number;
   public_id?: string;
@@ -307,6 +312,11 @@ export const setupUser = async (
   password: string = ""
 ): Promise<{ token: string }> => {
   const { data } = await api.post<{ token: string }>("auth/setup", { invite_token, username, password });
+  return data;
+};
+
+export const lookupInvite = async (inviteToken: string): Promise<InviteLookup> => {
+  const { data } = await api.get<InviteLookup>(`auth/invite/${encodeURIComponent(inviteToken)}`);
   return data;
 };
 

@@ -218,6 +218,11 @@ class SetupRequest(BaseSchema):
     password: constr(min_length=4, max_length=128)
 
 
+class InviteLookupResponse(BaseSchema):
+    username: str
+    type: Literal["invite", "reset"]
+
+
 class UserInfo(BaseSchema):
     sub: str
     username: str

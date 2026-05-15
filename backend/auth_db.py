@@ -213,6 +213,26 @@ class PostgresAuth:
         conn.close()
         return token
 
+    def get_invite_context(self, invite_token: str) -> Optional[Dict[str, Any]]:
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT username, status, password_hash, invite_expires_at FROM users WHERE invite_token=%s",
+            (invite_token.strip(),),
+        )
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return None
+        username, status, password_hash, expires_at = row
+        if expires_at:
+            now = datetime.now(timezone.utc)
+            exp = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
+            if now > exp.astimezone(timezone.utc):
+                return None
+        token_type = "reset" if password_hash or status == "active" else "invite"
+        return {"username": username, "type": token_type}
+
     # --- schedules (latest per owner) ---
     def save_schedule(self, owner: str, payload: Dict[str, Any]) -> None:
         conn = self._conn()
@@ -367,14 +387,14 @@ class PostgresAuth:
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, username, status, license_key, role, invite_token, invite_expires_at, invite_created_by, public_id FROM users WHERE invite_token=%s",
+            "SELECT id, username, status, license_key, role, invite_token, invite_expires_at, invite_created_by, public_id, password_hash FROM users WHERE invite_token=%s",
             (invite_token,),
         )
         row = cur.fetchone()
         if not row:
             conn.close()
             return None
-        user_id, username, status, license_key, role, inv, expires_at, inv_created_by, public_id = row
+        user_id, username, status, license_key, role, inv, expires_at, inv_created_by, public_id, existing_hash = row
         if expires_at:
             now = datetime.now(timezone.utc)
             exp = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
@@ -383,7 +403,8 @@ class PostgresAuth:
                 conn.close()
                 return None
         # allow username change on redeem if requested and unique
-        if desired_username and desired_username.strip() and desired_username.strip() != username:
+        is_reset = bool(existing_hash) or status == "active"
+        if not is_reset and desired_username and desired_username.strip() and desired_username.strip() != username:
             desired = desired_username.strip()
             cur.execute("SELECT 1 FROM users WHERE username=%s", (desired,))
             if cur.fetchone():
@@ -614,6 +635,10 @@ def update_role(user_id: int, role: str):
 
 def reset_invite(user_id: int, created_by: Optional[int] = None, ttl_hours: int = 24) -> str:
     return _backend.reset_invite(user_id, created_by=created_by, ttl_hours=ttl_hours)
+
+
+def get_invite_context(invite_token: str) -> Optional[Dict[str, Any]]:
+    return _backend.get_invite_context(invite_token)
 
 
 # Config helpers

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from backend.auth_db import (
     create_invite,
     delete_user,
+    get_invite_context,
     list_audit,
     list_users,
     log_event,
@@ -25,7 +26,7 @@ from ..request_context import (
     record_login_failure,
     request_meta,
 )
-from ..schemas import InviteRequest, LoginRequest, LoginResponse, SetupRequest, UserInfo
+from ..schemas import InviteLookupResponse, InviteRequest, LoginRequest, LoginResponse, SetupRequest, UserInfo
 
 router = APIRouter(prefix="/api")
 
@@ -92,6 +93,14 @@ def setup_user(request: Request, body: SetupRequest) -> LoginResponse:
     ip, ip_v4, user_agent, location = request_meta(request)
     log_event(user["id"], "login_success", "invite_setup", ip, user_agent, location, ip_v4)
     return token_response(token)
+
+
+@router.get("/auth/invite/{invite_token}", response_model=InviteLookupResponse)
+def lookup_invite(invite_token: str) -> InviteLookupResponse:
+    context = get_invite_context(invite_token)
+    if not context:
+        raise HTTPException(status_code=404, detail="Invalid or expired invite token")
+    return InviteLookupResponse(**context)
 
 
 @router.get("/auth/me", response_model=UserInfo, dependencies=[Depends(require_auth)])

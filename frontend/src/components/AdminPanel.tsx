@@ -64,6 +64,7 @@ export default function AdminPanel() {
   const [inviteLicense, setInviteLicense] = useState<string>("DEMO");
   const [inviteRole, setInviteRole] = useState<string>("user");
   const [inviteResult, setInviteResult] = useState<string>("");
+  const [inviteTokenToCopy, setInviteTokenToCopy] = useState<string>("");
   const [copyNotice, setCopyNotice] = useState<string>("");
 
   const copyText = async (text: string) => {
@@ -154,8 +155,10 @@ export default function AdminPanel() {
                   role: inviteRole
                 });
                 setInviteResult(res.token);
+                setInviteTokenToCopy(res.token);
               } catch (err: any) {
                 setInviteResult(friendlyError(err, "Failed to create invite"));
+                setInviteTokenToCopy("");
               }
             }}
           >
@@ -166,7 +169,7 @@ export default function AdminPanel() {
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <span className="muted">Invite token:</span>
             <code>{inviteResult}</code>
-            <button className="secondary-btn" onClick={() => copyText(inviteResult)}>
+            <button className="secondary-btn" onClick={() => copyText(inviteTokenToCopy || inviteResult)}>
               Copy Token
             </button>
             {copyNotice && <span className="muted">{copyNotice}</span>}
@@ -268,9 +271,11 @@ export default function AdminPanel() {
                         try {
                           const res = await resetUserInvite(u.id);
                           setInviteResult(`Reset token for ${u.username}: ${res.token}`);
+                          setInviteTokenToCopy(res.token);
                           loadUsers();
                         } catch (err: any) {
                           setInviteResult(err?.message ?? "Failed to reset invite");
+                          setInviteTokenToCopy("");
                         }
                       }}
                     >
