@@ -211,6 +211,7 @@ class PostgresAuth:
         )
         conn.commit()
         conn.close()
+        return token
 
     # --- schedules (latest per owner) ---
     def save_schedule(self, owner: str, payload: Dict[str, Any]) -> None:
