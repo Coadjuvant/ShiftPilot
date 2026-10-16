@@ -20,6 +20,9 @@ from .model import (
 
 # Scheduler tuning knobs
 FAIRNESS_WEIGHT = 0.5
+# Prefer even weeks over the default-strength soft rule (5), while keeping
+# required rules as eligibility filters and overall workload as a second signal.
+WEEKLY_FAIRNESS_WEIGHT = 6.0
 BLEACH_PENALTY = 5.0  # discourage assigning bleach-capable techs outside rotation if avoidable
 BLEACH_ROTATION_OFFSET_PENALTY = 1.0
 CONSTRAINT_HARD_THRESHOLD = 10.0
@@ -35,6 +38,7 @@ class _StaffState:
     last_bleach_day: Optional[int] = None
     last_saturday_week: Optional[int] = None
     week_assignments: Dict[int, set] = field(default_factory=lambda: defaultdict(set))
+    week_shift_counts: Dict[int, int] = field(default_factory=lambda: defaultdict(int))
 
     def total_assignments(self) -> int:
         return len(self.assignments)
@@ -241,9 +245,13 @@ def _score_candidate(
     *,
     base_penalty: float,
     fairness_weight: float,
+    week_index: int,
 ) -> float:
     workload_penalty = fairness_weight * member_state.total_assignments()
-    return base_penalty + workload_penalty
+    # A long-range total alone can hide one-shift weeks beside four-shift weeks.
+    # Keep balance soft so eligibility and required rules remain authoritative.
+    weekly_penalty = WEEKLY_FAIRNESS_WEIGHT * member_state.week_shift_counts.get(week_index, 0)
+    return base_penalty + workload_penalty + weekly_penalty
 
 
 def _select_bleach_candidate(
@@ -304,6 +312,10 @@ def _violates_daily_shift_rule(
     return bool(worked_today)
 
 
+class FixedAssignmentConflict(ValueError):
+    """A manual or locked assignment violates eligibility or a required rule."""
+
+
 def generate_schedule(
     staff: Sequence[StaffMember],
     requirements: Sequence[DailyRequirement],
@@ -314,6 +326,7 @@ def generate_schedule(
     rng: Optional[random.Random] = None,
     scheduled_roles: Optional[Sequence[str]] = None,
     score_roles: Optional[Sequence[str]] = None,
+    fixed_assignments: Optional[dict] = None,
 ) -> ScheduleResult:
     """
     Generate a schedule and return assignments + updated bleach cursor.
@@ -330,6 +343,11 @@ def generate_schedule(
         if (slot.role or "").strip().lower() in normalized_scheduled_roles
     ]
     slots.sort(key=lambda slot: (slot.day_index, *_slot_priority(slot), (slot.role or "")))
+    def slot_key(slot):
+        return (slot.date.isoformat(), slot.role, "bleach" if slot.is_bleach else slot.duty, slot.slot_index)
+    fixed_assignments = fixed_assignments or {}
+    if set(fixed_assignments) - {slot_key(slot) for slot in slots}:
+        raise FixedAssignmentConflict("An adjusted or locked slot does not exist in this schedule. Check dates, roles, and coverage needs.")
     tech_mid_slots_by_day: Dict[int, int] = defaultdict(int)
     for slot in slots:
         if slot.role == "Tech" and slot.duty == "mid":
@@ -363,6 +381,8 @@ def generate_schedule(
     total_penalty = 0.0
 
     for slot in slots:
+        week_idx, _ = _week_and_day_index(slot.day_index)
+        key = slot_key(slot)
         role_key = (slot.role or "").strip().lower()
         role_is_scored = role_key in normalized_score_roles
         role_candidates = staff_by_role.get(slot.role, [])
@@ -373,6 +393,9 @@ def generate_schedule(
         def gather_candidates() -> List[Tuple[StaffMember, _StaffState, float]]:
             found: List[Tuple[StaffMember, _StaffState, float]] = []
             for member in role_candidates:
+                # Reserve a person for a later fixed duty on the same day.
+                if key not in fixed_assignments and any(k[0] == key[0] and k != key and sid == member.id for k, sid in fixed_assignments.items()):
+                    continue
                 state = states[member.id]
                 if _violates_daily_shift_rule(state, slot, tech_mid_slots_by_day):
                     continue
@@ -394,7 +417,25 @@ def generate_schedule(
 
         base_penalty = None
 
-        if slot.is_bleach and cfg.bleach_rotation:
+        if key in fixed_assignments:
+            fixed_id = fixed_assignments[key]
+            if not fixed_id or fixed_id in {"FLOAT", "OPEN"}:
+                assignments.append(Assignment(slot=slot, staff_id=OPEN_LABEL, notes=["Needs coverage"]))
+                if role_is_scored:
+                    total_penalty += _open_slot_penalty(slot, cfg)
+                continue
+            fixed_candidate = next((item for item in candidates if item[0].id == fixed_id), None)
+            if fixed_candidate is None:
+                raise FixedAssignmentConflict(f"{slot.date} {slot.role} {slot.duty}: {fixed_id} conflicts with availability, time off, capabilities, another duty, or a required rule.")
+            chosen, chosen_state, constraint_penalty = fixed_candidate
+            base_penalty = _preference_penalty(chosen, slot) + constraint_penalty
+            note = "Manual or locked assignment"
+            if slot.is_bleach and cfg.bleach_rotation:
+                if chosen.id not in cfg.bleach_rotation:
+                    raise FixedAssignmentConflict("The chosen bleach staff member must be in the bleach rotation.")
+                rotation_index_used = cfg.bleach_rotation.index(chosen.id)
+
+        if chosen is None and slot.is_bleach and cfg.bleach_rotation:
             if role_is_scored:
                 best_score: Optional[Tuple[float, int, StaffMember, _StaffState, float]] = None
                 for offset in range(len(cfg.bleach_rotation)):
@@ -414,7 +455,7 @@ def generate_schedule(
                     if hard_violation:
                         continue
                     base = _preference_penalty(member, slot) + constraint_penalty + offset * BLEACH_ROTATION_OFFSET_PENALTY
-                    score = _score_candidate(state, base_penalty=base, fairness_weight=FAIRNESS_WEIGHT)
+                    score = _score_candidate(state, base_penalty=base, fairness_weight=FAIRNESS_WEIGHT, week_index=week_idx)
                     if best_score is None or score < best_score[0]:
                         best_score = (score, idx, member, state, base)
                 if best_score is not None:
@@ -446,12 +487,11 @@ def generate_schedule(
                             pos = None
                         if pos is None:
                             base += BLEACH_PENALTY
-                    score = _score_candidate(state, base_penalty=base, fairness_weight=FAIRNESS_WEIGHT)
+                    score = _score_candidate(state, base_penalty=base, fairness_weight=FAIRNESS_WEIGHT, week_index=week_idx)
                     jitter = rng.random() * JITTER_SCALE
-                    scored.append((score + jitter, score, member, state))
+                    scored.append((score + jitter, base, member, state))
                 scored.sort(key=lambda tup: (tup[0], tup[2].id))
-                _, score_value, chosen, chosen_state = scored[0]
-                base_penalty = score_value - FAIRNESS_WEIGHT * chosen_state.total_assignments()
+                _, base_penalty, chosen, chosen_state = scored[0]
             else:
                 chosen, chosen_state, _ = candidates[0]
 
@@ -476,6 +516,7 @@ def generate_schedule(
             chosen_state.day_shift_positions.setdefault(slot.day_index, set()).add(0)
         week_idx, _ = _week_and_day_index(slot.day_index)
         chosen_state.week_assignments.setdefault(week_idx, set()).add(slot.day_index)
+        chosen_state.week_shift_counts[week_idx] += 1
         if slot.is_bleach and slot.role == "Tech":
             chosen_state.last_bleach_day = slot.day_index
             if rotation_index_used is not None:
@@ -485,7 +526,7 @@ def generate_schedule(
         if role_is_scored and base_penalty is None:
             base_penalty = _preference_penalty(chosen, slot)
         if role_is_scored:
-            total_penalty += _score_candidate(chosen_state, base_penalty=base_penalty, fairness_weight=FAIRNESS_WEIGHT)
+            total_penalty += _score_candidate(chosen_state, base_penalty=base_penalty, fairness_weight=FAIRNESS_WEIGHT, week_index=week_idx)
 
     # compute summary stats
     totals = {

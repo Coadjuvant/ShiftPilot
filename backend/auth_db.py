@@ -98,6 +98,16 @@ class PostgresAuth:
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS public_id TEXT UNIQUE;")
         cur.execute(
             """
+            CREATE TABLE IF NOT EXISTS auth_sessions (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                expires_at TIMESTAMPTZ NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS auth_sessions_user_idx ON auth_sessions(user_id);
+            """
+        )
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS audit_log (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER,
@@ -141,6 +151,29 @@ class PostgresAuth:
             );
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schedule_versions (
+                id TEXT PRIMARY KEY,
+                owner TEXT NOT NULL,
+                payload JSONB NOT NULL,
+                state TEXT NOT NULL DEFAULT 'draft' CHECK (state IN ('draft', 'published')),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                published_at TIMESTAMPTZ
+            );
+            CREATE INDEX IF NOT EXISTS schedule_versions_owner_idx ON schedule_versions(owner, created_at DESC);
+            INSERT INTO schedule_versions (id, owner, payload, state, created_at, published_at)
+            SELECT 'legacy-' || id, owner, payload, 'published', COALESCE(created_at, NOW()), COALESCE(updated_at, NOW())
+            FROM schedules WHERE NOT (payload ? 'version_id') ON CONFLICT (id) DO NOTHING;
+            CREATE TABLE IF NOT EXISTS legacy_schedule_owners (
+                owner TEXT PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+            );
+            INSERT INTO legacy_schedule_owners (owner, user_id)
+            SELECT DISTINCT u.username, u.id FROM users u JOIN schedules s ON s.owner=u.username
+            WHERE u.username !~ '^[0-9]+$' ON CONFLICT(owner) DO NOTHING;
+            """
+        )
         conn.commit()
         conn.close()
 
@@ -149,7 +182,7 @@ class PostgresAuth:
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, username, status, license_key, role, created_at, last_login, invite_expires_at, invite_created_by, last_invite_token, public_id, invite_token FROM users ORDER BY id"
+            "SELECT id, username, status, license_key, role, created_at, last_login, invite_expires_at, invite_created_by, public_id FROM users ORDER BY id"
         )
         rows = cur.fetchall()
         conn.close()
@@ -163,11 +196,40 @@ class PostgresAuth:
             "last_login",
             "invite_expires_at",
             "invite_created_by",
-            "last_invite_token",
             "public_id",
-            "invite_token",
         ]
-        return [dict(zip(keys, r)) for r in rows]
+        admin_user = (os.getenv("ADMIN_USER", "admin") or "admin").strip()
+        return [{**dict(zip(keys, r)), "is_bootstrap_admin": r[1] == admin_user} for r in rows]
+
+    def create_session(self, session_id: str, user_id: int, expires_at: datetime):
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM auth_sessions WHERE expires_at <= NOW()")
+                cur.execute(
+                    "INSERT INTO auth_sessions (id, user_id, expires_at) VALUES (%s, %s, %s)",
+                    (session_id, user_id, expires_at),
+                )
+        conn.close()
+
+    def get_session_user(self, session_id: str, user_id: str) -> Optional[dict]:
+        # JWT claims alone must not preserve disabled accounts or old roles.
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT u.id, u.username, u.role FROM auth_sessions s
+                    JOIN users u ON u.id=s.user_id
+                    WHERE s.id=%s AND u.id::text=%s AND s.expires_at > NOW() AND u.status='active'""",
+                    (session_id, user_id),
+                )
+                row = cur.fetchone()
+        conn.close()
+        return dict(zip(("id", "username", "role"), row)) if row else None
+
+    def revoke_session(self, session_id: str):
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM auth_sessions WHERE id=%s", (session_id,))
+        conn.close()
 
     def delete_user(self, user_id: int):
         # protect default admin
@@ -179,13 +241,14 @@ class PostgresAuth:
         if row and row[0] == admin_user:
             conn.close()
             raise ValueError("Cannot delete default admin user")
-        conn = self._conn()
-        cur = conn.cursor()
         cur.execute("DELETE FROM users WHERE id=%s", (user_id,))
         conn.commit()
         conn.close()
 
     def revoke_invite(self, username: str):
+        admin_user = (os.getenv("ADMIN_USER", "admin") or "admin").strip()
+        if username.strip() == admin_user:
+            raise ValueError("Cannot disable the bootstrap admin")
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(
@@ -197,7 +260,7 @@ class PostgresAuth:
 
     def reset_invite(self, user_id: int, created_by: Optional[int] = None, ttl_hours: int = 24) -> str:
         token = secrets.token_hex(16)
-        expires_at = datetime.utcnow() + timedelta(hours=ttl_hours)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
         conn = self._conn()
         cur = conn.cursor()
         cur.execute("SELECT username FROM users WHERE id=%s", (user_id,))
@@ -234,6 +297,79 @@ class PostgresAuth:
         return {"username": username, "type": token_type}
 
     # --- schedules (latest per owner) ---
+    def legacy_schedule_owners(self, user_id: str) -> List[str]:
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT owner FROM legacy_schedule_owners WHERE user_id::text=%s", (user_id,))
+                owners = [row[0] for row in cur.fetchall()]
+        conn.close()
+        return owners
+
+    def save_schedule_draft(self, owner: str, payload: Dict[str, Any]) -> str:
+        version_id = uuid.uuid4().hex
+        payload = {**payload, "version_id": version_id, "schedule_status": "draft"}
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("INSERT INTO schedule_versions (id, owner, payload) VALUES (%s,%s,%s::jsonb)",
+                            (version_id, owner, json.dumps(payload, default=str)))
+        conn.close()
+        return version_id
+
+    def list_schedule_versions(self, owners: List[str]) -> list[dict]:
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT id, state, created_at, published_at, payload->>'clinic_name', payload->>'start_date',
+                    payload->>'weeks' FROM schedule_versions WHERE owner=ANY(%s) ORDER BY created_at DESC, id DESC LIMIT 50""",
+                    (owners,),
+                )
+                rows = cur.fetchall()
+        conn.close()
+        return [dict(zip(("id", "state", "created_at", "published_at", "clinic_name", "start_date", "weeks"), row)) for row in rows]
+
+    def get_schedule_version(self, owners: List[str], version_id: str) -> Optional[dict]:
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT payload, state FROM schedule_versions WHERE owner=ANY(%s) AND id=%s", (owners, version_id))
+                row = cur.fetchone()
+        conn.close()
+        return {**row[0], "version_id": version_id, "schedule_status": row[1]} if row else None
+
+    def delete_schedule_draft(self, owners: List[str], version_id: str) -> str:
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT state FROM schedule_versions WHERE owner=ANY(%s) AND id=%s FOR UPDATE", (owners, version_id))
+                row = cur.fetchone()
+                if not row:
+                    result = "missing"
+                elif row[0] != "draft":
+                    result = "published"
+                else:
+                    cur.execute("DELETE FROM schedule_versions WHERE id=%s", (version_id,))
+                    result = "deleted"
+        conn.close()
+        return result
+
+    def publish_schedule_version(self, owner: str, owners: List[str], version_id: str) -> Optional[dict]:
+        with self._conn() as conn:
+            with conn.cursor() as cur:
+                # Serialize publishing per owner, including concurrent requests for different drafts.
+                cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (owner,))
+                cur.execute("SELECT payload FROM schedule_versions WHERE owner=ANY(%s) AND id=%s FOR UPDATE", (owners, version_id))
+                row = cur.fetchone()
+                if row:
+                    payload = {**row[0], "version_id": version_id, "schedule_status": "published"}
+                    serial = json.dumps(payload, default=str)
+                    cur.execute("UPDATE schedule_versions SET state='published', published_at=NOW(), payload=%s::jsonb WHERE id=%s", (serial, version_id))
+                    cur.execute(
+                        """INSERT INTO schedules (owner,clinic_name,start_date,weeks,payload) VALUES (%s,%s,%s,%s,%s::jsonb)
+                        ON CONFLICT(owner) DO UPDATE SET clinic_name=EXCLUDED.clinic_name, start_date=EXCLUDED.start_date,
+                        weeks=EXCLUDED.weeks, payload=EXCLUDED.payload, updated_at=NOW()""",
+                        (owner, payload.get("clinic_name"), payload.get("start_date"), payload.get("weeks"), serial),
+                    )
+        conn.close()
+        return payload if row else None
+
     def save_schedule(self, owner: str, payload: Dict[str, Any]) -> None:
         conn = self._conn()
         cur = conn.cursor()
@@ -274,6 +410,8 @@ class PostgresAuth:
             return None
 
     def update_role(self, user_id: int, role: str):
+        if role not in {"user", "admin"}:
+            raise ValueError("Role must be user or admin")
         conn = self._conn()
         cur = conn.cursor()
         # protect default admin
@@ -291,18 +429,13 @@ class PostgresAuth:
         conn = self._conn()
         cur = conn.cursor()
         pwd_hash = _hash_password(password)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cur.execute(
             """
             INSERT INTO users (username, password_hash, status, license_key, role, created_at, public_id)
             VALUES (%s, %s, 'active', %s, 'admin', %s, %s)
             ON CONFLICT (username)
-            DO UPDATE SET password_hash = EXCLUDED.password_hash,
-                          status = 'active',
-                          license_key = EXCLUDED.license_key,
-                          role = 'admin',
-                          invite_token = NULL,
-                          public_id = COALESCE(users.public_id, EXCLUDED.public_id);
+            DO NOTHING;
             """,
             (username.strip(), pwd_hash, license_key.strip(), now, str(uuid.uuid4())),
         )
@@ -357,10 +490,15 @@ class PostgresAuth:
 
     def create_invite(self, username: str, license_key: str, role: str = "user", created_by: Optional[int] = None, ttl_hours: int = 24) -> str:
         token = secrets.token_hex(16)
-        expires_at = datetime.utcnow() + timedelta(hours=ttl_hours)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
         conn = self._conn()
         cur = conn.cursor()
         desired_user = username.strip() or f"user-{token[:8]}"
+        cur.execute("SELECT status FROM users WHERE username=%s", (desired_user,))
+        existing = cur.fetchone()
+        if existing and existing[0] == "active":
+            conn.close()
+            raise ValueError("This account already exists. Use password reset instead.")
         cur.execute(
             """
             INSERT INTO users (username, status, license_key, invite_token, role, created_at, public_id)
@@ -372,7 +510,7 @@ class PostgresAuth:
                           role=EXCLUDED.role,
                           public_id=COALESCE(users.public_id, EXCLUDED.public_id);
             """,
-            (desired_user, license_key.strip(), token, role, datetime.utcnow(), str(uuid.uuid4())),
+            (desired_user, license_key.strip(), token, role, datetime.now(timezone.utc), str(uuid.uuid4())),
         )
         # set expiry and creator
         cur.execute(
@@ -415,8 +553,9 @@ class PostgresAuth:
         pwd_hash = _hash_password(password)
         cur.execute(
             "UPDATE users SET password_hash=%s, status='active', last_invite_token=%s, invite_token=NULL WHERE id=%s",
-            (pwd_hash, inv, user_id),
+            (pwd_hash, None, user_id),
         )
+        cur.execute("DELETE FROM auth_sessions WHERE user_id=%s", (user_id,))
         conn.commit()
         cur.execute(
             "SELECT id, username, password_hash, status, license_key, invite_token, invite_expires_at, invite_created_by, last_invite_token, public_id, role, created_at, last_login FROM users WHERE id=%s",
@@ -444,7 +583,7 @@ class PostgresAuth:
     def update_last_login(self, user_id: int):
         conn = self._conn()
         cur = conn.cursor()
-        cur.execute("UPDATE users SET last_login=%s WHERE id=%s", (datetime.utcnow(), user_id))
+        cur.execute("UPDATE users SET last_login=%s WHERE id=%s", (datetime.now(timezone.utc), user_id))
         conn.commit()
         conn.close()
 
@@ -465,7 +604,7 @@ class PostgresAuth:
             INSERT INTO audit_log (user_id, event, detail, ip, ip_v4, user_agent, location, created_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
-            (user_id, event, detail, ip, ip_v4, user_agent, location, datetime.utcnow()),
+            (user_id, event, detail, ip, ip_v4, user_agent, location, datetime.now(timezone.utc)),
         )
         conn.commit()
         conn.close()
@@ -566,6 +705,18 @@ def init_db():
     _backend.init_db()
 
 
+def create_session(session_id: str, user_id: int, expires_at: datetime):
+    return _backend.create_session(session_id, user_id, expires_at)
+
+
+def get_session_user(session_id: str, user_id: str) -> Optional[dict]:
+    return _backend.get_session_user(session_id, user_id)
+
+
+def revoke_session(session_id: str):
+    return _backend.revoke_session(session_id)
+
+
 def ensure_admin(username: str, password: str, license_key: str = "DEMO"):
     _backend.ensure_admin(username, password, license_key)
 
@@ -661,6 +812,30 @@ def save_schedule(owner: str, payload: dict):
 
 def get_latest_schedule(owner: str) -> Optional[dict]:
     return _backend.get_latest_schedule(owner)
+
+
+def save_schedule_draft(owner: str, payload: dict) -> str:
+    return _backend.save_schedule_draft(owner, payload)
+
+
+def legacy_schedule_owners(user_id: str) -> List[str]:
+    return _backend.legacy_schedule_owners(user_id)
+
+
+def list_schedule_versions(owners: List[str]) -> list[dict]:
+    return _backend.list_schedule_versions(owners)
+
+
+def get_schedule_version(owners: List[str], version_id: str) -> Optional[dict]:
+    return _backend.get_schedule_version(owners, version_id)
+
+
+def publish_schedule_version(owner: str, owners: List[str], version_id: str) -> Optional[dict]:
+    return _backend.publish_schedule_version(owner, owners, version_id)
+
+
+def delete_schedule_draft(owners: List[str], version_id: str) -> str:
+    return _backend.delete_schedule_draft(owners, version_id)
 
 
 # Config import/export helpers

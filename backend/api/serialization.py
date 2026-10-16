@@ -14,7 +14,7 @@ def slugify(value: str) -> str:
 
 def owner_candidates(payload: dict) -> list[str]:
     candidates: list[str] = []
-    for key in ("sub", "username"):
+    for key in ("sub",):
         value = payload.get(key)
         if value is not None:
             text = str(value).strip()
@@ -28,7 +28,10 @@ def config_owner(payload: dict) -> str:
 
 
 def schedule_owners(payload: dict) -> list[str]:
-    return owner_candidates(payload)
+    from backend.auth_db import legacy_schedule_owners
+    # Legacy usernames are permanently bound to the original account ID.
+    # Reusing a deleted account's username must not grant access to its old rosters.
+    return owner_candidates(payload) + legacy_schedule_owners(str(payload.get("sub", "")))
 
 
 def parse_generated_at(value: object) -> datetime:
@@ -43,10 +46,11 @@ def parse_generated_at(value: object) -> datetime:
 
 
 def latest_schedule_for(payload: dict, loader: Callable[[str], dict | None]) -> dict | None:
-    schedules = [data for owner in schedule_owners(payload) if (data := loader(owner))]
-    if not schedules:
-        return None
-    return max(schedules, key=lambda item: parse_generated_at(item.get("generated_at")))
+    # Prefer the stable account ID; usernames are a fallback for older deployments.
+    for owner in schedule_owners(payload):
+        if data := loader(owner):
+            return data
+    return None
 
 
 def _parse_schedule_date(value: object) -> date:

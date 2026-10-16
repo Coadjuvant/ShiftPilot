@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 import jwt
 from fastapi import Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
+from backend.auth_db import create_session, get_session_user
 
 from .settings import API_KEY, ADMIN_USER, IS_PROD, JWT_EXPIRE_HOURS, JWT_SECRET
 
@@ -27,9 +29,13 @@ def require_auth(
         token = request.cookies.get("auth_token")
     if token:
         try:
-            return decode_jwt(token)
-        except Exception:
-            raise HTTPException(status_code=401, detail="Invalid token")
+            payload = decode_jwt(token)
+        except jwt.PyJWTError:
+            raise HTTPException(status_code=401, detail="Session expired. Please sign in again.")
+        user = get_session_user(payload.get("jti", ""), str(payload.get("sub", "")))
+        if not user:
+            raise HTTPException(status_code=401, detail="Session expired. Please sign in again.")
+        return {**payload, "username": user["username"], "role": user["role"]}
     if expected_key:
         if x_api_key == expected_key:
             return {"sub": "api-key"}
@@ -46,12 +52,16 @@ def require_admin(payload: dict = Depends(require_auth)) -> dict:
 
 
 def make_token_payload(user: dict) -> dict:
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_HOURS)
+    session_id = uuid4().hex
+    create_session(session_id, user["id"], expires_at)
     return {
+        "jti": session_id,
         "sub": str(user["id"]),
         "username": user["username"],
         "role": user.get("role", "user"),
-        "iat": datetime.utcnow(),
-        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS),
+        "iat": datetime.now(timezone.utc),
+        "exp": expires_at,
     }
 
 

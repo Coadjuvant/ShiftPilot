@@ -13,10 +13,14 @@ import api, {
   lookupInvite,
   login,
   runSchedule,
+  friendlyApiError,
+  loadScheduleVersion,
   saveConfig,
   setAuthToken,
   setupUser
 } from "../api/client";
+import ScheduleHistory from "../components/ScheduleHistory";
+import AssignmentEditor from "../components/AssignmentEditor";
 import StaffEditor from "../components/StaffEditor";
 import AvailabilityEditor from "../components/AvailabilityEditor";
 import PrefsEditor from "../components/PrefsEditor";
@@ -49,16 +53,7 @@ type InviteLookupState = {
 };
 
 export default function StaffPlanner() {
-  const friendlyError = (err: any, fallback: string) => {
-    const status = err?.response?.status;
-    const detail = err?.response?.data?.detail;
-    if (status === 401) return "Invalid username or password";
-    if (status === 422 && detail) return String(detail);
-    if (status === 422) return "Validation failed. Please check your inputs.";
-    if (status === 409 && err?.response?.data?.detail) return String(err.response.data.detail);
-    if (status === 409) return "Conflict: value already in use.";
-    return err?.message ?? fallback;
-  };
+  const friendlyError = friendlyApiError;
   const formatDateTime = (value?: string | null) => {
     if (!value) return "";
     const dt = new Date(value);
@@ -93,12 +88,12 @@ export default function StaffPlanner() {
   };
   const downloadSavedSchedule = async () => {
     try {
-      const meta = await fetchLatestSchedule();
+      const meta = currentVersion || await fetchLatestSchedule();
       if ((meta as any)?.status === "none" || !meta?.assignments?.length) {
         setStatus("No saved schedule to download.");
         return;
       }
-      const blob = await exportScheduleExcel();
+      const blob = await exportScheduleExcel(meta.version_id, exportRoles);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -118,6 +113,8 @@ export default function StaffPlanner() {
         setStatus("No saved schedule found.");
         return;
       }
+      setCurrentVersion(data);
+      setRunError("");
       setAssignments(data.assignments);
       setStats(data.stats || {});
       if (Array.isArray(data.export_roles) && data.export_roles.length) {
@@ -165,6 +162,7 @@ export default function StaffPlanner() {
   const [configName, setConfigName] = useState<string>("Demo Clinic");
   const [timezone, setTimezone] = useState<string>("UTC");
   const [runResult, setRunResult] = useState<string>("");
+  const [runError, setRunError] = useState("");
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [assignments, setAssignments] = useState<
     Array<{
@@ -201,6 +199,7 @@ export default function StaffPlanner() {
   const [bleachRotation, setBleachRotation] = useState<string[]>([]);
   const [bleachFrequency, setBleachFrequency] = useState<string>("weekly");
   const [trials, setTrials] = useState<number>(20);
+  const [scheduledRoles, setScheduledRoles] = useState<string[]>(["Tech", "RN", "Admin"]);
   const [exportRoles, setExportRoles] = useState<string[]>(["Tech", "RN", "Admin"]);
   const [threeDayWeight, setThreeDayWeight] = useState<number>(10);
   const [postBleachWeight, setPostBleachWeight] = useState<number>(10);
@@ -210,11 +209,54 @@ export default function StaffPlanner() {
   const [lastError, setLastError] = useState<string>("");
   const [scheduleStaffMap, setScheduleStaffMap] = useState<Record<string, string> | null>(null);
   const [latestScheduleMeta, setLatestScheduleMeta] = useState<SavedSchedule | null>(null);
-  const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [progress, setProgress] = useState<number>(0);
+  const [currentVersion, setCurrentVersion] = useState<SavedSchedule | null>(null);
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const [unsavedAssignments, setUnsavedAssignments] = useState(false);
+  const [draftKey, setDraftKey] = useState("");
+  const [recoverableDraft, setRecoverableDraft] = useState<ConfigPayload | null>(null);
+  const savedSnapshot = useRef<string | null>(null);
+  const configLoadSequence = useRef(0);
+  const [savedRevision, setSavedRevision] = useState(0);
   const [autoLoadedConfig, setAutoLoadedConfig] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const isAuthed = Boolean(authToken && authToken.length > 0);
+
+  const workspacePayload = buildConfigPayload({
+    configName, timezone, startDate, weeks, bleachFrequency, patientsPerTech, patientsPerRn, techsPerRn,
+    threeDayWeight, postBleachWeight, altSatWeight, techFourWeight, rnFourWeight,
+    bleachDay, bleachRotation, bleachCursor, trials, exportRoles, scheduledRoles, staffRows, demandRows, ptoRows
+  });
+  const workspaceSnapshot = JSON.stringify(workspacePayload);
+  // A load establishes a new baseline after React applies its batched state changes.
+  useEffect(() => {
+    if (savedSnapshot.current === null) savedSnapshot.current = workspaceSnapshot;
+  }, [workspaceSnapshot, savedRevision]);
+  const hasUnsavedChanges = savedSnapshot.current !== null && savedSnapshot.current !== workspaceSnapshot;
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => { if (hasUnsavedChanges || unsavedAssignments) event.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsavedChanges, unsavedAssignments]);
+  useEffect(() => {
+    if (!draftKey) return;
+    try {
+      const saved = sessionStorage.getItem(draftKey);
+      if (saved) setRecoverableDraft(JSON.parse(saved));
+    } catch { setRecoverableDraft(null); }
+  }, [draftKey]);
+  useEffect(() => {
+    if (!draftKey || !hasUnsavedChanges || recoverableDraft) return;
+    try { sessionStorage.setItem(draftKey, workspaceSnapshot); } catch { /* The unsaved warning still protects changes. */ }
+  }, [draftKey, workspaceSnapshot, hasUnsavedChanges, recoverableDraft]);
+  const showVersion = (data: SavedSchedule) => {
+    setHistoryRevision(n => n + 1);
+    setCurrentVersion(data);
+    setAssignments(data.assignments);
+    setStats(data.stats || {});
+    setScheduleStaffMap(Object.fromEntries((data.staff || []).map(person => [person.id, person.name])));
+    setRunError("");
+    setRunResult(`Viewing ${data.schedule_status || "published"} schedule from ${formatDateTime(data.generated_at)}`);
+  };
 
   // --- Computed values ---
   const staffNameMap = staffRows.reduce<Record<string, string>>((acc, row) => {
@@ -297,7 +339,7 @@ export default function StaffPlanner() {
     setStats({});
     setRunResult("");
     setWinningSeed(null);
-    setProgress(0);
+    setCurrentVersion(null);
     setSelectedConfig("");
     setConfigs([]);
     setAutoLoadedConfig(false);
@@ -377,6 +419,7 @@ export default function StaffPlanner() {
       .get<UserInfo>("auth/me")
       .then((r) => {
         const data = r.data;
+        setDraftKey(`shiftpilot-settings-draft-${data.sub}`);
         setIsAdmin((data?.role || "").toLowerCase() === "admin");
         if (data?.username) {
           localStorage.setItem("auth_user", data.username);
@@ -458,12 +501,7 @@ export default function StaffPlanner() {
   }, [isAuthed]);
 
   // --- Config handlers ---
-  const handleLoadConfig = async (name?: string) => {
-    const cfgName = name ?? selectedConfig;
-    if (!cfgName) return;
-    setSelectedConfig(cfgName);
-    try {
-      const cfg: ConfigPayload = await loadConfig(cfgName);
+  const applyConfig = (cfg: ConfigPayload) => {
       setConfigName(cfg.clinic?.name ?? "Clinic");
       setTimezone(cfg.clinic?.timezone ?? "UTC");
       setStartDate(cfg.schedule?.start ?? startDate);
@@ -491,6 +529,8 @@ export default function StaffPlanner() {
       setRnFourWeight(
         coerceConstraintWeight(cfg.constraints?.limit_rn_four_days, rnFourWeight)
       );
+      setScheduledRoles(cfg.scheduled_roles || ["Tech", "RN", "Admin"]);
+      savedSnapshot.current = null;
       if (Array.isArray(cfg.export_roles)) {
         setExportRoles(cfg.export_roles as string[]);
       }
@@ -505,6 +545,18 @@ export default function StaffPlanner() {
       } else {
         setPtoRows([]);
       }
+  };
+
+  const handleLoadConfig = async (name?: string) => {
+    const cfgName = name ?? selectedConfig;
+    if (!cfgName) return;
+    if (hasUnsavedChanges && !window.confirm("Replace your unsaved settings with this saved clinic setup?")) return;
+    setSelectedConfig(cfgName);
+    const loadSequence = ++configLoadSequence.current;
+    try {
+      const cfg: ConfigPayload = await loadConfig(cfgName);
+      if (loadSequence !== configLoadSequence.current) return;
+      applyConfig(cfg);
       setStatus(`Loaded config: ${cfgName}`);
       localStorage.setItem("last_config", cfgName);
     } catch (err: any) {
@@ -514,7 +566,7 @@ export default function StaffPlanner() {
     }
   };
 
-  const handleSaveConfig = async () => {
+  const handleSaveConfig = async (asCopy = false) => {
     if (hasErrors) {
       setStatus("Fix validation errors before saving.");
       return;
@@ -538,13 +590,24 @@ export default function StaffPlanner() {
       bleachCursor,
       trials,
       exportRoles,
+      scheduledRoles,
       staffRows,
       demandRows,
       ptoRows
     });
-    const req: SaveConfigRequest = { payload, filename: configName ? `${configName}.json` : undefined };
+    const copyName = `${configName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "clinic"}.json`;
+    if (asCopy && configs.includes(copyName)) {
+      setStatus("Choose a different clinic name before saving a copy.");
+      return;
+    }
+    const req: SaveConfigRequest = { payload, filename: asCopy ? copyName : selectedConfig || undefined };
     try {
       const res = await saveConfig(req);
+      setSelectedConfig(res.filename);
+      if (draftKey) sessionStorage.removeItem(draftKey);
+      setRecoverableDraft(null);
+      savedSnapshot.current = JSON.stringify(workspacePayload);
+      setSavedRevision(n => n + 1);
       setStatus(`Saved: ${res.filename}`);
       const names = await listConfigs();
       setConfigs(names);
@@ -635,6 +698,7 @@ export default function StaffPlanner() {
 
   // --- Run handler (stays in parent — touches shared state) ---
   const handleRun = async () => {
+    if (unsavedAssignments && !window.confirm("Discard unsaved assignment edits and generate a new draft?")) return;
     if (exportRoles.length === 0) {
       const msg = "Select at least one export role before running.";
       setStatus(msg);
@@ -657,11 +721,8 @@ export default function StaffPlanner() {
     try {
       setLastError("");
       setIsRunning(true);
-      setProgress(0);
-      if (progressRef.current) clearInterval(progressRef.current);
-      progressRef.current = setInterval(() => {
-        setProgress((p) => (p < 90 ? p + 5 : p));
-      }, 200);
+      setRunError("");
+      setRunResult("");
       setStatus("Running schedule...");
       const selectedSeed =
         usePrevSeed && winningSeed !== null ? winningSeed : baseSeed > 0 ? baseSeed : null;
@@ -684,6 +745,7 @@ export default function StaffPlanner() {
         bleachCursor,
         trials,
         exportRoles,
+        scheduledRoles,
         staffRows,
         demandRows,
         ptoRows,
@@ -694,16 +756,14 @@ export default function StaffPlanner() {
         setStats(res.stats);
         setWinningSeed(res.winning_seed ?? null);
         setScheduleStaffMap(null);
-        if (typeof res.bleach_cursor === "number") {
-          setBleachCursor(res.bleach_cursor);
-        }
-        setProgress(100);
+        setCurrentVersion(await loadScheduleVersion(res.version_id));
+        setHistoryRevision(n => n + 1);
       setRunResult(
-        `Winning seed: ${res.winning_seed ?? "n/a"} | Score: ${
+        `Draft generated. Review coverage before publishing. Winning seed: ${res.winning_seed ?? "n/a"} | Score: ${
           res.total_penalty?.toFixed ? res.total_penalty.toFixed(2) : res.total_penalty ?? "n/a"
         } | Next bleach in rotation: ${res.bleach_cursor} | Assignments: ${res.assignments.length}`
       );
-      setStatus("Schedule generated.");
+      setStatus("Draft generated. Review coverage before publishing.");
       setLastError("");
       refreshLatestMeta();
       try {
@@ -714,16 +774,12 @@ export default function StaffPlanner() {
       }
     } catch (err: any) {
       const msg = friendlyError(err, "Failed to generate schedule");
+      setRunError(msg);
       setStatus(msg);
       setRunResult("");
       setLastError(msg);
-      setProgress(0);
     } finally {
       setIsRunning(false);
-      if (progressRef.current) {
-        clearInterval(progressRef.current);
-        progressRef.current = null;
-      }
     }
   };
 
@@ -759,7 +815,7 @@ export default function StaffPlanner() {
   const runConfig: RunConfig = {
     configName, timezone, startDate, weeks,
     patientsPerTech, patientsPerRn, techsPerRn,
-    trials, baseSeed, usePrevSeed, exportRoles
+    trials, baseSeed, usePrevSeed, exportRoles, scheduledRoles
   };
   const handleRunConfigChange = (next: RunConfig) => {
     setConfigName(next.configName);
@@ -773,6 +829,7 @@ export default function StaffPlanner() {
     setBaseSeed(next.baseSeed);
     setUsePrevSeed(next.usePrevSeed);
     setExportRoles(next.exportRoles);
+    setScheduledRoles(next.scheduledRoles);
   };
 
   // --- Login wall ---
@@ -782,7 +839,7 @@ export default function StaffPlanner() {
           <div className="planner-hero">
             <div>
               <p className="eyebrow-pill">Planner access</p>
-              <h2 style={{ margin: "0.25rem 0 0.35rem" }}>Staff Planner (React prototype)</h2>
+              <h2 style={{ margin: "0.25rem 0 0.35rem" }}>Schedule planner</h2>
               <p className="hero-sub" style={{ maxWidth: "700px" }}>
                 Sign in with your clinic manager credentials to load configs, run scenarios, and export clean handoffs. One login,
                 no staff self-serve.
@@ -904,12 +961,18 @@ export default function StaffPlanner() {
   // --- Authenticated planner shell ---
   return (
     <section className="card planner-shell">
-      <h2>Staff Planner (React prototype)</h2>
-      <div className="planner-meta-row">
+      <h2>Schedule planner</h2>
+      <p className="muted">{configName} · {startDate} · {weeks} week{weeks === 1 ? "" : "s"} · {hasUnsavedChanges ? "Unsaved changes" : "Settings saved"}</p>
+      {recoverableDraft && <div className="recovery-notice" role="status">
+        <p>Unsaved clinic settings from this browser tab are available.</p>
+        <button onClick={() => { configLoadSequence.current += 1; applyConfig(recoverableDraft); savedSnapshot.current = ""; setRecoverableDraft(null); }}>Restore settings</button>
+        <button className="secondary-btn" onClick={() => { sessionStorage.removeItem(draftKey); setRecoverableDraft(null); }}>Discard recovery copy</button>
+      </div>}
+      <div className="planner-meta-row" aria-live="polite">
         <span className="pill subtle">
           {latestScheduleMeta?.generated_at
-            ? `Last run: ${formatGeneratedAt(latestScheduleMeta.generated_at)}`
-            : "No saved schedule"}
+            ? `Published roster · generated ${formatGeneratedAt(latestScheduleMeta.generated_at)}`
+            : "No published roster"}
         </span>
       </div>
       {showStatusLine ? <p>{statusText}</p> : null}
@@ -944,6 +1007,7 @@ export default function StaffPlanner() {
           <button onClick={handleDeleteConfig} disabled={!selectedConfig}>
             Delete
           </button>
+            <label htmlFor="config-save-name">Clinic name</label>
             <input
               placeholder="Save as..."
               id="config-save-name"
@@ -952,23 +1016,25 @@ export default function StaffPlanner() {
               onChange={(e) => setConfigName(e.target.value)}
               style={{ maxWidth: "180px" }}
             />
-          <button onClick={handleSaveConfig}>Save</button>
+          <button onClick={() => void handleSaveConfig()}>Save</button>
+          {selectedConfig && <button className="secondary-btn" onClick={() => void handleSaveConfig(true)}>Save copy</button>}
         </div>
-        <div className="tabs">
+        <div className="tabs" aria-label="Planner sections">
           {[
             { key: "staff", label: "Staff" },
-            { key: "demand", label: "Demand" },
+            { key: "demand", label: "Coverage needs" },
             { key: "avail", label: "Availability" },
             { key: "pto", label: "PTO" },
-            { key: "constraints", label: "Constraints" },
-            { key: "prefs", label: "Prefs" },
-            { key: "run", label: "Run" },
+            { key: "constraints", label: "Scheduling rules" },
+            { key: "prefs", label: "Preferences" },
+            { key: "run", label: "Review & generate" },
             ...(isAdmin ? [{ key: "admin", label: "Admin" }] : [])
           ].map((tab) => (
             <button
               key={tab.key}
+              aria-pressed={activeTab === tab.key}
               className={`tab-btn ${activeTab === tab.key ? "active" : ""}`}
-              onClick={() => setActiveTab(tab.key as any)}
+              onClick={() => { if (unsavedAssignments && !window.confirm("Discard unsaved assignment edits before leaving this section?")) return; setUnsavedAssignments(false); setActiveTab(tab.key as any); }}
             >
               {tab.label}
             </button>
@@ -1032,12 +1098,22 @@ export default function StaffPlanner() {
         )}
 
         {activeTab === "run" && (
+          <>
+          <ScheduleHistory onDeleted={(id) => {
+            if (currentVersion?.version_id !== id) {
+              setHistoryRevision(n => n + 1); setStatus("Draft deleted. Your published schedule is unchanged.");
+              return;
+            }
+            setCurrentVersion(null); setAssignments([]); setStats({}); setScheduleStaffMap(null);
+            setUnsavedAssignments(false); setRunResult(""); setRunError("");
+            setHistoryRevision(n => n + 1); setStatus("Draft deleted. Your published schedule is unchanged.");
+          }} current={currentVersion} revision={historyRevision} hasEdits={unsavedAssignments} publishedId={latestScheduleMeta?.version_id} onLoad={showVersion} onPublished={() => { if (typeof currentVersion?.bleach_cursor === "number") setBleachCursor(currentVersion.bleach_cursor); void refreshLatestMeta(); window.dispatchEvent(new Event("storage")); }} />
           <RunPanel
             config={runConfig}
             onConfigChange={handleRunConfigChange}
             isRunning={isRunning}
-            progress={progress}
             runResult={runResult}
+            runError={runError}
             assignments={assignments}
             stats={stats}
             displayStaffMap={displayStaffMap}
@@ -1047,6 +1123,8 @@ export default function StaffPlanner() {
             onDownloadExcel={downloadSavedSchedule}
             onLoadLatest={loadLatestSavedSchedule}
           />
+          <AssignmentEditor current={currentVersion} onLoad={showVersion} onDirty={setUnsavedAssignments} />
+          </>
         )}
 
         {activeTab === "admin" && isAdmin && <AdminPanel />}

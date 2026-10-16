@@ -15,6 +15,9 @@ venv/
 .env
 .screenshots/
 .codex-backups/
+.local/
+.env.*
+!.env.example
 
 # Node/Vite
 node_modules/

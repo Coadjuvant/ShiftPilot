@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   AuditEntry,
+  friendlyApiError,
   AuditFilters,
   UserSummary,
   createInvite,
@@ -16,6 +17,7 @@ const auditEventOptions = [
   "login_success",
   "login_fail",
   "schedule_run",
+  "schedule_published",
   "schedule_export",
   "schedule_import",
   "config_save",
@@ -45,16 +47,10 @@ const formatDateTime = (value?: string | null) => {
   return `${month}/${day}/${year} ${hours}:${minutes}:${seconds} ${suffix}`;
 };
 
-const friendlyError = (err: any, fallback: string) => {
-  const status = err?.response?.status;
-  if (status === 401) return "Invalid username or password";
-  if (status === 422) return "Validation failed. Please check your inputs.";
-  if (status === 409 && err?.response?.data?.detail) return String(err.response.data.detail);
-  if (status === 409) return "Conflict: value already in use.";
-  return err?.message ?? fallback;
-};
+const friendlyError = friendlyApiError;
 
 export default function AdminPanel() {
+  const [adminError, setAdminError] = useState("");
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [auditFeed, setAuditFeed] = useState<AuditEntry[]>([]);
   const [auditEvent, setAuditEvent] = useState<string>("");
@@ -90,8 +86,8 @@ export default function AdminPanel() {
     try {
       const data = await listUsers();
       setUsers(data);
-    } catch {
-      // ignore
+    } catch (err) {
+      setAdminError(friendlyApiError(err, "Could not load accounts."));
     }
   };
 
@@ -106,8 +102,8 @@ export default function AdminPanel() {
       };
       const data = await listAudit(filters);
       setAuditFeed(data);
-    } catch {
-      /* ignore */
+    } catch (err) {
+      setAdminError(friendlyApiError(err, "Could not load activity."));
     }
   };
 
@@ -123,8 +119,9 @@ export default function AdminPanel() {
 
   return (
     <div className="card" style={{ marginTop: "1rem" }}>
-      <h3>Admin</h3>
-      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.75rem" }}>
+      <h3>Administration</h3>
+      {adminError && <p className="status error" role="alert">{adminError}</p>}
+      <div className="admin-user-tools" style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.75rem" }}>
         <strong>User tools</strong>
         <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem", alignItems: "center" }}>
             <input
@@ -206,9 +203,9 @@ export default function AdminPanel() {
                 <select
                   id={`admin-user-role-${u.id}`}
                   name={`admin-user-role-${u.id}`}
-                  disabled={u.username?.toLowerCase() === "admin" || u.id === 1}
+                  disabled={u.is_bootstrap_admin}
                   title={
-                    u.username?.toLowerCase() === "admin" || u.id === 1
+                    u.is_bootstrap_admin
                       ? "Master admin cannot be changed"
                       : undefined
                   }
@@ -218,8 +215,8 @@ export default function AdminPanel() {
                     try {
                       await updateUserRole(u.id, newRole);
                           loadUsers();
-                        } catch {
-                          /* ignore */
+                        } catch (err) {
+                          setAdminError(friendlyApiError(err, "Could not update this account."));
                         }
                       }}
                     >
@@ -241,25 +238,29 @@ export default function AdminPanel() {
                   >
                     <button
                       className="secondary-btn"
+                      disabled={u.is_bootstrap_admin || u.status === "disabled"}
                       onClick={async () => {
+                        if (!window.confirm(`Disable access for ${u.username}? Existing sessions will stop working.`)) return;
                         try {
-                          await revokeInvite({ username: u.username, license_key: "" });
+                          await revokeInvite({ username: u.username, license_key: "DEMO" });
                           loadUsers();
-                        } catch {
-                          /* ignore */
+                        } catch (err) {
+                          setAdminError(friendlyApiError(err, "Could not update this account."));
                         }
                       }}
                     >
-                      Revoke invite
+                      {u.status === "active" ? "Disable access" : "Revoke invitation"}
                     </button>
                     <button
                       className="secondary-btn"
+                      disabled={u.is_bootstrap_admin}
                       onClick={async () => {
+                        if (!window.confirm(`Permanently delete the account ${u.username}?`)) return;
                         try {
                           await deleteUser(u.id);
                           loadUsers();
-                        } catch {
-                          /* ignore */
+                        } catch (err) {
+                          setAdminError(friendlyApiError(err, "Could not update this account."));
                         }
                       }}
                     >

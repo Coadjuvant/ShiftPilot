@@ -36,6 +36,33 @@
   --pill-radius: 999px;
 }
 
+/* Operational screens favor legibility and predictable focus over decoration. */
+:focus-visible { outline: 3px solid var(--concise-blue); outline-offset: 3px; }
+.page-shell .planner-shell { max-width: 1500px; margin: 1.5rem auto; padding: 1.5rem; }
+.planner-shell .card { box-shadow: none; background-image: none; }
+.section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.section-heading h3 { margin-bottom: 0.25rem; }
+.schedule-history select { max-width: 100%; width: 32rem; }
+.role-options { border: 1px solid var(--warm-3); border-radius: 8px; display: flex; flex-wrap: wrap; gap: 1rem; padding: 0.75rem; }
+.role-options label { display: flex; flex-direction: row; align-items: center; gap: 0.4rem; }
+.coverage-summary { margin-top: 1rem; padding: 1rem; border: 1px solid var(--medical-blue); border-radius: 8px; }
+.coverage-summary strong, .coverage-summary span { display: block; }
+.planner-shell .schedule-matrix th:first-child, .planner-shell .schedule-matrix td:first-child { position: sticky; left: 0; background: var(--warm-1); color: var(--deep-blue); z-index: 1; }
+.page-shell.dark .planner-shell .schedule-matrix th:first-child, .page-shell.dark .planner-shell .schedule-matrix td:first-child { background: var(--deep-blue); color: white; }
+.page-shell .auth-hero { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); }
+.auth-card .status { overflow-wrap: anywhere; }
+@media (max-width: 800px) {
+  .page-shell .auth-hero { display: flex; flex-direction: column; gap: 1.25rem; padding-top: 1.5rem; }
+  .auth-copy .hero-sub { margin-bottom: 0; }
+  .auth-card { width: 100%; box-sizing: border-box; }
+  .page-shell .planner-shell { padding: 1rem; margin: 0.75rem; }
+  .schedule-history select { width: 100%; }
+  .controls-row > label { min-width: 0; max-width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -2535,4 +2562,33 @@ button.secondary-link:hover {
   table td, table th {
     padding: 6px 4px;
   }
+}
+
+/* Final overrides for the operational workspace in both themes. */
+.page-shell.dark .planner-shell, .page-shell.dark .planner-shell .card { background: #101d32; background-image: none; border-color: #2a3b55; box-shadow: none; }
+.page-shell.light .planner-shell, .page-shell.light .planner-shell .card { background: #fff; background-image: none; border-color: #d6dce5; box-shadow: none; }
+.page-shell .planner-shell button { box-shadow: none; }
+.page-shell .planner-shell .tab-btn { background: transparent; border-radius: 8px; }
+.page-shell .planner-shell .tab-btn.active { background: var(--brand-blue); color: white; }
+.page-shell .planner-shell .tabs { gap: 0.35rem; border-bottom: 1px solid #64748b; padding-bottom: 0.75rem; }
+.page-shell .planner-shell details > summary { cursor: pointer; padding: 0.75rem 0; font-weight: 600; }
+.table-scroll { overflow: auto; max-height: 32rem; }
+.table-scroll table { width: 100%; border-collapse: collapse; }
+.table-scroll th { position: sticky; top: 0; background: var(--deep-blue); color: white; }
+.table-scroll th, .table-scroll td { padding: 0.6rem; text-align: left; }
+.recovery-notice { padding: 0.75rem 1rem; border: 1px solid var(--medical-blue); border-radius: 8px; margin: 1rem 0; }
+.recovery-notice button { margin-right: 0.5rem; }
+
+.page-shell .planner-shell::after { display: none; }
+.theme-choice { white-space: nowrap; }
+
+@media (max-width: 600px) {
+  .page-shell .top-nav { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "nav brand" "cta cta"; }
+  .page-shell .brand-mark { min-width: 0; justify-self: end; max-width: 100%; }
+  .page-shell .brand-logo { max-width: 220px; width: 100%; height: 54px; object-fit: contain; }
+  .page-shell .nav-right { width: 100%; min-width: 0; justify-content: flex-end; flex-wrap: wrap; }
+  .page-shell .nav-right > div { min-width: 0; flex-wrap: wrap; }
+  .page-shell .nav-right .pill { display: none; }
+  .admin-user-tools, .admin-user-tools > div { flex-direction: column; align-items: stretch !important; width: 100%; }
+  .admin-user-tools input, .admin-user-tools select { max-width: none !important; width: 100%; box-sizing: border-box; }
 }

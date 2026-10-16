@@ -7,7 +7,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
-from backend.auth_db import get_latest_schedule, log_event, save_schedule as persist_schedule
+from backend.auth_db import get_latest_schedule, log_event, save_schedule_draft, list_schedule_versions, get_schedule_version, publish_schedule_version, delete_schedule_draft
 from backend.scheduler import (
     ConstraintToggles,
     DailyRequirement,
@@ -17,12 +17,12 @@ from backend.scheduler import (
     export_schedule_to_excel,
     run_tournament,
 )
-from backend.scheduler.engine import OPEN_LABEL
+from backend.scheduler.engine import OPEN_LABEL, FixedAssignmentConflict
 from backend.scheduler.model import DAYS, PTOEntry
 
 from ..dependencies import require_auth
 from ..request_context import rate_limit, request_meta
-from ..schemas import AssignmentOut, ScheduleRequest, ScheduleResponse, StaffMemberIn
+from ..schemas import AssignmentOut, ScheduleRequest, ScheduleResponse, StaffMemberIn, ScheduleAdjustment
 from ..serialization import (
     hydrate_pto_entries,
     hydrate_schedule_result,
@@ -30,6 +30,7 @@ from ..serialization import (
     schedule_date_range,
     schedule_owners,
     slugify,
+    config_owner,
 )
 from ..settings import IS_PROD
 
@@ -37,7 +38,7 @@ router = APIRouter(prefix="/api")
 
 
 def _to_staff_member(payload: StaffMemberIn) -> StaffMember:
-    preferences = StaffPreferences(**payload.preferences.dict())
+    preferences = StaffPreferences(**payload.preferences.model_dump())
     availability = {day: bool(payload.availability.get(day, False)) for day in DAYS}
     return StaffMember(
         id=payload.id,
@@ -62,6 +63,7 @@ def _serialize_assignments(assignments: list[AssignmentOut]) -> list[dict]:
             "notes": getattr(item, "notes", []),
             "slot_index": getattr(item, "slot_index", None),
             "is_bleach": getattr(item, "is_bleach", False),
+            "is_locked": item.is_locked,
         }
         for item in assignments
     ]
@@ -106,7 +108,7 @@ def run_schedule(
                     "Suggested fix: choose the Monday for that schedule week, then run again."
                 ),
             )
-        toggles = ConstraintToggles(**body.config.toggles.dict())
+        toggles = ConstraintToggles(**body.config.toggles.model_dump())
         config = ScheduleConfig(
             clinic_name=body.config.clinic_name,
             timezone=body.config.timezone,
@@ -124,7 +126,9 @@ def run_schedule(
         pto_entries = [PTOEntry(staff_id=item.staff_id, date=item.date) for item in body.pto]
         if not body.export_roles:
             raise HTTPException(status_code=400, detail="Select at least one export role.")
-        active_roles = body.export_roles
+        active_roles = body.scheduled_roles
+        fixed = {(a.date.isoformat(), a.role, a.duty, a.slot_index): a.staff_id for a in body.fixed_assignments}
+        locked = {(a.date.isoformat(), a.role, a.duty, a.slot_index) for a in body.fixed_assignments if a.is_locked}
         result, winning_seed = run_tournament(
             staff_members,
             requirements,
@@ -134,6 +138,7 @@ def run_schedule(
             base_seed=body.base_seed,
             scheduled_roles=active_roles,
             score_roles=active_roles,
+            fixed_assignments=fixed,
         )
         essential_float_slots: List[str] = []
         for assignment in result.assignments:
@@ -163,6 +168,7 @@ def run_schedule(
             )
         assignments = [
             AssignmentOut(
+                is_locked=(assignment.slot.date.isoformat(), assignment.slot.role, "bleach" if assignment.slot.is_bleach else assignment.slot.duty, assignment.slot.slot_index) in locked,
                 date=assignment.slot.date,
                 day_name=assignment.slot.day_name,
                 role=assignment.slot.role,
@@ -189,7 +195,7 @@ def run_schedule(
             else body.config.start_date,
             "weeks": body.config.weeks,
             "bleach_frequency": body.config.bleach_frequency,
-            "toggles": body.config.toggles.dict(),
+            "toggles": body.config.toggles.model_dump(),
             "requirements": [
                 {
                     "day_name": req.day_name,
@@ -209,6 +215,7 @@ def run_schedule(
             "winning_seed": winning_seed,
             "bleach_cursor": result.bleach_cursor,
             "export_roles": body.export_roles,
+            "scheduled_roles": body.scheduled_roles,
             "tournament_trials": body.tournament_trials,
             "pto": [
                 {
@@ -220,8 +227,9 @@ def run_schedule(
             "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
         safe_payload = json.loads(json.dumps(schedule_payload, default=str))
-        for owner in schedule_owners(payload):
-            persist_schedule(owner, safe_payload)
+        safe_payload["inputs"] = body.model_dump(mode="json")
+        safe_payload["inputs"]["fixed_assignments"] = [a.model_dump(mode="json") for a in body.fixed_assignments if a.is_locked]
+        version_id = save_schedule_draft(config_owner(payload), safe_payload)
         open_slots = sum(
             1
             for assignment in assignments
@@ -242,6 +250,7 @@ def run_schedule(
         ip, ip_v4, user_agent, location = request_meta(http_request)
         log_event(payload.get("sub"), "schedule_run", detail, ip, user_agent, location, ip_v4)
         return ScheduleResponse(
+            version_id=version_id,
             bleach_cursor=result.bleach_cursor,
             winning_seed=winning_seed,
             assignments=assignments,
@@ -249,6 +258,8 @@ def run_schedule(
             stats=result.stats,
             excel=excel_b64,
         )
+    except FixedAssignmentConflict as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except HTTPException as exc:
         raise exc
     except Exception as exc:
@@ -267,22 +278,84 @@ def latest_schedule(response: Response, payload: dict = Depends(require_auth)) -
     return data
 
 
+@router.get("/schedule/versions")
+def schedule_history(payload: dict = Depends(require_auth)):
+    return list_schedule_versions(schedule_owners(payload))
+
+
+@router.get("/schedule/versions/{version_id}")
+def load_version(version_id: str, payload: dict = Depends(require_auth)):
+    data = get_schedule_version(schedule_owners(payload), version_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Schedule version not found")
+    return data
+
+
+@router.post("/schedule/versions/{version_id}/publish")
+def publish_version(version_id: str, request: Request, payload: dict = Depends(require_auth)):
+    data = publish_schedule_version(config_owner(payload), schedule_owners(payload), version_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Schedule version not found")
+    ip, ip_v4, user_agent, location = request_meta(request)
+    log_event(payload.get("sub"), "schedule_published", f"version={version_id}", ip, user_agent, location, ip_v4)
+    return data
+
+
+@router.delete("/schedule/versions/{version_id}")
+def delete_draft(version_id: str, request: Request, payload: dict = Depends(require_auth)):
+    result = delete_schedule_draft(schedule_owners(payload), version_id)
+    if result == "missing":
+        raise HTTPException(status_code=404, detail="Schedule version not found")
+    if result == "published":
+        raise HTTPException(status_code=409, detail="Published schedules cannot be deleted. Only drafts can be deleted.")
+    ip, ip_v4, user_agent, location = request_meta(request)
+    log_event(payload.get("sub"), "schedule_draft_deleted", f"version={version_id}", ip, user_agent, location, ip_v4)
+    return {"status": "deleted"}
+
+
+@router.post("/schedule/versions/{version_id}/adjust", dependencies=[Depends(rate_limit("schedule_run", limit=8, window_seconds=60))])
+def adjust_version(version_id: str, request: Request, changes: ScheduleAdjustment, payload: dict = Depends(require_auth)):
+    source = get_schedule_version(schedule_owners(payload), version_id)
+    if not source or not source.get("inputs"):
+        raise HTTPException(status_code=404, detail="This version has no saved generation inputs. Generate a new draft first.")
+    expected = {(a["date"], a["role"], a["duty"], a["slot_index"]) for a in source["assignments"]}
+    provided = {(a.date.isoformat(), a.role, a.duty, a.slot_index) for a in changes.assignments}
+    if expected != provided or len(changes.assignments) != len(expected):
+        raise HTTPException(status_code=422, detail="Adjustments must retain every original schedule slot exactly once.")
+    try:
+        body = ScheduleRequest(**{**source["inputs"], "fixed_assignments": [a.model_dump() for a in changes.assignments], "tournament_trials": 1})
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return run_schedule(request, body, payload)
+
+
+@router.post("/schedule/versions/{version_id}/regenerate", dependencies=[Depends(rate_limit("schedule_run", limit=8, window_seconds=60))])
+def regenerate_version(version_id: str, request: Request, payload: dict = Depends(require_auth)):
+    source = get_schedule_version(schedule_owners(payload), version_id)
+    if not source or not source.get("inputs"):
+        raise HTTPException(status_code=404, detail="This version has no saved generation inputs. Generate a new draft first.")
+    return run_schedule(request, ScheduleRequest(**source["inputs"]), payload)
+
+
 @router.get("/schedule/export/csv")
 def export_schedule_csv(request: Request, payload: dict = Depends(require_auth)):
     raise HTTPException(status_code=501, detail="CSV export is disabled for now")
 
 
 @router.get("/schedule/export/excel")
-def export_schedule_excel(request: Request, payload: dict = Depends(require_auth)):
-    data = latest_schedule_for(payload, get_latest_schedule)
+def export_schedule_excel(request: Request, version_id: str | None = None, roles: str | None = None, payload: dict = Depends(require_auth)):
+    data = get_schedule_version(schedule_owners(payload), version_id) if version_id else latest_schedule_for(payload, get_latest_schedule)
     if not data or not data.get("assignments"):
         raise HTTPException(status_code=404, detail="No saved schedule")
     result, staff = hydrate_schedule_result(data)
     pto_entries = hydrate_pto_entries(data)
+    export_roles = roles.split(",") if roles else data.get("export_roles")
+    if export_roles and any(role not in {"Tech", "RN", "Admin"} for role in export_roles):
+        raise HTTPException(status_code=422, detail="Choose valid export roles")
     excel_bytes = export_schedule_to_excel(
         result,
         staff,
-        export_roles=data.get("export_roles"),
+        export_roles=export_roles,
         pto_entries=pto_entries,
     )
     clinic_name = data.get("clinic_name") or "schedule"

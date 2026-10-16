@@ -1,0 +1,20 @@
+# Separate project and volume; never uses the production .env or database.
+name: shiftpilot-local-test
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: shiftpilot_test
+      POSTGRES_PASSWORD: ${SHIFT_TEST_DB_PASSWORD:?Set a local-only test password}
+      POSTGRES_DB: shiftpilot_test
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - test-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shiftpilot_test -d shiftpilot_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+volumes:
+  test-db-data:

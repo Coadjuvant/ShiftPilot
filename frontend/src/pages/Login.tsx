@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { consumeAuthExpiredFlag, fetchHealth, login, setAuthToken, setupUser } from "../api/client";
+import { consumeAuthExpiredFlag, fetchHealth, login, logout, lookupInvite, InviteLookup, friendlyApiError, setAuthToken, setupUser } from "../api/client";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -17,7 +17,19 @@ export default function Login() {
   const [signupStatus, setSignupStatus] = useState("");
   const [signupTone, setSignupTone] = useState<"default" | "success" | "error">("default");
   const [isCreating, setIsCreating] = useState(false);
+  const [inviteContext, setInviteContext] = useState<InviteLookup | null>(null);
+  const [showPasswordHelp, setShowPasswordHelp] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setInviteContext(null);
+    if (authMode !== "signup" || inviteToken.trim().length < 8) return;
+    let cancelled = false;
+    lookupInvite(inviteToken.trim()).then(context => {
+      if (!cancelled) { setInviteContext(context); setNewUsername(context.username); }
+    }).catch(() => { /* Submission provides the actionable expired/invalid invitation error. */ });
+    return () => { cancelled = true; };
+  }, [inviteToken, authMode]);
 
   useEffect(() => {
     fetchHealth()
@@ -43,13 +55,13 @@ export default function Login() {
       localStorage.setItem("auth_token", res.token);
       localStorage.setItem("auth_user", username || "user");
       setLoginSuccess(true);
-      const message = "Login successful. Redirecting to home...";
+      const message = "Signed in. Opening your planner...";
       setStatus(message);
       setStatusTone("success");
       window.dispatchEvent(new Event("storage"));
-      setTimeout(() => navigate("/"), 2000);
-    } catch {
-      setStatus("Login failed. Check credentials.");
+      navigate("/planner");
+    } catch (error: any) {
+      setStatus(error?.response?.status === 401 ? "Username or password is incorrect." : friendlyApiError(error, "Could not sign in. Check your connection and try again."));
       setLoginSuccess(false);
       setStatusTone("error");
     } finally {
@@ -66,9 +78,8 @@ export default function Login() {
     setLoginSuccess(false);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("auth_user");
+  const handleLogout = async () => {
+    try { await logout(); } catch { setStatus("Could not end your session. Please try again."); return; }
     setLoginSuccess(false);
     setStatus("Logged out");
     setStatusTone("default");
@@ -87,13 +98,12 @@ export default function Login() {
       setAuthToken(res.token);
       localStorage.setItem("auth_token", res.token);
       localStorage.setItem("auth_user", newUsername || "user");
-      setSignupStatus("Account created. Redirecting to home...");
+      setSignupStatus(inviteContext?.type === "reset" ? "Password updated. Opening planner…" : "Account created. Opening planner…");
       setSignupTone("success");
       window.dispatchEvent(new Event("storage"));
-      setTimeout(() => navigate("/"), 2500);
+      navigate("/planner");
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || "Account creation failed. Check the key and try again.";
-      setSignupStatus(String(msg));
+      setSignupStatus(friendlyApiError(err, "Could not accept the invitation. Check the key and try again."));
       setSignupTone("error");
     } finally {
       setIsCreating(false);
@@ -112,23 +122,13 @@ export default function Login() {
           <div className="eyebrow-pill">Access your planner</div>
           <h1>Log in to ShiftPilot</h1>
           <p className="hero-sub">
-            One set of clinic manager credentials - open the planner, run scenarios, and export clean handoffs for floor teams and leadership.
+            Sign in to update availability, plan clinic coverage, and export your schedule.
           </p>
-          <ul className="hero-checklist">
-            <li>Guardrails for Tech / RN / Admin</li>
-            <li>Keep fixed assignments locked</li>
-            <li>Exports ready for Excel</li>
-          </ul>
-          <div className="auth-badges">
-            <span className="pill subtle">Single login</span>
-            <span className="pill subtle">No staff self-serve</span>
-            <span className="pill subtle">HIPAA conscious</span>
-          </div>
         </div>
 
         <div className="auth-card">
           <div className="auth-card-head">
-            <p className="muted">{authMode === "login" ? "Clinic manager sign-in" : "Create your clinic login"}</p>
+            <p className="muted">{authMode === "login" ? "Clinic manager sign-in" : inviteContext?.type === "reset" ? "Reset your password" : "Accept your invitation"}</p>
             <div style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "wrap" }}>
               <span className={`pill ${online === "ok" ? "success" : "subtle"}`} title={onlineTitle}>
                 {onlineLabel}
@@ -170,10 +170,12 @@ export default function Login() {
                 </button>
                 {status && <p className={`status ${statusTone !== "default" ? statusTone : ""}`}>{status}</p>}
               </form>
+              <button type="button" className="secondary-link" onClick={() => setShowPasswordHelp(value => !value)}>Password help</button>
+              {showPasswordHelp && <p className="muted">Ask your clinic administrator for a password reset invitation, then choose Accept invitation below.</p>}
               <div className="auth-switch-row">
                 <span className="muted small-note">Need access? Redeem an invite key.</span>
                 <button type="button" className="secondary-link" onClick={() => switchMode("signup")}>
-                  Register
+                  Accept invitation
                 </button>
               </div>
             </>
@@ -199,6 +201,7 @@ export default function Login() {
                     id="signup-username"
                     name="signup-username"
                     value={newUsername}
+                    disabled={inviteContext?.type === "reset"}
                     onChange={(e) => setNewUsername(e.target.value)}
                     autoComplete="username"
                     required
@@ -213,11 +216,12 @@ export default function Login() {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     autoComplete="new-password"
+                    minLength={12}
                     required
                   />
                 </label>
                 <button type="submit" disabled={isCreating}>
-                  {isCreating ? "Creating account..." : "Create account"}
+                  {isCreating ? "Saving…" : inviteContext?.type === "reset" ? "Save new password" : "Accept invitation"}
                 </button>
                 {signupStatus && (
                   <p className={`status ${signupTone !== "default" ? signupTone : ""}`}>{signupStatus}</p>

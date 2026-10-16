@@ -385,7 +385,7 @@ export default function Landing() {
             without the scramble
           </h1>
           <p className="hero-sub">
-            Keep RN, Tech, and admin assistant coverage balanced across shifts. ShiftPilot gives you guardrails, collaboration, and exports without
+            Keep RN, Tech, and admin assistant coverage balanced across shifts. ShiftPilot gives you guardrails, draft review, and exports without
             losing override control.
           </p>
           <div className="hero-actions">
@@ -403,7 +403,7 @@ export default function Landing() {
             <li>Exports for floor teams & leadership</li>
           </ul>
           <div className="trust-row">
-            <div className="pill muted-pill">HIPAA-conscious workflows</div>
+            <div className="pill muted-pill">Manager-controlled access</div>
             <div className="pill muted-pill">Audit-friendly exports</div>
             <div className="pill muted-pill">Built for clinic managers</div>
           </div>
@@ -532,7 +532,7 @@ export default function Landing() {
                   <span className="pill small-pill">Week of Jun 10</span>
                   <h4 style={{ margin: 0 }}>Dialysis coverage</h4>
                 </div>
-                <div className="pill muted-pill">Conflicts resolved</div>
+                <div className="pill muted-pill">Example roster</div>
               </div>
               <div className="schedule-list">
                 <div className="schedule-row">

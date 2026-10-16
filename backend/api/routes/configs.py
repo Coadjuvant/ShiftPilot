@@ -58,7 +58,7 @@ def save_config(request: Request, body: SaveConfigRequest, payload: dict = Depen
     if not filename.endswith(".json"):
         filename += ".json"
     try:
-        payload_dict = body.payload.dict()
+        payload_dict = body.payload.model_dump()
         safe_name = Path(filename).name
         save_user_config(owner, safe_name, payload_dict)
         size_kb = round(len(json.dumps(payload_dict, default=str)) / 1024, 1)
@@ -98,7 +98,7 @@ def import_config(request: Request, body: SaveConfigRequest, payload: dict = Dep
         filename = f"{slugify(body.payload.clinic.name)}.config"
     try:
         safe_name = Path(filename).name
-        payload_dict = body.payload.dict()
+        payload_dict = body.payload.model_dump()
         import_user_config(owner, safe_name, payload_dict)
         size_kb = round(len(json.dumps(payload_dict, default=str)) / 1024, 1)
         ip, ip_v4, user_agent, location = request_meta(request)

@@ -12,6 +12,7 @@ export type RunConfig = {
   baseSeed: number;
   usePrevSeed: boolean;
   exportRoles: string[];
+  scheduledRoles: string[];
 };
 
 type Assignment = {
@@ -29,8 +30,8 @@ type Props = {
   config: RunConfig;
   onConfigChange: (next: RunConfig) => void;
   isRunning: boolean;
-  progress: number;
   runResult: string;
+  runError?: string;
   assignments: Assignment[];
   stats: Record<string, number>;
   displayStaffMap: Record<string, string>;
@@ -45,8 +46,8 @@ export default function RunPanel({
   config,
   onConfigChange,
   isRunning,
-  progress,
   runResult,
+  runError,
   assignments,
   stats,
   displayStaffMap,
@@ -58,9 +59,9 @@ export default function RunPanel({
 }: Props) {
   const FLOAT_ROW_ID = "__FLOAT__";
   const UNFILLED_ROW_ID = "__UNFILLED__";
-  const { configName, timezone, startDate, weeks, patientsPerTech, patientsPerRn, techsPerRn, trials, baseSeed, usePrevSeed, exportRoles } = config;
+  const { configName, timezone, startDate, weeks, patientsPerTech, patientsPerRn, techsPerRn, trials, baseSeed, usePrevSeed, exportRoles, scheduledRoles } = config;
   const hasNoExportRoles = exportRoles.length === 0;
-  const hasRunErrors = hasErrors || hasNoExportRoles;
+  const hasRunErrors = hasErrors || hasNoExportRoles || scheduledRoles.length === 0 || isRunning;
   const [collapsedRoles, setCollapsedRoles] = React.useState<Set<string>>(new Set());
 
   const toggleRoleCollapse = (role: string) => {
@@ -92,7 +93,9 @@ export default function RunPanel({
 
   return (
     <div className="card" style={{ marginTop: "1rem" }}>
-      <h3>Run Scheduler</h3>
+      <h3>Review & generate</h3>
+      <p className="muted">Choose the roles to schedule, then generate a draft for review. Export choices only affect the download.</p>
+      <details open={assignments.length === 0}><summary>Generation settings</summary>
       <div className="stack">
         <label>
           Clinic
@@ -133,6 +136,7 @@ export default function RunPanel({
               name="run-weeks"
               type="number"
               min={1}
+              max={26}
               value={weeks}
               onChange={(e) => onConfigChange({ ...config, weeks: Number(e.target.value) })}
             />
@@ -179,6 +183,7 @@ export default function RunPanel({
               name="run-trials"
               type="number"
               min={1}
+              max={100}
               value={trials}
               onChange={(e) => onConfigChange({ ...config, trials: Number(e.target.value) })}
             />
@@ -205,6 +210,11 @@ export default function RunPanel({
           />
           Use previous best seed
         </label>
+        <fieldset className="role-options"><legend>Roles to schedule</legend>
+          {["Tech", "RN", "Admin"].map(role => <label key={role}>
+            <input type="checkbox" checked={scheduledRoles.includes(role)} onChange={e => onConfigChange({ ...config, scheduledRoles: e.target.checked ? [...scheduledRoles, role] : scheduledRoles.filter(r => r !== role) })} />{role}
+          </label>)}
+        </fieldset>
         <div style={{ display: "flex", flexDirection: "column" }}>
           <span>Export roles</span>
           <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.25rem" }}>
@@ -231,8 +241,9 @@ export default function RunPanel({
           </div>
         </div>
       </div>
+      </details>
       <button disabled={hasRunErrors} onClick={onRun}>
-        Run Schedule
+        {isRunning ? "Generating draft…" : "Generate draft"}
       </button>
       {hasNoExportRoles && (
         <p className="muted" style={{ color: "var(--danger, #cc3d3d)", marginTop: "0.5rem" }}>
@@ -241,7 +252,7 @@ export default function RunPanel({
       )}
       {isRunning && (
         <div style={{ marginTop: "0.5rem" }}>
-          <div className="muted" style={{ marginBottom: "0.25rem" }}>
+          <div role="status" className="muted" style={{ marginBottom: "0.25rem" }}>
             Running trials...
           </div>
           <div
@@ -263,45 +274,32 @@ export default function RunPanel({
           </div>
         </div>
       )}
-      {isRunning || progress > 0 ? (
-        <div style={{ marginTop: "0.75rem" }}>
-          <div className="muted">Running {trials} trials...</div>
-          <div
-            style={{
-              height: "8px",
-              background: "var(--warm-3)",
-              borderRadius: "999px",
-              overflow: "hidden",
-              marginTop: "0.35rem"
-            }}
-          >
-            <div
-              style={{
-                width: `${Math.min(progress, 100)}%`,
-                height: "100%",
-                background: "var(--brand-blue)",
-                transition: "width 0.2s ease"
-              }}
-            />
-          </div>
-        </div>
-      ) : null}
-      {runResult && <p style={{ marginTop: "0.75rem" }}>{runResult}</p>}
+      {!isRunning && runError && <div role="alert" style={{ marginTop: "0.75rem", color: "var(--danger, #cc3d3d)" }}>
+        <strong>Draft could not be generated.</strong>
+        <p>{runError}</p>
+        {assignments.length > 0 && <p>The schedule below is the previously viewed version.</p>}
+      </div>}
+      {!isRunning && !runError && runResult && <p role="status" style={{ marginTop: "0.75rem" }}>{runResult}</p>}
         {isAuthed && (
           <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <button className="primary-btn" onClick={onDownloadExcel}>
-              Download Latest Schedule
+              Download viewed schedule
             </button>
             <button className="secondary-btn" onClick={onLoadLatest}>
-              Load Latest Schedule
+              Open published schedule
             </button>
           </div>
         )}
+      {assignments.length > 0 && <div className="coverage-summary" role="status">
+        <strong>{assignments.filter(a => !a.staff_id || isOpenLike(a.staff_id)).length} slots need coverage</strong>
+        <span>{assignments.length} total assignments · {Object.keys(stats).length} staff in workload summary</span>
+        <p className="muted">Review all gaps before publishing. A failed search does not prove that coverage is impossible.</p>
+      </div>}
       {assignments.length > 0 && (
         <div style={{ marginTop: "1rem", overflowX: "auto" }}>
           {(() => {
             const uniqueDates = Array.from(new Set(assignments.map((a) => a.date))).sort();
-            const exportRoleSet = new Set(exportRoles.map((role) => role.toLowerCase()));
+            const exportRoleSet = new Set(assignments.map((a) => a.role.toLowerCase()));
             const matrixAssignments = assignments.filter((a) => exportRoleSet.has((a.role || "").toLowerCase()));
             const dateDayMap = uniqueDates.reduce<Record<string, string>>((acc, d) => {
               const found = assignments.find((a) => a.date === d);
