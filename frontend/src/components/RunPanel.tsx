@@ -61,7 +61,7 @@ export default function RunPanel({
   const UNFILLED_ROW_ID = "__UNFILLED__";
   const { configName, timezone, startDate, weeks, patientsPerTech, patientsPerRn, techsPerRn, trials, baseSeed, usePrevSeed, exportRoles, scheduledRoles } = config;
   const hasNoExportRoles = exportRoles.length === 0;
-  const hasInvalidTrials = !Number.isInteger(trials) || trials < 1 || trials > 100;
+  const hasInvalidTrials = !Number.isInteger(trials) || trials < 1 || trials > 500;
   const hasRunErrors = hasErrors || hasNoExportRoles || hasInvalidTrials || scheduledRoles.length === 0 || isRunning;
   const [collapsedRoles, setCollapsedRoles] = React.useState<Set<string>>(new Set());
 
@@ -177,6 +177,7 @@ export default function RunPanel({
               onChange={(e) => onConfigChange({ ...config, techsPerRn: Number(e.target.value) })}
             />
         </label>
+        <div>
         <label>
           Trials
             <input
@@ -184,11 +185,16 @@ export default function RunPanel({
               name="run-trials"
               type="number"
               min={1}
-              max={100}
+              max={500}
+              aria-describedby="run-trials-guidance"
               value={trials}
               onChange={(e) => onConfigChange({ ...config, trials: Number(e.target.value) })}
             />
         </label>
+        <p id="run-trials-guidance" className="muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85rem" }}>
+          100 is usually enough; 250 is standard. Maximum: 500 trials.
+        </p>
+        </div>
         <label>
           Seed (0 = random)
             <input
@@ -247,7 +253,7 @@ export default function RunPanel({
         {isRunning ? "Generating draft…" : "Generate draft"}
       </button>
       {hasInvalidTrials && <p role="alert" style={{ marginTop: "0.5rem" }}>
-        This setup uses {trials} trials. Choose 1–100 trials in Generation settings before generating a draft.
+        This setup uses {trials} trials. Choose 1–500 trials in Generation settings before generating a draft.
       </p>}
       {hasNoExportRoles && (
         <p className="muted" style={{ color: "var(--danger, #cc3d3d)", marginTop: "0.5rem" }}>

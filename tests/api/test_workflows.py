@@ -152,13 +152,21 @@ def test_invalid_schedule_inputs_rejected(client, change):
     if change == "budget": request["requirements"][0]["tech_mids"] = 100000
     if change == "timezone": request["config"]["timezone"] = "invalid/timezone"
     if change == "weeks": request["config"]["weeks"] = 100
-    if change == "trials": request["tournament_trials"] = 1000
+    if change == "trials": request["tournament_trials"] = 501
     result = client.post("/api/schedule/run", json=request)
     assert result.status_code == 422, result.text
 
 
 def test_database_readiness(client):
     assert client.get("/api/ready").json() == {"status": "ready"}
+
+
+def test_generation_accepts_five_hundred_trials(client):
+    request = schedule_request()
+    request["tournament_trials"] = 500
+    response = client.post("/api/schedule/run", json=request)
+    assert response.status_code == 200, response.text
+    assert response.json()["assignments"]
 
 
 def test_legacy_config_with_large_trial_count_loads_without_losing_staff(client):

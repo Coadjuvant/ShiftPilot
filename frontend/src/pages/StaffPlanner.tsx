@@ -198,7 +198,7 @@ export default function StaffPlanner() {
   const [bleachCursor, setBleachCursor] = useState<number>(0);
   const [bleachRotation, setBleachRotation] = useState<string[]>([]);
   const [bleachFrequency, setBleachFrequency] = useState<string>("weekly");
-  const [trials, setTrials] = useState<number>(20);
+  const [trials, setTrials] = useState<number>(250);
   const [scheduledRoles, setScheduledRoles] = useState<string[]>(["Tech", "RN", "Admin"]);
   const [exportRoles, setExportRoles] = useState<string[]>(["Tech", "RN", "Admin"]);
   const [threeDayWeight, setThreeDayWeight] = useState<number>(10);
@@ -326,7 +326,7 @@ export default function StaffPlanner() {
     setBleachRotation([]);
     setBleachFrequency("weekly");
     setScheduleStaffMap(null);
-    setTrials(20);
+    setTrials(250);
     setExportRoles(["Tech", "RN", "Admin"]);
     setThreeDayWeight(10);
     setPostBleachWeight(10);
