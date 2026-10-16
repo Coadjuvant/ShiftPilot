@@ -6,7 +6,7 @@ ShiftPilot helps clinic managers build multi-week staff schedules, enforce clini
 
 1) Open the site and select `Login`.
 2) After login, go to `Planner`.
-3) Load a config, update inputs, then run the schedule.
+3) Load clinic settings, update inputs, and generate a draft. Review coverage before publishing.
 
 ## Local preview
 
@@ -78,23 +78,34 @@ Set the schedule window and constraints, then click `Run Schedule`.
 ## Schedule results
 
 - A schedule matrix appears in the planner after a successful run.
-- The latest run is also saved and shown on the home page schedule card (only when logged in).
+- Each run is saved as a separate draft. The home page shows the current published roster (only when logged in).
+- Open earlier versions in Schedule history. Publishing a draft changes the current roster; generating one does not.
+- Adjust staff assignments and locks in the review section. Saving edits creates a validated new draft. Regeneration keeps saved locks.
 - Use the week arrows on the home page card to move through the schedule weeks.
 
 ## Exports
 
 In the planner:
-- `Download Latest Schedule` exports the most recent saved schedule (Excel).
+- `Download viewed schedule` exports the version currently open (Excel).
 - `Export roles` controls which roles appear in exports.
+- `Roles to schedule` independently controls generation. Export choices do not remove coverage from a roster.
 
 ## Login behavior
 
 - The top-right button toggles between `Login` and `Logout`.
 - Sessions expire; if the session ends, you will be prompted to log in again.
+- Logout ends the server session. Disabled accounts lose access, and role changes apply to existing sessions.
+- Use Accept invitation for account setup or administrator-issued password resets. New passwords require at least 12 characters.
 
 ## Admin (optional)
 
 Admins can manage invites, user roles, and review recent activity.
+
+## Development and deployment
+
+Use [isolated local testing](docs/local-testing.md) to test authenticated workflows with fictional clinic data.
+See [the Vultr/Cloudflare deployment runbook](docs/production-deployment.md) before pushing to the production branch.
+The existing five-minute timer may deploy a production-branch push automatically.
 
 ## Support
 

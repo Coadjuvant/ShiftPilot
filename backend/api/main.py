@@ -11,6 +11,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.auth_db import ensure_admin, init_db
+from backend.auth_db import _backend
 
 from .middleware import security_headers_middleware
 from .routes.auth import router as auth_router
@@ -57,6 +58,20 @@ health_router = APIRouter(prefix="/api")
 @health_router.get("/health")
 def healthcheck() -> dict:
     return {"status": "ok"}
+
+
+@health_router.get("/ready")
+def readiness():
+    from fastapi.responses import JSONResponse
+    try:
+        conn = _backend._conn()
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+        conn.close()
+    except Exception:
+        return JSONResponse({"status": "unavailable"}, status_code=503)
+    return {"status": "ready"}
 
 
 app.include_router(health_router)

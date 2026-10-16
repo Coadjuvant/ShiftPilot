@@ -166,7 +166,7 @@ export default function Features() {
           <div className="features-pill-row">
             <span className="pill subtle">Single clinic login</span>
             <span className="pill subtle">No staff self-serve</span>
-            <span className="pill subtle">HIPAA conscious</span>
+            <span className="pill subtle">Manager-controlled access</span>
           </div>
         </div>
 

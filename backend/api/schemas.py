@@ -2,36 +2,9 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Dict, List, Optional, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-try:
-    from pydantic import BaseModel, ConfigDict, Field, conint, constr, validator  # type: ignore
-except Exception:
-    # Minimal fallback when pydantic is not available (prevents editor/linter errors).
-    # This does not replicate pydantic's validation; it's only to allow imports and defaults.
-    from typing import Any, Callable, Optional
-
-    class BaseModel:
-        def __init__(self, **kwargs):
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-
-    def ConfigDict(**kwargs):  # type: ignore
-        return kwargs
-
-    def Field(*, default: Any = None, default_factory: Optional[Callable[[], Any]] = None, **kwargs):
-        # If a default_factory is provided, use it to produce a default value now.
-        # This mirrors common usage in the file and prevents unresolved import errors.
-        if default_factory is not None:
-            return default_factory()
-        return default
-    def conint(**kwargs):  # type: ignore
-        return int
-    def constr(**kwargs):  # type: ignore
-        return str
-    def validator(*args, **kwargs):  # type: ignore
-        def decorator(fn):
-            return fn
-        return decorator
+from pydantic import BaseModel, ConfigDict, Field, conint, constr, field_validator, model_validator
 
 from backend.scheduler.model import DAYS
 
@@ -42,7 +15,7 @@ UserRole = Literal["user", "admin"]
 
 
 class BaseSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
 
 
 class StaffPreferencesIn(BaseSchema):
@@ -84,7 +57,7 @@ class ConstraintTogglesIn(BaseSchema):
     limit_tech_four_days: conint(ge=0, le=10) = 10
     limit_rn_four_days: conint(ge=0, le=10) = 10
 
-    @validator("*", pre=True)
+    @field_validator("*", mode="before")
     def _coerce_legacy_bools(cls, value):
         if isinstance(value, bool):
             return 10 if value else 0
@@ -100,7 +73,7 @@ class ScheduleConfigIn(BaseSchema):
     clinic_name: constr(min_length=1, max_length=80)
     timezone: constr(min_length=1, max_length=48)
     start_date: date
-    weeks: conint(ge=1) = 1
+    weeks: conint(ge=1, le=26) = 1
     bleach_day: DayName = "Thu"
     bleach_rotation: List[constr(min_length=1, max_length=64)] = Field(default_factory=list)
     bleach_cursor: conint(ge=0) = 0
@@ -110,23 +83,79 @@ class ScheduleConfigIn(BaseSchema):
     techs_per_rn: conint(ge=0) = 4
     toggles: ConstraintTogglesIn = Field(default_factory=ConstraintTogglesIn)
 
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value):
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError("Choose a valid timezone, such as America/Chicago")
+        return value
+
 
 class PTOEntryIn(BaseSchema):
     staff_id: constr(min_length=1, max_length=64)
     date: date
 
 
+class FixedAssignmentIn(BaseSchema):
+    date: date
+    role: RoleName
+    duty: constr(min_length=1, max_length=32)
+    slot_index: conint(ge=0)
+    staff_id: Optional[str] = None
+    is_locked: bool = False
+
+
+class ScheduleAdjustment(BaseSchema):
+    assignments: List[FixedAssignmentIn] = Field(min_length=1, max_length=10000)
+
+
 class ScheduleRequest(BaseSchema):
-    staff: List[StaffMemberIn]
-    requirements: List[RequirementIn]
+    staff: List[StaffMemberIn] = Field(min_length=1, max_length=200)
+    requirements: List[RequirementIn] = Field(min_length=6, max_length=6)
     config: ScheduleConfigIn
-    pto: List[PTOEntryIn] = Field(default_factory=list)
-    tournament_trials: conint(ge=1) = 20
+    pto: List[PTOEntryIn] = Field(default_factory=list, max_length=10000)
+    tournament_trials: conint(ge=1, le=100) = 20
     base_seed: Optional[conint(ge=0)] = None
     export_roles: List[RoleName] = Field(default_factory=list)
+    scheduled_roles: List[RoleName] = Field(default_factory=lambda: ["Tech", "RN", "Admin"], min_length=1, max_length=3)
+    fixed_assignments: List[FixedAssignmentIn] = Field(default_factory=list, max_length=10000)
+
+    @model_validator(mode="after")
+    def consistent_inputs(self):
+        ids = [person.id for person in self.staff]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Staff IDs must be unique")
+        keys = [(a.date, a.role, a.duty, a.slot_index) for a in self.fixed_assignments]
+        if len(keys) != len(set(keys)):
+            raise ValueError("A slot can only have one fixed assignment")
+        if any(a.staff_id and a.staff_id not in ids and a.staff_id not in {"FLOAT", "OPEN"} for a in self.fixed_assignments):
+            raise ValueError("Fixed assignments must reference existing staff members")
+        if {row.day_name for row in self.requirements} != set(DAYS):
+            raise ValueError("Coverage needs must include each day from Mon to Sat exactly once")
+        if any(entry.staff_id not in ids for entry in self.pto):
+            raise ValueError("Time off must reference an existing staff member")
+        if any(staff_id not in ids for staff_id in self.config.bleach_rotation):
+            raise ValueError("Bleach rotation must reference existing staff members")
+        if len(self.config.bleach_rotation) != len(set(self.config.bleach_rotation)):
+            raise ValueError("Bleach rotation must not contain duplicate staff members")
+        # Include automatically expanded ratio demand in the compute budget.
+        slots = 0
+        for row in self.requirements:
+            tech = max(row.tech_openers + row.tech_mids + row.tech_closers,
+                       -(-row.patient_count // self.config.patients_per_tech) if self.config.patients_per_tech else 0)
+            rn = max(row.rn_count,
+                     -(-row.patient_count // self.config.patients_per_rn) if self.config.patients_per_rn else 0,
+                     -(-tech // self.config.techs_per_rn) if self.config.techs_per_rn else 0)
+            slots += tech + rn + row.admin_count
+        if slots * self.config.weeks > 10000 or slots * self.config.weeks * self.tournament_trials * len(ids) > 10000000:
+            raise ValueError("This run is too large. Reduce weeks, coverage needs, or trials")
+        return self
 
 
 class AssignmentOut(BaseSchema):
+    is_locked: bool = False
     date: date
     day_name: DayName
     role: RoleName
@@ -138,6 +167,7 @@ class AssignmentOut(BaseSchema):
 
 
 class ScheduleResponse(BaseSchema):
+    version_id: str
     bleach_cursor: conint(ge=0)
     winning_seed: Optional[int]
     assignments: List[AssignmentOut]
@@ -153,7 +183,7 @@ class ConfigClinic(BaseSchema):
 
 class ConfigSchedule(BaseSchema):
     start: date
-    weeks: conint(ge=1)
+    weeks: conint(ge=1, le=26)
     bleach_frequency: BleachFrequency = "weekly"
 
 
@@ -175,7 +205,7 @@ class ConfigBleach(BaseSchema):
 
 
 class ConfigTournament(BaseSchema):
-    trials: conint(ge=1) = 20
+    trials: conint(ge=1, le=100) = 20
     last_seed: conint(ge=0) = 0
 
 
@@ -187,9 +217,17 @@ class ConfigPayload(BaseSchema):
     bleach: ConfigBleach
     tournament: ConfigTournament
     export_roles: List[RoleName] = Field(default_factory=list)
+    scheduled_roles: List[RoleName] = Field(default_factory=lambda: ["Tech", "RN", "Admin"])
     staff: List[Dict[str, object]]
     demand: List[Dict[str, object]]
     pto: List[Dict[str, object]] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_role_scope(cls, value):
+        if isinstance(value, dict) and "scheduled_roles" not in value:
+            return {**value, "scheduled_roles": value.get("export_roles") or ["Tech", "RN", "Admin"]}
+        return value
 
 
 class SaveConfigRequest(BaseSchema):
@@ -199,7 +237,7 @@ class SaveConfigRequest(BaseSchema):
 
 class LoginRequest(BaseSchema):
     username: constr(min_length=3, max_length=64)
-    password: constr(min_length=4, max_length=128)
+    password: constr(min_length=4, max_length=128, strip_whitespace=False)
 
 
 class LoginResponse(BaseSchema):
@@ -215,7 +253,7 @@ class InviteRequest(BaseSchema):
 class SetupRequest(BaseSchema):
     invite_token: constr(min_length=8, max_length=128)
     username: constr(min_length=3, max_length=64)
-    password: constr(min_length=4, max_length=128)
+    password: constr(min_length=12, max_length=128, strip_whitespace=False)
 
 
 class InviteLookupResponse(BaseSchema):

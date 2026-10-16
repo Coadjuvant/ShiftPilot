@@ -5,11 +5,12 @@ import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Features from "./pages/Features";
 import Contact from "./pages/Contact";
-import { clearStoredAuth, getStoredToken } from "./api/client";
+import { logout, getStoredToken } from "./api/client";
 
 export default function App() {
   const supportEmail = "support@shiftpilot.me";
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const [theme, setTheme] = useState<"light" | "dark">(() => localStorage.getItem("theme") === "light" ? "light" : "dark");
+  const [logoutError, setLogoutError] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isAuthed, setIsAuthed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -30,6 +31,7 @@ export default function App() {
 
   useEffect(() => {
     document.body.dataset.theme = theme;
+    localStorage.setItem("theme", theme);
     const link =
       document.querySelector<HTMLLinkElement>("link[rel='icon']") ||
       document.querySelector<HTMLLinkElement>("link[rel='shortcut icon']") ||
@@ -38,7 +40,7 @@ export default function App() {
     link.type = "image/x-icon";
     link.href = theme === "dark" ? "/favicon-dark.ico" : "/favicon-light.ico";
     if (!link.parentNode) document.head.appendChild(link);
-    document.title = "Clinic Scheduler";
+    document.title = "ShiftPilot";
   }, [theme]);
 
   useEffect(() => {
@@ -66,9 +68,13 @@ export default function App() {
     ? `https://github.com/Coadjuvant/ShiftPilot/commit/${gitCommit}`
     : null;
 
-  const handleLogout = () => {
-    if (typeof window === "undefined") return;
-    clearStoredAuth();
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch {
+      setLogoutError("Could not end your session. Check your connection and try again.");
+      return;
+    }
     setIsAuthed(false);
     setAuthUser("");
     window.location.href = "/";
@@ -89,14 +95,6 @@ export default function App() {
 
   return (
     <div className={`page-shell ${theme === "dark" ? "dark" : "light"}`}>
-      <button
-        className="theme-fab"
-        onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        aria-label="Toggle theme"
-        title="Toggle theme"
-      >
-        <span className={`theme-icon ${theme === "dark" ? "dark" : "light"}`} aria-hidden="true" />
-      </button>
       <div className="hero-wrap">
         <header className="top-nav">
           <div className="nav-trigger">
@@ -132,6 +130,9 @@ export default function App() {
             <span className="brand-name">ShiftPilot</span>
           </Link>
           <div className="nav-right">
+            <button className="secondary-link theme-choice" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>
+              {theme === "dark" ? "Light" : "Dark"}
+            </button>
             <nav className="nav-links nav-links-desktop">
               <Link to="/">Home</Link>
               <Link to="/planner">Planner</Link>
@@ -153,6 +154,7 @@ export default function App() {
           </div>
         </header>
 
+        {logoutError && <p role="alert">{logoutError}</p>}
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />

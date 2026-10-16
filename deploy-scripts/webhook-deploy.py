@@ -19,15 +19,16 @@ import json
 
 # Configuration
 PORT = 9000
-SECRET = os.environ.get('WEBHOOK_SECRET', 'change-this-secret-key')
-DEPLOY_SCRIPT = '/path/to/wip-scheduler/auto-deploy.sh'  # UPDATE THIS PATH
+SECRET = os.environ.get('WEBHOOK_SECRET', '')
+DEPLOY_SCRIPT = os.environ.get('DEPLOY_SCRIPT', '/opt/shiftpilot/auto-deploy.sh')
+EXPECTED_REPOSITORY = os.environ.get('DEPLOY_REPOSITORY', 'Coadjuvant/ShiftPilot')
+EXPECTED_REF = 'refs/heads/' + os.environ.get('DEPLOY_BRANCH', 'main')
 
 # Logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('/var/log/shiftpilot-webhook.log'),
         logging.StreamHandler()
     ]
 )
@@ -42,6 +43,9 @@ class WebhookHandler(BaseHTTPRequestHandler):
 
         # Verify GitHub signature
         content_length = int(self.headers.get('Content-Length', 0))
+        if not 0 < content_length <= 1048576:
+            self.send_error(413, 'Invalid payload size')
+            return
         post_data = self.rfile.read(content_length)
 
         signature = self.headers.get('X-Hub-Signature-256', '')
@@ -62,7 +66,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
             logging.info(f"Webhook received from {repo_name}: {ref}")
 
             # Only deploy for main/dev branch pushes
-            if ref in ['refs/heads/main', 'refs/heads/dev']:
+            if self.headers.get('X-GitHub-Event') == 'push' and repo_name == EXPECTED_REPOSITORY and ref == EXPECTED_REF:
                 branch = ref.split('/')[-1]
                 logging.info(f"Triggering deployment for {branch}")
 
@@ -70,7 +74,8 @@ class WebhookHandler(BaseHTTPRequestHandler):
                 result = subprocess.run(
                     ['/bin/bash', DEPLOY_SCRIPT],
                     capture_output=True,
-                    text=True
+                    text=True,
+                    timeout=600
                 )
 
                 if result.returncode == 0:
@@ -98,6 +103,8 @@ class WebhookHandler(BaseHTTPRequestHandler):
 
     def verify_signature(self, payload, signature):
         """Verify GitHub webhook signature"""
+        if len(SECRET) < 32:
+            return False
         if not signature:
             return False
 
@@ -116,7 +123,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
 
 def run_server():
     """Start the webhook server"""
-    server = HTTPServer(('0.0.0.0', PORT), WebhookHandler)
+    server = HTTPServer((os.environ.get('WEBHOOK_BIND', '127.0.0.1'), PORT), WebhookHandler)
     logging.info(f"Webhook server started on port {PORT}")
     logging.info(f"Deployment script: {DEPLOY_SCRIPT}")
     logging.info("Waiting for GitHub webhooks...")
@@ -135,8 +142,8 @@ if __name__ == '__main__':
         logging.error("Please update DEPLOY_SCRIPT in webhook-deploy.py")
         exit(1)
 
-    if SECRET == 'change-this-secret-key':
-        logging.warning("WARNING: Using default secret key!")
-        logging.warning("Set WEBHOOK_SECRET environment variable or update SECRET in script")
+    if len(SECRET) < 32:
+        logging.error('WEBHOOK_SECRET must be configured with at least 32 characters')
+        exit(1)
 
     run_server()

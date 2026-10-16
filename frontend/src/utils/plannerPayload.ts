@@ -22,6 +22,7 @@ type PlannerConfigArgs = {
   bleachCursor: number;
   trials: number;
   exportRoles: string[];
+  scheduledRoles: string[];
   staffRows: StaffRow[];
   demandRows: DemandRow[];
   ptoRows: PTORow[];
@@ -121,6 +122,7 @@ export const buildConfigPayload = (args: PlannerConfigArgs): ConfigPayload => ({
   },
   tournament: { trials: args.trials, last_seed: 0 },
   export_roles: args.exportRoles,
+  scheduled_roles: args.scheduledRoles,
   staff: args.staffRows.map((staff) => ({
     ...staff,
     pref_open_mwf: coercePrefWeight(staff.pref_open_mwf, 5),
@@ -202,5 +204,6 @@ export const buildScheduleRequest = (args: ScheduleRequestArgs): ScheduleRequest
   pto: expandPtoRows(args.ptoRows),
   tournament_trials: args.trials,
   base_seed: args.selectedSeed,
-  export_roles: args.exportRoles
+  export_roles: args.exportRoles,
+  scheduled_roles: args.scheduledRoles
 });

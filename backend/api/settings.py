@@ -65,3 +65,6 @@ def require_safe_prod_config() -> None:
         raise RuntimeError("Default admin/admin credentials are not allowed when APP_ENV=prod.")
     if not CORS_ALLOW_ORIGINS:
         raise RuntimeError("CORS_ALLOW_ORIGINS must be set when APP_ENV=prod.")
+
+# Include only the reverse proxies that actually reach this application.
+TRUSTED_PROXY_CIDRS = split_env_csv("TRUSTED_PROXY_CIDRS", "127.0.0.1/32,::1/128,172.16.0.0/12")

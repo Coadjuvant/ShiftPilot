@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi.responses import JSONResponse
+import jwt
 
 from backend.auth_db import (
     create_invite,
@@ -15,9 +17,11 @@ from backend.auth_db import (
     update_last_login,
     update_role,
     validate_login,
+    revoke_session,
 )
 
-from ..dependencies import encode_token, make_token_payload, require_admin, require_auth, token_response
+from ..dependencies import decode_jwt, encode_token, make_token_payload, require_admin, require_auth, token_response
+from ..settings import IS_PROD
 from ..request_context import (
     clear_login_failures,
     is_locked_out,
@@ -29,6 +33,22 @@ from ..request_context import (
 from ..schemas import InviteLookupResponse, InviteRequest, LoginRequest, LoginResponse, SetupRequest, UserInfo
 
 router = APIRouter(prefix="/api")
+
+
+@router.post("/auth/logout")
+def logout(request: Request):
+    authorization = request.headers.get("authorization", "")
+    token = authorization[7:].strip() if authorization.lower().startswith("bearer ") else request.cookies.get("auth_token")
+    if token:
+        try:
+            payload = decode_jwt(token)
+        except jwt.PyJWTError:
+            pass  # Expired cookies must still be removable.
+        else:
+            revoke_session(payload.get("jti", ""))
+    response = JSONResponse({"status": "logged_out"})
+    response.delete_cookie("auth_token", httponly=True, secure=IS_PROD, samesite="strict")
+    return response
 
 
 @router.post(
@@ -63,12 +83,15 @@ def invite_user(request: Request, req: InviteRequest, payload: dict = Depends(re
         creator_id = int(creator) if creator is not None else None
     except Exception:
         creator_id = None
-    token = create_invite(req.username, req.license_key, role=req.role or "user", created_by=creator_id)
+    try:
+        token = create_invite(req.username, req.license_key, role=req.role or "user", created_by=creator_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     ip, ip_v4, user_agent, location = request_meta(request)
     log_event(
         creator_id,
         "invite_created",
-        f"username={req.username or ''};token={token}",
+        f"username={req.username or ''};role={req.role}",
         ip,
         user_agent,
         location,
@@ -126,7 +149,10 @@ def delete_user_admin(request: Request, user_id: int):
 
 @router.post("/auth/invite/revoke", dependencies=[Depends(require_admin)])
 def revoke_invite_admin(request: Request, req: InviteRequest):
-    revoke_invite(req.username)
+    try:
+        revoke_invite(req.username)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     ip, ip_v4, user_agent, location = request_meta(request)
     log_event(None, "invite_revoked", f"username={req.username}", ip, user_agent, location, ip_v4)
     return {"status": "revoked", "username": req.username}
@@ -134,7 +160,7 @@ def revoke_invite_admin(request: Request, req: InviteRequest):
 
 @router.get("/auth/audit", dependencies=[Depends(require_admin)])
 def audit_feed(
-    limit: int = 50,
+    limit: int = Query(default=50, ge=1, le=500),
     event: str | None = None,
     user_id: int | None = None,
     search: str | None = None,

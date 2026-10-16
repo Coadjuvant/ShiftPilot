@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from backend.scheduler.engine import OPEN_LABEL, generate_schedule
+from backend.scheduler.tournament import run_tournament
 from backend.scheduler.model import (
     ConstraintToggles,
     DailyRequirement,
@@ -118,6 +119,54 @@ def test_bleach_rotation_advances_after_assignment() -> None:
     bleach = next(a for a in result.assignments if a.slot.is_bleach)
     assert bleach.staff_id == "ben"
     assert result.bleach_cursor == 1
+
+
+def test_weekly_balance_does_not_hide_uneven_weeks_in_six_week_totals() -> None:
+    staff = [_tech(f"tech-{i}", can_bleach=True) for i in range(1, 7)]
+    cfg = ScheduleConfig(
+        clinic_name="Weekly balance regression", timezone="America/Chicago",
+        start_date=date(2026, 10, 19), weeks=6, bleach_day="Tue",
+        bleach_rotation=[f"tech-{i}" for i in range(1, 5)],
+        patients_per_tech=4, patients_per_rn=12, techs_per_rn=4,
+        toggles=ConstraintToggles(enforce_three_day_cap=10, enforce_post_bleach_rest=10,
+                                  enforce_alt_saturdays=5, limit_tech_four_days=10, limit_rn_four_days=0),
+    )
+    result, _ = run_tournament(staff, _reqs(tech_openers=1, tech_mids=1, tech_closers=1),
+                               cfg, trials=10, base_seed=132796955, scheduled_roles=["Tech"])
+    assert len(result.assignments) == 108
+    assert all(a.staff_id != OPEN_LABEL for a in result.assignments)
+    for member in staff:
+        worked = [a.slot.day_index for a in result.assignments if a.staff_id == member.id]
+        assert [sum(day // 6 == week for day in worked) for week in range(6)] == [3] * 6
+        assert not any(day + 1 in worked and day + 2 in worked for day in worked)
+        for assignment in result.assignments:
+            if assignment.staff_id == member.id and assignment.slot.is_bleach:
+                assert assignment.slot.day_index + 1 not in worked
+
+
+def test_weekly_balance_respects_limited_availability_and_pto() -> None:
+    staff = [_tech("limited", availability={day: day == "Mon" for day in DAYS}), _tech("available")]
+    cfg = _cfg(toggles=ConstraintToggles(0, 0, 0, 0, 0))
+    result = generate_schedule(staff, _reqs(tech_openers=1), cfg,
+                               pto_entries=[PTOEntry("limited", cfg.start_date)],
+                               rng_seed=42, scheduled_roles=["Tech"])
+    assert all(a.staff_id == "available" for a in result.assignments)
+
+
+def test_tournament_prioritizes_coverage_over_balance_score(monkeypatch) -> None:
+    import copy
+    import backend.scheduler.tournament as tournament
+    covered = generate_schedule([_tech("available")], _reqs(tech_openers=1),
+                                _cfg(toggles=ConstraintToggles(0, 0, 0, 0, 0)),
+                                scheduled_roles=["Tech"], rng_seed=1)
+    uncovered = copy.deepcopy(covered)
+    uncovered.assignments[-1].staff_id = OPEN_LABEL
+    uncovered.total_penalty = 0
+    covered.total_penalty = 1000
+    results = iter([uncovered, covered])
+    monkeypatch.setattr(tournament, "generate_schedule", lambda *a, **kw: next(results))
+    selected, _ = tournament.run_tournament([], [], _cfg(), trials=2, base_seed=1)
+    assert selected is covered
 
 
 def test_hard_four_day_cap_prevents_fifth_day() -> None:

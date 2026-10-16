@@ -30,131 +30,30 @@ export default function ConstraintsEditor({ state, onChange, bleachState, onBlea
 
   return (
     <div className="card" style={{ marginTop: "1rem" }}>
-      <h3>Scheduling Constraints</h3>
+      <h3>Scheduling rules</h3>
       <p className="muted small-note">
         Set the importance of each constraint. 0 = ignore, 1–9 = soft penalty, 10 = hard stop.
       </p>
       <div className="constraint-stack">
-        <label className="constraint-field">
-          3-day streak cap
+        {([
+          ["threeDayWeight", "Maximum three consecutive days", threeDayWeight],
+          ["altSatWeight", "Alternate Saturdays", altSatWeight],
+          ["techFourWeight", "Tech: maximum four days per week", techFourWeight],
+          ["rnFourWeight", "RN: maximum four days per week", rnFourWeight],
+          ["postBleachWeight", "Rest day after bleach duty", postBleachWeight]
+        ] as const).map(([key, label, weight]) => <div className="constraint-field" key={key}>
+          <label htmlFor={`rule-${key}`}>{label}</label>
           <div className="constraint-control">
-            <input
-              id="constraint-three-day"
-              name="constraint-three-day"
-              type="range"
-              min={0}
-              max={10}
-              step={1}
-              value={threeDayWeight}
-              onChange={(e) => onChange({ ...state, threeDayWeight: Number(e.target.value) })}
-            />
-            <input
-              type="number"
-              className="constraint-value-input"
-              min={0}
-              max={10}
-              step={1}
-              value={threeDayWeight}
-              onChange={(e) => onChange({ ...state, threeDayWeight: Number(e.target.value) })}
-            />
+            <select id={`rule-${key}`} value={weight === 0 ? "off" : weight === 10 ? "required" : "prefer"}
+              onChange={e => onChange({ ...state, [key]: e.target.value === "off" ? 0 : e.target.value === "required" ? 10 : 5 })}>
+              <option value="off">Off</option><option value="prefer">Prefer</option><option value="required">Required</option>
+            </select>
+            {weight > 0 && weight < 10 && <label>Preference strength
+              <input aria-label={`${label}: preference strength`} type="number" min={1} max={9} value={weight}
+                onChange={e => onChange({ ...state, [key]: Math.max(1, Math.min(9, Number(e.target.value) || 1)) })} />
+            </label>}
           </div>
-        </label>
-        <label className="constraint-field">
-          No consecutive Saturdays
-          <div className="constraint-control">
-            <input
-              id="constraint-alt-sat"
-              name="constraint-alt-sat"
-              type="range"
-              min={0}
-              max={10}
-              step={1}
-              value={altSatWeight}
-              onChange={(e) => onChange({ ...state, altSatWeight: Number(e.target.value) })}
-            />
-            <input
-              type="number"
-              className="constraint-value-input"
-              min={0}
-              max={10}
-              step={1}
-              value={altSatWeight}
-              onChange={(e) => onChange({ ...state, altSatWeight: Number(e.target.value) })}
-            />
-          </div>
-        </label>
-        <label className="constraint-field">
-          Tech 4-day cap
-          <div className="constraint-control">
-            <input
-              id="constraint-tech-four"
-              name="constraint-tech-four"
-              type="range"
-              min={0}
-              max={10}
-              step={1}
-              value={techFourWeight}
-              onChange={(e) => onChange({ ...state, techFourWeight: Number(e.target.value) })}
-            />
-            <input
-              type="number"
-              className="constraint-value-input"
-              min={0}
-              max={10}
-              step={1}
-              value={techFourWeight}
-              onChange={(e) => onChange({ ...state, techFourWeight: Number(e.target.value) })}
-            />
-          </div>
-        </label>
-        <label className="constraint-field">
-          RN 4-day cap
-          <div className="constraint-control">
-            <input
-              id="constraint-rn-four"
-              name="constraint-rn-four"
-              type="range"
-              min={0}
-              max={10}
-              step={1}
-              value={rnFourWeight}
-              onChange={(e) => onChange({ ...state, rnFourWeight: Number(e.target.value) })}
-            />
-            <input
-              type="number"
-              className="constraint-value-input"
-              min={0}
-              max={10}
-              step={1}
-              value={rnFourWeight}
-              onChange={(e) => onChange({ ...state, rnFourWeight: Number(e.target.value) })}
-            />
-          </div>
-        </label>
-        <label className="constraint-field">
-          Post-bleach rest day
-          <div className="constraint-control">
-            <input
-              id="constraint-post-bleach"
-              name="constraint-post-bleach"
-              type="range"
-              min={0}
-              max={10}
-              step={1}
-              value={postBleachWeight}
-              onChange={(e) => onChange({ ...state, postBleachWeight: Number(e.target.value) })}
-            />
-            <input
-              type="number"
-              className="constraint-value-input"
-              min={0}
-              max={10}
-              step={1}
-              value={postBleachWeight}
-              onChange={(e) => onChange({ ...state, postBleachWeight: Number(e.target.value) })}
-            />
-          </div>
-        </label>
+        </div>)}
       </div>
 
       <h3 style={{ marginTop: "2rem" }}>Bleach Planning</h3>

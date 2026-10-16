@@ -8,7 +8,7 @@ from collections import defaultdict, deque
 
 from fastapi import HTTPException, Request
 
-from .settings import GEOIP_API_TIMEOUT, GEOIP_API_URL, GEOIP_CACHE_TTL
+from .settings import GEOIP_API_TIMEOUT, GEOIP_API_URL, GEOIP_CACHE_TTL, TRUSTED_PROXY_CIDRS
 
 _geoip_cache: dict[str, tuple[float, tuple[str | None, str | None, str | None]]] = {}
 _rate_buckets: dict[str, deque] = defaultdict(deque)
@@ -17,32 +17,31 @@ _login_lockouts: dict[str, float] = {}
 
 
 def client_ip(request: Request) -> str:
-    header = request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for")
-    if header:
-        return header.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    peer = request.client.host if request.client else "unknown"
+    try:
+        trusted = [ipaddress.ip_network(cidr.strip()) for cidr in TRUSTED_PROXY_CIDRS if cidr.strip()]
+        def is_trusted(value):
+            address = ipaddress.ip_address(value)
+            return any(address in network for network in trusted)
+        if not is_trusted(peer):
+            return peer
+        # Walk from the direct peer toward the client, stopping at the first untrusted hop.
+        # Client-supplied prefixes must not override an address appended by the real proxy.
+        chain = [part.strip() for part in request.headers.get("x-forwarded-for", "").split(",") if part.strip()]
+        for address in reversed(chain):
+            if not is_trusted(address):
+                return address
+        return chain[0] if chain else peer
+    except ValueError:
+        return peer
 
 
 def client_ipv4(request: Request) -> str:
-    candidates = [
-        request.headers.get("cf-pseudo-ipv4"),
-        request.headers.get("true-client-ip"),
-        request.headers.get("x-real-ip"),
-        request.headers.get("cf-connecting-ip"),
-        request.headers.get("x-forwarded-for"),
-    ]
-    for candidate in candidates:
-        if not candidate:
-            continue
-        for part in candidate.split(","):
-            ip = part.strip()
-            try:
-                addr = ipaddress.ip_address(ip)
-            except ValueError:
-                continue
-            if addr.version == 4:
-                return ip
-    return ""
+    value = client_ip(request)
+    try:
+        return value if ipaddress.ip_address(value).version == 4 else ""
+    except ValueError:
+        return ""
 
 
 def _geoip_cache_get(ip: str) -> tuple[str | None, str | None, str | None] | None:
@@ -111,28 +110,8 @@ def _geoip_location(ip: str) -> tuple[str | None, str | None, str | None]:
 
 
 def client_location(request: Request) -> str:
-    headers = request.headers
-    city = headers.get("cf-ipcity") or headers.get("cf-city") or headers.get("x-geo-city")
-    region = headers.get("cf-region") or headers.get("cf-region-code") or headers.get("x-geo-region")
-    country = headers.get("cf-ipcountry") or headers.get("x-geo-country")
-    if not city or not region:
-        ip = client_ip(request)
-        geo_city, geo_region, geo_country = _geoip_location(ip)
-        if geo_city:
-            city = geo_city
-        if geo_region:
-            region = geo_region
-        if not country and geo_country:
-            country = geo_country
-    if city and region:
-        return f"{city}, {region}"
-    if city and country:
-        return f"{city}, {country}"
-    if region and country:
-        return f"{region}, {country}"
-    if country:
-        return country
-    return ""
+    city, region, country = _geoip_location(client_ip(request))
+    return ", ".join(str(value) for value in (city, region, country) if value)
 
 
 def request_meta(request: Request) -> tuple[str, str, str, str]:

@@ -49,6 +49,7 @@ export const isTokenExpired = (token: string | null): boolean => {
 };
 
 export const clearStoredAuth = (markExpired = false) => {
+  setAuthToken(null);
   if (typeof window === "undefined") return;
   window.localStorage.removeItem("auth_token");
   window.localStorage.removeItem("auth_user");
@@ -92,16 +93,41 @@ api.interceptors.request.use((config) => {
     if (stored) {
       config.headers = config.headers ?? {};
       config.headers["Authorization"] = `Bearer ${stored}`;
+    } else {
+      delete config.headers["Authorization"];
     }
   }
   return config;
 });
+
+api.interceptors.response.use(response => response, error => {
+  const url = error.config?.url || "";
+  if (error.response?.status === 401 && !url.startsWith("auth/login") && !url.startsWith("auth/setup")) {
+    clearStoredAuth(true);
+    window.dispatchEvent(new Event("storage"));
+  }
+  return Promise.reject(error);
+});
+
+export const friendlyApiError = (error: any, fallback: string): string => {
+  if (error?.response?.status === 401) return "Your session expired. Please sign in again.";
+  const detail = error?.response?.data?.detail;
+  if (Array.isArray(detail)) return detail.map(item => `${item.loc?.slice(1).join(" → ") || "Input"}: ${item.msg}`).join("; ");
+  return typeof detail === "string" ? detail : fallback;
+};
+
+export const logout = async () => {
+  await api.post("auth/logout");
+  clearStoredAuth();
+  window.dispatchEvent(new Event("storage"));
+};
 
 export interface HealthResponse {
   status: string;
 }
 
 export interface ConfigPayload {
+  scheduled_roles?: string[];
   clinic: { name: string; timezone: string };
   schedule: { start: string; weeks: number; bleach_frequency?: string };
   ratios: { patients_per_tech: number; patients_per_rn: number; techs_per_rn: number };
@@ -131,6 +157,7 @@ export interface InviteLookup {
 }
 
 export interface UserSummary {
+  is_bootstrap_admin?: boolean;
   id: number;
   public_id?: string;
   username: string;
@@ -165,6 +192,7 @@ export interface AuditFilters {
 }
 
 export interface ScheduleRequest {
+  scheduled_roles?: string[];
   staff: Array<Record<string, unknown>>;
   requirements: Array<Record<string, unknown>>;
   config: {
@@ -188,6 +216,7 @@ export interface ScheduleRequest {
 }
 
 export interface ScheduleResponse {
+  version_id: string;
   bleach_cursor: number;
   winning_seed: number | null;
   assignments: Array<{
@@ -216,6 +245,7 @@ export interface SavedRequirement {
 }
 
 export interface SavedAssignment {
+  is_locked?: boolean;
   date: string;
   day_name: string;
   role: string;
@@ -227,6 +257,10 @@ export interface SavedAssignment {
 }
 
 export interface SavedSchedule {
+  inputs?: Record<string, unknown>;
+  version_id?: string;
+  schedule_status?: "draft" | "published";
+  scheduled_roles?: string[];
   clinic_name?: string;
   timezone?: string;
   start_date: string;
@@ -294,10 +328,27 @@ export const importConfig = async (req: SaveConfigRequest & { encoded?: string }
   return api.post("configs/import", req);
 };
 
-export const exportScheduleExcel = async () => {
-  const { data } = await api.get<Blob>("schedule/export/excel", { responseType: "blob" });
+export const exportScheduleExcel = async (versionId?: string, roles?: string[]) => {
+  const { data } = await api.get<Blob>("schedule/export/excel", { responseType: "blob", params: { version_id: versionId, roles: roles?.join(",") } });
   return data;
 };
+
+export interface ScheduleVersion {
+  id: string;
+  state: "draft" | "published";
+  created_at: string;
+  published_at?: string;
+  clinic_name: string;
+  start_date: string;
+  weeks: string;
+}
+export const listScheduleVersions = async (): Promise<ScheduleVersion[]> => (await api.get("schedule/versions")).data;
+export const loadScheduleVersion = async (id: string): Promise<SavedSchedule> => (await api.get(`schedule/versions/${id}`)).data;
+export const publishScheduleVersion = async (id: string): Promise<SavedSchedule> => (await api.post(`schedule/versions/${id}/publish`)).data;
+export const deleteScheduleDraft = async (id: string): Promise<void> => { await api.delete(`schedule/versions/${id}`); };
+export const adjustScheduleVersion = async (id: string, assignments: SavedAssignment[]): Promise<ScheduleResponse> =>
+  (await api.post(`schedule/versions/${id}/adjust`, { assignments: assignments.map(({ date, role, duty, slot_index, staff_id, is_locked }) => ({ date, role, duty, slot_index, staff_id, is_locked: Boolean(is_locked) })) })).data;
+export const regenerateScheduleVersion = async (id: string): Promise<ScheduleResponse> => (await api.post(`schedule/versions/${id}/regenerate`)).data;
 
 export default api;
 
