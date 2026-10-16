@@ -198,7 +198,7 @@ export default function StaffPlanner() {
   const [bleachCursor, setBleachCursor] = useState<number>(0);
   const [bleachRotation, setBleachRotation] = useState<string[]>([]);
   const [bleachFrequency, setBleachFrequency] = useState<string>("weekly");
-  const [trials, setTrials] = useState<number>(20);
+  const [trials, setTrials] = useState<number>(250);
   const [scheduledRoles, setScheduledRoles] = useState<string[]>(["Tech", "RN", "Admin"]);
   const [exportRoles, setExportRoles] = useState<string[]>(["Tech", "RN", "Admin"]);
   const [threeDayWeight, setThreeDayWeight] = useState<number>(10);
@@ -326,7 +326,7 @@ export default function StaffPlanner() {
     setBleachRotation([]);
     setBleachFrequency("weekly");
     setScheduleStaffMap(null);
-    setTrials(20);
+    setTrials(250);
     setExportRoles(["Tech", "RN", "Admin"]);
     setThreeDayWeight(10);
     setPostBleachWeight(10);
@@ -553,13 +553,17 @@ export default function StaffPlanner() {
     if (hasUnsavedChanges && !window.confirm("Replace your unsaved settings with this saved clinic setup?")) return;
     setSelectedConfig(cfgName);
     const loadSequence = ++configLoadSequence.current;
+    setLastError("");
+    setStatus(`Loading config: ${cfgName}…`);
     try {
       const cfg: ConfigPayload = await loadConfig(cfgName);
       if (loadSequence !== configLoadSequence.current) return;
       applyConfig(cfg);
+      setLastError("");
       setStatus(`Loaded config: ${cfgName}`);
-      localStorage.setItem("last_config", cfgName);
+      try { localStorage.setItem("last_config", cfgName); } catch { /* Remembering the selection is optional. */ }
     } catch (err: any) {
+      if (loadSequence !== configLoadSequence.current) return;
       const msg = friendlyError(err, "Failed to load config");
       setStatus(msg);
       setLastError(msg);

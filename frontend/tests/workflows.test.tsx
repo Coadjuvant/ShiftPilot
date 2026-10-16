@@ -121,6 +121,31 @@ it("shows scheduled RN coverage even when only Tech is selected for export", () 
   expect(screen.getByRole("heading", {name:"RN (1)"})).toBeTruthy();
 });
 
+it("allows viewing a legacy setup but blocks generation until its trial count is within limits", () => {
+  const config = {configName:"Legacy Clinic", timezone:"America/Chicago", startDate:"2026-10-19", weeks:1,
+    patientsPerTech:4, patientsPerRn:12, techsPerRn:4, trials:1000, baseSeed:0, usePrevSeed:false,
+    scheduledRoles:["Tech","RN"], exportRoles:["Tech"]};
+  const onRun = vi.fn();
+  const props = {config, onConfigChange:vi.fn(), isRunning:false, runResult:"", assignments:draft.assignments,
+    stats:{rn:1}, displayStaffMap:{rn:"Sample RN"}, hasErrors:false, isAuthed:true,
+    onRun, onDownloadExcel:vi.fn(), onLoadLatest:vi.fn()};
+  const {rerender} = render(<RunPanel {...props} />);
+  expect(screen.getByRole("alert").textContent).toContain("Choose 1–500 trials");
+  expect(screen.getByText("100 is usually enough; 250 is standard. Maximum: 500 trials.")).toBeTruthy();
+  expect(screen.getByLabelText("Trials").getAttribute("max")).toBe("500");
+  const button = screen.getByRole("button", {name:"Generate draft", exact:true}) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+  expect(screen.getByLabelText("Trials").closest("details")?.open).toBe(true);
+  fireEvent.click(button);
+  expect(onRun).not.toHaveBeenCalled();
+  rerender(<RunPanel {...props} config={{...config, trials:500}} />);
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(button.disabled).toBe(false);
+  expect(screen.getByRole("heading", {name:"RN (1)"})).toBeTruthy();
+  rerender(<RunPanel {...props} config={{...config, trials:501}} />);
+  expect(button.disabled).toBe(true);
+});
+
 it("shows generation failures beside the button and identifies the previous schedule", () => {
   const config = {configName:"Sample Clinic", timezone:"America/Chicago", startDate:"2026-10-19", weeks:1,
     patientsPerTech:4, patientsPerRn:12, techsPerRn:4, trials:2, baseSeed:0, usePrevSeed:false,

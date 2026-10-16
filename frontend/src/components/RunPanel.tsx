@@ -61,7 +61,8 @@ export default function RunPanel({
   const UNFILLED_ROW_ID = "__UNFILLED__";
   const { configName, timezone, startDate, weeks, patientsPerTech, patientsPerRn, techsPerRn, trials, baseSeed, usePrevSeed, exportRoles, scheduledRoles } = config;
   const hasNoExportRoles = exportRoles.length === 0;
-  const hasRunErrors = hasErrors || hasNoExportRoles || scheduledRoles.length === 0 || isRunning;
+  const hasInvalidTrials = !Number.isInteger(trials) || trials < 1 || trials > 500;
+  const hasRunErrors = hasErrors || hasNoExportRoles || hasInvalidTrials || scheduledRoles.length === 0 || isRunning;
   const [collapsedRoles, setCollapsedRoles] = React.useState<Set<string>>(new Set());
 
   const toggleRoleCollapse = (role: string) => {
@@ -95,7 +96,7 @@ export default function RunPanel({
     <div className="card" style={{ marginTop: "1rem" }}>
       <h3>Review & generate</h3>
       <p className="muted">Choose the roles to schedule, then generate a draft for review. Export choices only affect the download.</p>
-      <details open={assignments.length === 0}><summary>Generation settings</summary>
+      <details open={assignments.length === 0 || hasInvalidTrials}><summary>Generation settings</summary>
       <div className="stack">
         <label>
           Clinic
@@ -176,6 +177,7 @@ export default function RunPanel({
               onChange={(e) => onConfigChange({ ...config, techsPerRn: Number(e.target.value) })}
             />
         </label>
+        <div>
         <label>
           Trials
             <input
@@ -183,11 +185,16 @@ export default function RunPanel({
               name="run-trials"
               type="number"
               min={1}
-              max={100}
+              max={500}
+              aria-describedby="run-trials-guidance"
               value={trials}
               onChange={(e) => onConfigChange({ ...config, trials: Number(e.target.value) })}
             />
         </label>
+        <p id="run-trials-guidance" className="muted" style={{ margin: "0.25rem 0 0", fontSize: "0.85rem" }}>
+          100 is usually enough; 250 is standard. Maximum: 500 trials.
+        </p>
+        </div>
         <label>
           Seed (0 = random)
             <input
@@ -245,6 +252,9 @@ export default function RunPanel({
       <button disabled={hasRunErrors} onClick={onRun}>
         {isRunning ? "Generating draft…" : "Generate draft"}
       </button>
+      {hasInvalidTrials && <p role="alert" style={{ marginTop: "0.5rem" }}>
+        This setup uses {trials} trials. Choose 1–500 trials in Generation settings before generating a draft.
+      </p>}
       {hasNoExportRoles && (
         <p className="muted" style={{ color: "var(--danger, #cc3d3d)", marginTop: "0.5rem" }}>
           Select at least one export role before running.

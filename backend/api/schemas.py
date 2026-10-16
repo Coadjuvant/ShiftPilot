@@ -116,7 +116,7 @@ class ScheduleRequest(BaseSchema):
     requirements: List[RequirementIn] = Field(min_length=6, max_length=6)
     config: ScheduleConfigIn
     pto: List[PTOEntryIn] = Field(default_factory=list, max_length=10000)
-    tournament_trials: conint(ge=1, le=100) = 20
+    tournament_trials: conint(ge=1, le=500) = 250
     base_seed: Optional[conint(ge=0)] = None
     export_roles: List[RoleName] = Field(default_factory=list)
     scheduled_roles: List[RoleName] = Field(default_factory=lambda: ["Tech", "RN", "Admin"], min_length=1, max_length=3)
@@ -205,7 +205,9 @@ class ConfigBleach(BaseSchema):
 
 
 class ConfigTournament(BaseSchema):
-    trials: conint(ge=1, le=100) = 20
+    # Loading/saving an old setup performs no scheduling work. Preserve its
+    # value; ScheduleRequest enforces the limit when generation is requested.
+    trials: conint(ge=1) = 250
     last_seed: conint(ge=0) = 0
 
 
