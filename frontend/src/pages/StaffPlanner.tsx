@@ -553,13 +553,17 @@ export default function StaffPlanner() {
     if (hasUnsavedChanges && !window.confirm("Replace your unsaved settings with this saved clinic setup?")) return;
     setSelectedConfig(cfgName);
     const loadSequence = ++configLoadSequence.current;
+    setLastError("");
+    setStatus(`Loading config: ${cfgName}…`);
     try {
       const cfg: ConfigPayload = await loadConfig(cfgName);
       if (loadSequence !== configLoadSequence.current) return;
       applyConfig(cfg);
+      setLastError("");
       setStatus(`Loaded config: ${cfgName}`);
-      localStorage.setItem("last_config", cfgName);
+      try { localStorage.setItem("last_config", cfgName); } catch { /* Remembering the selection is optional. */ }
     } catch (err: any) {
+      if (loadSequence !== configLoadSequence.current) return;
       const msg = friendlyError(err, "Failed to load config");
       setStatus(msg);
       setLastError(msg);
