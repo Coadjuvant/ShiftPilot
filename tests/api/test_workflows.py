@@ -143,7 +143,7 @@ def test_generate_history_publish_export_and_isolation(client):
     assert other.get("/api/schedule/versions").json() == []
 
 
-@pytest.mark.parametrize("change", ["duplicates", "days", "pto", "budget", "timezone", "weeks"])
+@pytest.mark.parametrize("change", ["duplicates", "days", "pto", "budget", "timezone", "weeks", "trials"])
 def test_invalid_schedule_inputs_rejected(client, change):
     request = copy.deepcopy(schedule_request())
     if change == "duplicates": request["staff"].append(request["staff"][0])
@@ -152,12 +152,36 @@ def test_invalid_schedule_inputs_rejected(client, change):
     if change == "budget": request["requirements"][0]["tech_mids"] = 100000
     if change == "timezone": request["config"]["timezone"] = "invalid/timezone"
     if change == "weeks": request["config"]["weeks"] = 100
+    if change == "trials": request["tournament_trials"] = 1000
     result = client.post("/api/schedule/run", json=request)
     assert result.status_code == 422, result.text
 
 
 def test_database_readiness(client):
     assert client.get("/api/ready").json() == {"status": "ready"}
+
+
+def test_legacy_config_with_large_trial_count_loads_without_losing_staff(client):
+    from backend.auth_db import save_config
+    owner = client.get("/api/auth/me").json()["sub"]
+    legacy = {
+        "clinic": {"name": "Legacy Clinic", "timezone": "America/Chicago"},
+        "schedule": {"start": "2026-10-19", "weeks": 1},
+        "ratios": {"patients_per_tech": 4, "patients_per_rn": 12, "techs_per_rn": 4},
+        "constraints": {}, "bleach": {"day": "Thu", "rotation": [], "cursor": 0},
+        "tournament": {"trials": 1000, "last_seed": 0}, "export_roles": ["Tech"],
+        "staff": [{"id": "legacy-tech", "name": "Existing Tech", "role": "Tech",
+                   "availability": {"Mon": False, "Tue": True}, "pref_open_mwf": 2}],
+        "demand": [], "pto": [],
+    }
+    save_config(owner, "legacy-trials.json", legacy)
+    loaded = client.get("/api/configs/legacy-trials.json")
+    assert loaded.status_code == 200, loaded.text
+    assert loaded.json()["tournament"]["trials"] == 1000
+    assert loaded.json()["staff"] == legacy["staff"]
+    # Round-tripping a saved setup must not silently rewrite preferences/trials.
+    assert client.post("/api/configs/save", json={"filename": "legacy-trials.json", "payload": loaded.json()}).status_code == 200
+    assert client.get("/api/configs/legacy-trials.json").json()["staff"] == legacy["staff"]
 
 
 def test_delete_draft_enforces_ownership_and_protects_published_versions(client):

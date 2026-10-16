@@ -205,7 +205,9 @@ class ConfigBleach(BaseSchema):
 
 
 class ConfigTournament(BaseSchema):
-    trials: conint(ge=1, le=100) = 20
+    # Loading/saving an old setup performs no scheduling work. Preserve its
+    # value; ScheduleRequest enforces the limit when generation is requested.
+    trials: conint(ge=1) = 20
     last_seed: conint(ge=0) = 0
 
 
