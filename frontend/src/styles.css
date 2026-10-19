@@ -1215,7 +1215,7 @@ table tbody tr:nth-child(even) {
 
 .top-nav {
   position: relative;
-  z-index: 1;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1224,7 +1224,6 @@ table tbody tr:nth-child(even) {
   color: var(--warm-1);
   padding-left: 0;
   padding-right: 12px;
-  backdrop-filter: blur(6px);
 }
 
 .nav-trigger {
@@ -2271,6 +2270,7 @@ button.secondary-link:hover {
   }
   .nav-trigger {
     position: relative;
+    z-index: 1;
     left: 0;
     top: 0;
     transform: none;
@@ -2298,6 +2298,14 @@ button.secondary-link:hover {
     display: none;
     transform: none;
     max-width: min(240px, calc(100vw - 32px));
+    background: rgba(7, 27, 69, 0.88);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+  }
+  .nav-links-mobile a {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
   }
   .nav-links-mobile.open {
     display: flex;
@@ -2582,10 +2590,19 @@ button.secondary-link:hover {
 .page-shell .planner-shell::after { display: none; }
 .theme-choice { white-space: nowrap; }
 
+/* The banner includes the wordmark; keep its natural aspect ratio at every size. */
+.page-shell .brand-mark .brand-logo {
+  display: block;
+  width: clamp(240px, 28vw, 330px);
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
 @media (max-width: 600px) {
   .page-shell .top-nav { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "nav brand" "cta cta"; }
   .page-shell .brand-mark { min-width: 0; justify-self: end; max-width: 100%; }
-  .page-shell .brand-logo { max-width: 220px; width: 100%; height: 54px; object-fit: contain; }
+  .page-shell .brand-mark .brand-logo { width: clamp(180px, 54vw, 260px); max-width: 100%; height: auto; }
   .page-shell .nav-right { width: 100%; min-width: 0; justify-content: flex-end; flex-wrap: wrap; }
   .page-shell .nav-right > div { min-width: 0; flex-wrap: wrap; }
   .page-shell .nav-right .pill { display: none; }
