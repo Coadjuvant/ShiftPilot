@@ -37,8 +37,8 @@ export default function App() {
       document.querySelector<HTMLLinkElement>("link[rel='shortcut icon']") ||
       document.createElement("link");
     link.rel = "icon";
-    link.type = "image/x-icon";
-    link.href = theme === "dark" ? "/favicon-dark.ico" : "/favicon-light.ico";
+    link.type = "image/svg+xml";
+    link.href = "/brand/favicon.svg";
     if (!link.parentNode) document.head.appendChild(link);
     document.title = "ShiftPilot";
   }, [theme]);
@@ -98,7 +98,14 @@ export default function App() {
       <div className="hero-wrap">
         <header className="top-nav">
           <div className="nav-trigger">
-            <button className="menu-toggle" onClick={() => setMobileOpen(!mobileOpen)} aria-label="Toggle menu">
+            <button
+              className="menu-toggle"
+              onClick={() => setMobileOpen(!mobileOpen)}
+              aria-label="Toggle menu"
+              aria-expanded={mobileOpen}
+              aria-controls="mobile-navigation"
+              onKeyDown={(event) => { if (event.key === "Escape") setMobileOpen(false); }}
+            >
               <span className="sr-only">{mobileOpen ? "Close menu" : "Open menu"}</span>
               {mobileOpen ? (
                 <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -110,7 +117,17 @@ export default function App() {
                 </svg>
               )}
             </button>
-            <nav className={`nav-links nav-links-mobile ${mobileOpen ? "open" : ""}`}>
+            <nav
+              id="mobile-navigation"
+              aria-label="Main navigation"
+              className={`nav-links nav-links-mobile ${mobileOpen ? "open" : ""}`}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setMobileOpen(false);
+                  document.querySelector<HTMLButtonElement>(".menu-toggle")?.focus();
+                }
+              }}
+            >
               <Link to="/" onClick={() => setMobileOpen(false)}>
                 Home
               </Link>
@@ -126,8 +143,7 @@ export default function App() {
             </nav>
           </div>
           <Link to="/" className="brand-mark brand-link">
-            <img src={theme === "dark" ? "/logo-dark.png" : "/logo-light.png"} alt="ShiftPilot logo" className="brand-logo" />
-            <span className="brand-name">ShiftPilot</span>
+            <img src={`/brand/shiftpilot-banner-${theme}.svg`} alt="ShiftPilot" className="brand-logo" width="593" height="120" />
           </Link>
           <div className="nav-right">
             <button className="secondary-link theme-choice" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>
