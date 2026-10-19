@@ -19,5 +19,9 @@ Windows Arial Bold; on another platform supply a licensed bold sans-serif TTF
 with `--font /path/to/font.ttf`. Raster exports are rendered from the same
 vector source. No font file is distributed or downloaded at runtime.
 
-Previous logo files are retained for compatibility; the header and document
+The app header uses the icon-only SVG beside live ShiftPilot text. The text
+inherits the site's font and heading weight, with white in dark mode and Deep
+Blue in light mode. The outlined banners remain available as standalone exports.
+
+Previous logo files are retained for compatibility; the header icon and document
 icons use the new `/brand/` paths to avoid the old cached favicon URLs.

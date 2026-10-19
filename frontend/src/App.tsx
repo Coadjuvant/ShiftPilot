@@ -143,7 +143,8 @@ export default function App() {
             </nav>
           </div>
           <Link to="/" className="brand-mark brand-link">
-            <img src={`/brand/shiftpilot-banner-${theme}.svg`} alt="ShiftPilot" className="brand-logo" width="593" height="120" />
+            <img src="/brand/shiftpilot-icon.svg" alt="" aria-hidden="true" className="brand-logo" width="128" height="120" />
+            <span className="brand-name">ShiftPilot</span>
           </Link>
           <div className="nav-right">
             <button className="secondary-link theme-choice" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>
