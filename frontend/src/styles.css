@@ -2590,19 +2590,36 @@ button.secondary-link:hover {
 .page-shell .planner-shell::after { display: none; }
 .theme-choice { white-space: nowrap; }
 
-/* The banner includes the wordmark; keep its natural aspect ratio at every size. */
+/* Keep the symbol as artwork and match the wordmark to the site's headings. */
+.page-shell .brand-mark {
+  gap: 0.6rem;
+}
 .page-shell .brand-mark .brand-logo {
   display: block;
-  width: clamp(240px, 28vw, 330px);
-  max-width: 100%;
+  width: 52px;
+  flex: 0 0 auto;
   height: auto;
   object-fit: contain;
+}
+.page-shell .brand-mark .brand-name {
+  font-family: inherit;
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--white);
+  white-space: nowrap;
+}
+.page-shell.light .brand-mark .brand-name {
+  color: var(--deep-blue);
 }
 
 @media (max-width: 600px) {
   .page-shell .top-nav { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "nav brand" "cta cta"; }
   .page-shell .brand-mark { min-width: 0; justify-self: end; max-width: 100%; }
-  .page-shell .brand-mark .brand-logo { width: clamp(180px, 54vw, 260px); max-width: 100%; height: auto; }
+  .page-shell .brand-mark { gap: 0.45rem; }
+  .page-shell .brand-mark .brand-logo { width: 40px; height: auto; }
+  .page-shell .brand-mark .brand-name { font-size: clamp(1.5rem, 6vw, 2rem); }
   .page-shell .nav-right { width: 100%; min-width: 0; justify-content: flex-end; flex-wrap: wrap; }
   .page-shell .nav-right > div { min-width: 0; flex-wrap: wrap; }
   .page-shell .nav-right .pill { display: none; }
