@@ -27,4 +27,3 @@ def test_export_preserves_untrusted_text_without_formulas_or_links(text):
                 sheet = ET.fromstring(archive.read(name))
                 assert not sheet.findall(".//s:f", ns), name
                 assert not sheet.findall(".//s:hyperlink", ns), name
-
