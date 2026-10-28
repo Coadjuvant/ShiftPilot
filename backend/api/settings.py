@@ -30,6 +30,10 @@ def split_env_csv(name: str, default: str = "") -> list[str]:
 
 APP_ENV = os.getenv("APP_ENV", "dev").lower()
 IS_PROD = APP_ENV == "prod"
+_db_startup_mode = os.getenv("DB_INITIALIZE_ON_STARTUP", "true").strip().lower()
+if _db_startup_mode not in {"true", "false"}:
+    raise RuntimeError("DB_INITIALIZE_ON_STARTUP must be true or false.")
+DB_INITIALIZE_ON_STARTUP = _db_startup_mode == "true"
 API_VERSION = os.getenv("API_VERSION", "1")
 API_KEY = os.getenv("API_KEY")
 
@@ -61,7 +65,7 @@ def require_safe_prod_config() -> None:
     jwt_secret = (os.getenv("JWT_SECRET") or "").strip()
     if not jwt_secret or jwt_secret in {"dev-secret", "change-me", "local-dev-secret-change-later"}:
         raise RuntimeError("JWT_SECRET must be set to a strong non-default value when APP_ENV=prod.")
-    if ADMIN_USER == "admin" and ADMIN_PASS == "admin":
+    if DB_INITIALIZE_ON_STARTUP and ADMIN_USER == "admin" and ADMIN_PASS == "admin":
         raise RuntimeError("Default admin/admin credentials are not allowed when APP_ENV=prod.")
     if not CORS_ALLOW_ORIGINS:
         raise RuntimeError("CORS_ALLOW_ORIGINS must be set when APP_ENV=prod.")

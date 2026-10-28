@@ -1,9 +1,16 @@
 # ShiftPilot on Vultr and Cloudflare
 
-The intended path is Cloudflare → host Nginx → Docker frontend on 127.0.0.1:8080
-→ backend → Postgres. Host Nginx may also proxy the API to 127.0.0.1:8000.
+The intended path is Cloudflare â†’ host Nginx â†’ Docker frontend on 127.0.0.1:8080
+â†’ backend â†’ Postgres. Host Nginx may also proxy the API to 127.0.0.1:8000.
 Verify the actual host configuration before rollout. App ports now bind only to
 loopback; host Nginx remains the public entry point.
+
+## Restricted database runtime rollout
+
+This release separates schema maintenance from HTTP access. For an existing
+installation, follow [the attended database transition](database-runtime.md)
+before recreating the backend. The previous administrator DATABASE_URL is rejected
+by the new runtime preflight. Keep auto-deployment paused through that first switch.
 
 ## First rollout
 
@@ -52,7 +59,7 @@ minutes of a push to its watched branch.
 The deployment script refuses tracked edits, fast-forwards the configured branch,
 builds while the old stack runs, waits for health, and restores previous app
 images on an unhealthy replacement. An ignored failure marker retries the same
-commit. It does not reverse database migrations; this release is additive.
+commit. It does not reverse database migrations; this release is additive. Database password/role transitions also require their separate environment recovery procedure.
 
 ## Proxy trust
 
