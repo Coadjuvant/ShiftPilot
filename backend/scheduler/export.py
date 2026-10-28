@@ -456,7 +456,12 @@ def export_schedule_to_excel(
     filtered_result = _FilteredResult(filtered_assignments, filtered_stats)
 
     buf = BytesIO()
-    with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
+    # All schedule fields are data, including names/notes that resemble formulas or URLs.
+    with pd.ExcelWriter(
+        buf,
+        engine="xlsxwriter",
+        engine_kwargs={"options": {"strings_to_formulas": False, "strings_to_urls": False}},
+    ) as writer:
         all_dates = sorted({assignment.slot.date for assignment in filtered_assignments})
 
         # Roster Matrix first

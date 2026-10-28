@@ -69,6 +69,36 @@ class PostgresAuth:
     def _conn(self):
         return self.psycopg2.connect(self.dsn)
 
+    def check_runtime_database(self):
+        """Check an already migrated schema without DDL or bootstrap writes."""
+        conn = self._conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls "
+                            "FROM pg_roles WHERE rolname=current_user")
+                if any(cur.fetchone()):
+                    raise RuntimeError("Runtime database role has administrative privileges.")
+                cur.execute("SELECT has_schema_privilege(current_user,current_schema(),'CREATE')")
+                if cur.fetchone()[0]:
+                    raise RuntimeError("Runtime database role must not create schema objects.")
+                cur.execute("SELECT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
+                            "WHERE n.nspname=current_schema() AND c.relowner=(SELECT oid FROM pg_roles WHERE rolname=current_user)) "
+                            "OR EXISTS (SELECT 1 FROM pg_auth_members WHERE member=(SELECT oid FROM pg_roles WHERE rolname=current_user))")
+                if cur.fetchone()[0]:
+                    raise RuntimeError("Runtime database role must not own schema objects or inherit other roles.")
+                for query in (
+                    "SELECT id,username,password_hash,status,license_key,role,public_id,invite_token,invite_expires_at,invite_created_by,last_invite_token,created_at,last_login FROM users LIMIT 0",
+                    "SELECT id,user_id,expires_at FROM auth_sessions LIMIT 0",
+                    "SELECT id,user_id,event,detail,ip,ip_v4,user_agent,location,created_at FROM audit_log LIMIT 0",
+                    "SELECT owner,filename,payload,created_at,updated_at FROM configs LIMIT 0",
+                    "SELECT owner,payload,created_at,updated_at FROM schedules LIMIT 0",
+                    "SELECT id,owner,payload,state,created_at,published_at FROM schedule_versions LIMIT 0",
+                    "SELECT owner,user_id FROM legacy_schedule_owners LIMIT 0",
+                ):
+                    cur.execute(query)
+        finally:
+            conn.close()
+
     def init_db(self):
         conn = self._conn()
         cur = conn.cursor()
@@ -523,46 +553,41 @@ class PostgresAuth:
 
     def redeem_invite(self, invite_token: str, password: str, desired_username: Optional[str] = None) -> Optional[Dict[str, Any]]:
         conn = self._conn()
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT id, username, status, license_key, role, invite_token, invite_expires_at, invite_created_by, public_id, password_hash FROM users WHERE invite_token=%s",
-            (invite_token,),
-        )
-        row = cur.fetchone()
-        if not row:
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id, username, status, password_hash FROM users "
+                        "WHERE invite_token=%s AND (invite_expires_at IS NULL OR invite_expires_at > clock_timestamp())",
+                        (invite_token,),
+                    )
+                    row = cur.fetchone()
+                    if not row:
+                        return None
+                    user_id, username, status, existing_hash = row
+                    is_reset = bool(existing_hash) or status == "active"
+                    if not is_reset and desired_username and desired_username.strip():
+                        username = desired_username.strip()
+                    pwd_hash = _hash_password(password)
+                    # Recheck while acquiring the update lock: only one concurrent caller
+                    # can consume this token, including if it expires/revokes during hashing.
+                    cur.execute(
+                        "UPDATE users SET username=%s, password_hash=%s, status='active', "
+                        "last_invite_token=NULL, invite_token=NULL, invite_expires_at=NULL "
+                        "WHERE id=%s AND invite_token=%s "
+                        "AND (invite_expires_at IS NULL OR invite_expires_at > clock_timestamp()) "
+                        "RETURNING id, username, password_hash, status, license_key, invite_token, "
+                        "invite_expires_at, invite_created_by, last_invite_token, public_id, role, created_at, last_login",
+                        (username, pwd_hash, user_id, invite_token),
+                    )
+                    updated = cur.fetchone()
+                    if not updated:
+                        return None
+                    cur.execute("DELETE FROM auth_sessions WHERE user_id=%s", (user_id,))
+        except self.psycopg2.errors.UniqueViolation as exc:
+            raise ValueError("Username already exists") from exc
+        finally:
             conn.close()
-            return None
-        user_id, username, status, license_key, role, inv, expires_at, inv_created_by, public_id, existing_hash = row
-        if expires_at:
-            now = datetime.now(timezone.utc)
-            exp = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
-            exp = exp.astimezone(timezone.utc)
-            if now > exp:
-                conn.close()
-                return None
-        # allow username change on redeem if requested and unique
-        is_reset = bool(existing_hash) or status == "active"
-        if not is_reset and desired_username and desired_username.strip() and desired_username.strip() != username:
-            desired = desired_username.strip()
-            cur.execute("SELECT 1 FROM users WHERE username=%s", (desired,))
-            if cur.fetchone():
-                conn.close()
-                raise ValueError("Username already exists")
-            username = desired
-            cur.execute("UPDATE users SET username=%s WHERE id=%s", (username, user_id))
-        pwd_hash = _hash_password(password)
-        cur.execute(
-            "UPDATE users SET password_hash=%s, status='active', last_invite_token=%s, invite_token=NULL WHERE id=%s",
-            (pwd_hash, None, user_id),
-        )
-        cur.execute("DELETE FROM auth_sessions WHERE user_id=%s", (user_id,))
-        conn.commit()
-        cur.execute(
-            "SELECT id, username, password_hash, status, license_key, invite_token, invite_expires_at, invite_created_by, last_invite_token, public_id, role, created_at, last_login FROM users WHERE id=%s",
-            (user_id,),
-        )
-        updated = cur.fetchone()
-        conn.close()
         keys = [
             "id",
             "username",

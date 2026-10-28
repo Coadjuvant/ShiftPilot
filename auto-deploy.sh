@@ -68,7 +68,17 @@ if ! docker compose build backend frontend; then
   touch "$failed_marker"
   echo "Build failed. Existing containers are still serving."; exit 1
 fi
-if docker compose up -d --no-build --wait --wait-timeout 180; then
+# Schema maintenance uses a separate, short-lived service. Its administrative
+# credentials are never supplied to the HTTP application's environment.
+if ! docker compose --profile maintenance run --rm --no-deps -T db-maintenance; then
+  echo "Database maintenance failed. Existing application containers are still serving."
+  exit 1
+fi
+if ! docker compose run --rm --no-deps -T backend python -m backend.check_runtime; then
+  echo "Runtime database preflight failed. Existing application containers are still serving."
+  exit 1
+fi
+if docker compose up -d --no-deps --no-build --wait --wait-timeout 180 backend frontend; then
   rm -f "$failed_marker"
   echo "Deployment healthy: $target"
 else
@@ -77,7 +87,7 @@ else
   docker compose ps
   if [[ "$rollback_ready" == 1 ]]; then
     echo "Restoring previous application images; additive database changes are retained."
-    docker compose -f docker-compose.yml -f "$rollback_file" up -d --no-build --wait --wait-timeout 180
+    docker compose -f docker-compose.yml -f "$rollback_file" up -d --no-deps --no-build --wait --wait-timeout 180 backend frontend
   else
     echo "No complete previous application images are available for automatic rollback."
   fi

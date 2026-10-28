@@ -22,6 +22,7 @@ from .settings import (
     ADMIN_PASS,
     ADMIN_USER,
     CORS_ALLOW_ORIGINS,
+    DB_INITIALIZE_ON_STARTUP,
     IS_PROD,
     require_safe_prod_config,
 )
@@ -35,14 +36,12 @@ app = FastAPI(
     redoc_url=None if IS_PROD else "/redoc",
     openapi_url=None if IS_PROD else "/openapi.json",
 )
-init_db()
+if DB_INITIALIZE_ON_STARTUP:
+    init_db()
+    ensure_admin(ADMIN_USER, ADMIN_PASS, ADMIN_LICENSE)
+else:
+    _backend.check_runtime_database()
 app.middleware("http")(security_headers_middleware)
-
-ensure_admin(
-    ADMIN_USER,
-    ADMIN_PASS,
-    ADMIN_LICENSE,
-)
 
 app.add_middleware(
     CORSMiddleware,

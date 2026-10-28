@@ -40,7 +40,9 @@ case "$*" in
   'compose ps -aq frontend') echo frontend-container;;
   inspect*) echo previous-image;;
   'compose build backend frontend') [[ "${FAIL_BUILD:-0}" != 1 ]];;
-  'compose up -d --no-build --wait --wait-timeout 180') [[ "${FAIL_UP:-0}" != 1 ]];;
+  'compose --profile maintenance run --rm --no-deps -T db-maintenance') [[ "${FAIL_MIGRATION:-0}" != 1 ]];;
+  'compose run --rm --no-deps -T backend python -m backend.check_runtime') [[ "${FAIL_RUNTIME:-0}" != 1 ]];;
+  'compose up -d --no-deps --no-build --wait --wait-timeout 180 backend frontend') [[ "${FAIL_UP:-0}" != 1 ]];;
   'compose -f '*) cat "$5" >> "$CALLS";;
   *) exit 0;;
 esac
@@ -75,6 +77,27 @@ def test_unhealthy_release_rolls_back_images(deployment):
     assert "compose -f docker-compose.yml -f" in commands
     assert "/api/health" in commands  # Rollback images predate /api/ready.
     assert "compose down" not in commands
+    assert (server / "deploy-scripts/.local-deploy-failed").exists()
+
+
+def test_failed_database_maintenance_keeps_serving_release(deployment):
+    run, calls, server = deployment
+    result = run(FAIL_MIGRATION="1")
+    assert result.returncode != 0
+    commands = calls.read_text()
+    assert "db-maintenance" in commands
+    assert "compose up" not in commands and "compose down" not in commands
+    assert (server / "deploy-scripts/.local-deploy-failed").exists()
+    assert not (server / "deploy-scripts/status/deployment.json").exists()
+
+
+def test_unsafe_runtime_configuration_keeps_serving_release(deployment):
+    run, calls, server = deployment
+    result = run(FAIL_RUNTIME="1")
+    assert result.returncode != 0
+    commands = calls.read_text()
+    assert "backend.check_runtime" in commands
+    assert "compose up" not in commands and "compose down" not in commands
     assert (server / "deploy-scripts/.local-deploy-failed").exists()
 
 

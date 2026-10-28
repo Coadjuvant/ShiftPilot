@@ -27,8 +27,8 @@ def schedule_request():
     }
 
 
-@pytest.fixture(scope="module")
-def application():
+@pytest.fixture(scope="module", params=["bootstrap", "restricted"])
+def application(request):
     dsn = os.getenv("SHIFT_TEST_DATABASE_URL")
     if not dsn:
         pytest.skip("Set SHIFT_TEST_DATABASE_URL to a dedicated *_test database")
@@ -43,8 +43,24 @@ def application():
     previous = dict(os.environ)
     os.environ.update(DATABASE_URL=make_dsn(dsn, options=f"-c search_path={schema}"), AUTH_BACKEND="postgres",
                       APP_ENV="dev", ADMIN_USER="test-admin", ADMIN_PASS="sample-admin-password",
-                      JWT_SECRET="test-secret-with-at-least-thirty-two-bytes", API_KEY="")
+                      JWT_SECRET="test-secret-with-at-least-thirty-two-bytes", API_KEY="",
+                      DB_INITIALIZE_ON_STARTUP="true")
+    runtime_user = None
     try:
+        if request.param == "restricted":
+            from backend.database_admin import provision_runtime_role
+            storage = importlib.reload(importlib.import_module("backend.auth_db"))
+            admin_store = storage.PostgresAuth(os.environ["DATABASE_URL"])
+            admin_store.init_db()
+            admin_store.ensure_admin("test-admin", "sample-admin-password")
+            candidate = "runtime_" + uuid.uuid4().hex
+            password = uuid.uuid4().hex + uuid.uuid4().hex
+            provision_runtime_role(admin_store.dsn, candidate, password, schema=schema)
+            runtime_user = candidate
+            os.environ["DATABASE_URL"] = make_dsn(dsn, user=runtime_user, password=password, options=f"-c search_path={schema}")
+            os.environ["DB_INITIALIZE_ON_STARTUP"] = "false"
+            # The runtime application must not need the bootstrap admin password.
+            os.environ.pop("ADMIN_PASS", None)
         # Existing unit tests may have loaded settings/storage with fake connections.
         for name in ("backend.auth_db", "backend.api.settings", "backend.api.dependencies",
                      "backend.api.request_context", "backend.api.routes.auth", "backend.api.routes.schedules",
@@ -57,6 +73,62 @@ def application():
         os.environ.update(previous)
         with conn.cursor() as cur:
             cur.execute(f'DROP SCHEMA "{schema}" CASCADE')
+            if runtime_user:
+                from psycopg2 import sql
+                cur.execute(sql.SQL("DROP OWNED BY {}").format(sql.Identifier(runtime_user)))
+                cur.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(runtime_user)))
+        conn.close()
+
+
+@pytest.fixture
+def migration_store(application):
+    from backend.auth_db import PostgresAuth, _backend
+    return PostgresAuth(make_dsn(os.environ["SHIFT_TEST_DATABASE_URL"], options=parse_dsn(_backend.dsn)["options"]))
+
+
+def test_restricted_database_cannot_change_schema_or_roles(application):
+    from backend.auth_db import _backend
+    if os.environ["DB_INITIALIZE_ON_STARTUP"] != "false":
+        pytest.skip("Privilege denials apply to the restricted runtime profile")
+    from psycopg2 import sql
+    conn = _backend._conn()
+    try:
+        for statement in (
+            "CREATE TABLE privilege_probe (id integer)",
+            "ALTER TABLE users ADD COLUMN privilege_probe integer",
+            "DROP TABLE configs",
+            sql.SQL("CREATE ROLE {}").format(sql.Identifier("probe_" + uuid.uuid4().hex)),
+            "INSERT INTO legacy_schedule_owners(owner,user_id) VALUES ('not-allowed',NULL)",
+            "DELETE FROM audit_log",
+        ):
+            try:
+                with conn.cursor() as cur:
+                    with pytest.raises(psycopg2.errors.InsufficientPrivilege):
+                        cur.execute(statement)
+            finally:
+                conn.rollback()
+        _backend.check_runtime_database()
+    finally:
+        conn.close()
+
+
+def test_maintenance_can_refresh_permissions_without_promoting_runtime(application, migration_store):
+    if os.environ["DB_INITIALIZE_ON_STARTUP"] != "false":
+        pytest.skip("Permission refresh applies to the restricted runtime profile")
+    from backend.auth_db import _backend
+    from backend.database_admin import refresh_runtime_permissions
+    from psycopg2 import sql
+    runtime = parse_dsn(_backend.dsn)["user"]
+    conn = migration_store._conn()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT current_schema()")
+                schema = cur.fetchone()[0]
+                cur.execute(sql.SQL("REVOKE SELECT ON configs FROM {}").format(sql.Identifier(runtime)))
+        refresh_runtime_permissions(migration_store.dsn, runtime, schema)
+        _backend.check_runtime_database()
+    finally:
         conn.close()
 
 
@@ -80,6 +152,91 @@ def invite(client):
     response = other.post("/api/auth/setup", json={"invite_token": token, "username": username, "password": "sample-user-password"})
     assert response.status_code == 200, response.text
     return other, username, token
+
+
+@pytest.mark.parametrize("reset", [False, True])
+def test_invite_and_reset_tokens_are_consumed_once_under_concurrency(client, monkeypatch, reset):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    import backend.auth_db as auth
+
+    store = auth._backend
+    username = "race-" + uuid.uuid4().hex
+    token = store.create_invite(username, "DEMO")
+    if reset:
+        user = store.redeem_invite(token, "initial-fictional-password")
+        token = store.reset_invite(user["id"])
+    barrier = threading.Barrier(2)
+    original_hash = auth._hash_password
+
+    def synchronized_hash(password):
+        barrier.wait(timeout=10)
+        return original_hash(password)
+
+    monkeypatch.setattr(auth, "_hash_password", synchronized_hash)
+    passwords = ["fictional-password-one", "fictional-password-two"]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        users = list(pool.map(lambda password: store.redeem_invite(token, password), passwords))
+    assert sum(user is not None for user in users) == 1
+    winner = next(index for index, user in enumerate(users) if user is not None)
+    stored = store.get_user_by_username(username)
+    assert auth._check_password(passwords[winner], stored["password_hash"])
+    assert not auth._check_password(passwords[1 - winner], stored["password_hash"])
+    assert store.get_invite_context(token) is None
+
+
+@pytest.mark.parametrize("interruption", ["revoke", "expire", "replace", "hash_failure"])
+def test_redemption_does_not_accept_a_token_changed_during_hashing(client, monkeypatch, interruption):
+    import backend.auth_db as auth
+
+    store = auth._backend
+    username = "interrupted-" + uuid.uuid4().hex
+    token = store.create_invite(username, "DEMO")
+    original_hash = auth._hash_password
+
+    def interrupted_hash(password):
+        if interruption == "hash_failure":
+            raise RuntimeError("Simulated password hashing failure")
+        if interruption == "revoke":
+            store.revoke_invite(username)
+        else:
+            conn = store._conn()
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        if interruption == "expire":
+                            cur.execute("UPDATE users SET invite_expires_at=clock_timestamp() - interval '1 second' WHERE username=%s", (username,))
+                        else:
+                            cur.execute("UPDATE users SET invite_token=%s WHERE username=%s", ("replacement-token", username))
+            finally:
+                conn.close()
+        return original_hash(password)
+
+    monkeypatch.setattr(auth, "_hash_password", interrupted_hash)
+    if interruption == "hash_failure":
+        with pytest.raises(RuntimeError):
+            store.redeem_invite(token, "fictional-new-password", desired_username="must-not-be-saved")
+        assert store.get_invite_context(token) is not None
+    else:
+        assert store.redeem_invite(token, "fictional-new-password", desired_username="must-not-be-saved") is None
+    assert store.get_user_by_username("must-not-be-saved") is None
+    stored = store.get_user_by_username(username)
+    assert stored is not None and not stored["password_hash"]
+
+
+def test_username_conflict_does_not_consume_invitation(client):
+    import backend.auth_db as auth
+
+    store = auth._backend
+    existing_name = "existing-" + uuid.uuid4().hex
+    existing = store.create_invite(existing_name, "DEMO")
+    store.redeem_invite(existing, "fictional-existing-password")
+    username = "pending-" + uuid.uuid4().hex
+    token = store.create_invite(username, "DEMO")
+    with pytest.raises(ValueError, match="Username already exists"):
+        store.redeem_invite(token, "fictional-new-password", desired_username=existing_name)
+    assert store.get_invite_context(token) is not None
+    assert store.redeem_invite(token, "fictional-new-password", desired_username=username)
 
 
 def test_logout_revokes_cookie_and_bearer_token(client):
@@ -242,9 +399,10 @@ def test_manual_adjustments_create_versions_and_locks_survive_regeneration(clien
     assert client.post(f"/api/schedule/versions/{original_id}/adjust", json={"assignments": changes[:-1]}).status_code == 422
 
 
-def test_reused_username_cannot_inherit_legacy_schedules(client):
+def test_reused_username_cannot_inherit_legacy_schedules(client, migration_store):
     other, username, _ = invite(client)
-    from backend.auth_db import init_db, save_schedule
+    from backend.auth_db import save_schedule
+    init_db = migration_store.init_db
     save_schedule(username, {"clinic_name": "Legacy Clinic", "assignments": [], "weeks": 1, "start_date": "2026-10-19"})
     init_db()
     assert other.get("/api/schedule/latest").json()["clinic_name"] == "Legacy Clinic"
@@ -260,9 +418,10 @@ def test_reused_username_cannot_inherit_legacy_schedules(client):
     assert replacement.get("/api/schedule/versions").json() == []
 
 
-def test_upgrade_keeps_existing_published_roster_and_backfills_history_once(client):
+def test_upgrade_keeps_existing_published_roster_and_backfills_history_once(client, migration_store):
     other, username, _ = invite(client)
-    from backend.auth_db import init_db, save_schedule
+    from backend.auth_db import save_schedule
+    init_db = migration_store.init_db
     draft = client.post("/api/schedule/run", json=schedule_request()).json()
     legacy = {**draft, "clinic_name": "Existing production-style roster",
               "start_date": "2026-10-19", "weeks": 1,

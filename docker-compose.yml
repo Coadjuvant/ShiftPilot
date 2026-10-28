@@ -33,20 +33,22 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    env_file:
-      - .env
     environment:
       # Ensure these are present in .env on the server.
+      - APP_ENV=${APP_ENV:-dev}
+      - API_VERSION=${API_VERSION:-1}
+      - API_KEY=${API_KEY:-}
+      - DB_INITIALIZE_ON_STARTUP=${DB_INITIALIZE_ON_STARTUP:-false}
       - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRE_HOURS=${JWT_EXPIRE_HOURS:-8}
       - ADMIN_USER=${ADMIN_USER}
-      - ADMIN_PASS=${ADMIN_PASS}
-      - ADMIN_LICENSE=${ADMIN_LICENSE}
       - AUTH_BACKEND=${AUTH_BACKEND}
       - DATABASE_URL=${DATABASE_URL}
       - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-http://localhost:8080,http://localhost:5173,http://127.0.0.1:8080,http://127.0.0.1:5173}
       - GEOIP_API_URL=${GEOIP_API_URL:-}
       - GEOIP_API_TIMEOUT=${GEOIP_API_TIMEOUT:-2.0}
       - GEOIP_CACHE_TTL=${GEOIP_CACHE_TTL:-3600}
+      - TRUSTED_PROXY_CIDRS=${TRUSTED_PROXY_CIDRS:-127.0.0.1/32,::1/128,172.16.0.0/12}
     depends_on:
       db:
         condition: service_healthy
@@ -56,6 +58,27 @@ services:
       - "8000"
     ports:
       - "127.0.0.1:8000:8000"
+
+  db-maintenance:
+    profiles: ["maintenance"]
+    image: ${COMPOSE_PROJECT_NAME:-shiftpilot}-backend
+    command: ["python", "-m", "backend.manage_db", "migrate"]
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-admin}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      DB_NAME: ${DB_NAME:-shiftpilot_db}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASS: ${ADMIN_PASS:-}
+      ADMIN_LICENSE: ${ADMIN_LICENSE:-DEMO}
+      RUNTIME_DB_USER: ${RUNTIME_DB_USER:-shiftpilot_runtime}
+      RUNTIME_DB_PASSWORD: ${RUNTIME_DB_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - shiftpilot
 
   frontend:
     restart: unless-stopped
